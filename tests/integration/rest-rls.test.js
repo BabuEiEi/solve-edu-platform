@@ -14,6 +14,8 @@ import { createProgramService } from '../../src/features/programs/service.js'
 
 const URL = process.env.SOLVEEDU_REST_URL
 const SECRET = process.env.SOLVEEDU_JWT_SECRET
+// Supabase Local routes through Kong, which also wants the publishable key.
+const API_KEY = process.env.SOLVEEDU_API_KEY
 const run = URL && SECRET ? describe : describe.skip
 
 const U = {
@@ -31,7 +33,12 @@ function jwtFor(sub, role = 'authenticated') {
   return `${head}.${body}.${sig}`
 }
 const clientAs = (key) =>
-  new PostgrestClient(URL, { headers: key ? { Authorization: `Bearer ${jwtFor(U[key])}` } : {} })
+  new PostgrestClient(URL, {
+    headers: {
+      ...(API_KEY ? { apikey: API_KEY } : {}),
+      ...(key ? { Authorization: `Bearer ${jwtFor(U[key])}` } : {}),
+    },
+  })
 
 run('REST + RLS integration (local)', () => {
   beforeAll(() => vi.spyOn(console, 'error').mockImplementation(() => {}))
@@ -80,6 +87,15 @@ run('REST + RLS integration (local)', () => {
     expect(a[0].organizations.name).toBe('โรงเรียนสาธิต ก (สมมติ)')
     const b = await createAdminService(clientAs('school_admin_b')).listProfilesByStatus('pending')
     expect(b).toEqual([])
+  })
+
+  it('active list embeds only current, in-scope memberships', async () => {
+    const rows = await createAdminService(clientAs('school_admin_a')).listProfilesByStatus('active')
+    const a1 = rows.find((p) => p.id === U.teacher_a1)
+    expect(a1.organization_memberships.map((m) => [m.org_role, m.organizations.name])).toEqual([
+      ['teacher', 'โรงเรียนสาธิต ก (สมมติ)'],
+    ])
+    expect(rows.some((p) => p.id === U.school_admin_b)).toBe(false)
   })
 
   it('out-of-scope approval is denied; in-scope approval succeeds', async () => {
