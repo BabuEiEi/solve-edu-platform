@@ -1,0 +1,35 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'IBM Plex Sans Thai', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #eef4ff;
+  --color-brand-100: #dbe7fe;
+  --color-brand-300: #93b4fb;
+  --color-brand-500: #3b6ff2;
+  --color-brand-600: #2554d9;
+  --color-brand-700: #1d42ae;
+
+  --color-ink-50: #f7f8fa;
+  --color-ink-100: #eef0f4;
+  --color-ink-200: #dde1e8;
+  --color-ink-400: #9aa3b2;
+  --color-ink-500: #6b7486;
+  --color-ink-600: #4d5566;
+  --color-ink-700: #374050;
+  --color-ink-800: #252c38;
+  --color-ink-900: #141922;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+body {
+  @apply bg-ink-50 font-sans text-ink-800 antialiased;
+}
+:focus-visible {
+  @apply outline-2 outline-offset-2 outline-brand-500;
+}
+code {
+  @apply rounded bg-ink-100 px-1 py-0.5 text-[0.85em];
+}

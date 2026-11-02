@@ -1,0 +1,47 @@
+/**
+ * Translate Supabase/PostgREST/Postgres errors into user-facing Thai messages.
+ * Raw details go to the console for developers — never secrets, never to the UI.
+ */
+const BY_CODE = {
+  42501: 'คุณไม่มีสิทธิ์ดำเนินการนี้',
+  23505: 'ข้อมูลนี้มีอยู่แล้วในระบบ',
+  23503: 'ข้อมูลอ้างอิงไม่ถูกต้องหรือถูกใช้งานอยู่',
+  23514: 'ข้อมูลไม่ผ่านเงื่อนไขของระบบ',
+  22023: 'ค่าที่ส่งมาไม่ถูกต้อง',
+  PGRST116: 'ไม่พบข้อมูลที่ต้องการ',
+  PGRST301: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
+}
+
+export class AppError extends Error {
+  constructor(userMessage, { code = null, cause = null } = {}) {
+    super(userMessage)
+    this.name = 'AppError'
+    this.code = code
+    this.cause = cause
+  }
+}
+
+export function toUserMessage(error) {
+  if (!error) return ''
+  if (error instanceof AppError) return error.message
+  const code = error.code ?? error.status ?? null
+  if (code && BY_CODE[code]) return BY_CODE[code]
+  const msg = String(error.message || '')
+  if (/Invalid login credentials/i.test(msg)) return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
+  if (/Email not confirmed/i.test(msg)) return 'กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ'
+  if (/Failed to fetch|NetworkError/i.test(msg)) return 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบเครือข่าย'
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
+}
+
+/** Throw AppError if a Supabase response carries an error (SEC-05). */
+export function unwrap({ data, error }, context = '') {
+  if (error) {
+    console.error(`[supabase] ${context}`, {
+      code: error.code,
+      message: error.message,
+      details: error.details,
+    })
+    throw new AppError(toUserMessage(error), { code: error.code ?? null, cause: error })
+  }
+  return data
+}

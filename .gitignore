@@ -1,0 +1,19 @@
+node_modules
+dist
+dist-ssr
+coverage
+*.log
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# Environment — never commit real values
+.env
+.env.*
+!.env.example
+
+# Supabase local state
+supabase/.branches
+supabase/.temp
+supabase/signing_keys.json
