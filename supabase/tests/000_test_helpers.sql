@@ -57,6 +57,17 @@ begin
 end;
 $$;
 
+-- Same, for a user created inside a test (arbitrary uuid)
+create or replace function tests.authenticate_as_id(p_id uuid)
+returns void
+language plpgsql
+as $$
+begin
+  perform set_config('request.jwt.claims', json_build_object('sub', p_id, 'role', 'authenticated')::text, true);
+  perform set_config('role', 'authenticated', true);
+end;
+$$;
+
 create or replace function tests.as_anon()
 returns void
 language plpgsql
