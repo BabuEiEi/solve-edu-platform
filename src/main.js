@@ -12,6 +12,8 @@ import { createAdminService } from './features/admin/service.js'
 import { createOrganizationService } from './features/organizations/service.js'
 import { createProgramService } from './features/programs/service.js'
 import { createCourseService } from './features/courses/service.js'
+import { createLessonService } from './features/lessons/service.js'
+import { createMediaService } from './features/lessons/media.js'
 import {
   renderAuthScreen,
   renderPendingScreen,
@@ -21,6 +23,7 @@ import {
 import { renderApprovalsView } from './features/admin/views.js'
 import { renderProgramsView } from './features/programs/views.js'
 import { renderCoursesView, renderCourseOutlineView } from './features/courses/views.js'
+import { renderLessonView } from './features/lessons/views.js'
 import { renderDashboard } from './features/dashboard.js'
 
 const root = document.getElementById('app')
@@ -31,6 +34,7 @@ const routes = compileRoutes([
   { path: '/programs', view: renderProgramsView, allow: (c) => c.isActive },
   { path: '/courses', view: renderCoursesView, allow: (c) => c.isActive },
   { path: '/courses/:id', view: renderCourseOutlineView, allow: (c) => c.isActive },
+  { path: '/learn/:courseId/:lessonId', view: renderLessonView, allow: (c) => c.isActive },
   { path: '/admin/approvals', view: renderApprovalsView, allow: (c) => c.canApproveUsers },
 ])
 
@@ -58,6 +62,8 @@ async function boot() {
     organizations: createOrganizationService(supabase),
     programs: createProgramService(supabase),
     courses: createCourseService(supabase),
+    lessons: createLessonService(supabase),
+    media: createMediaService(supabase),
   }
   let state = { session: null, context: null, caps: null }
 

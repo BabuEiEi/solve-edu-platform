@@ -32,6 +32,11 @@ export function createCourseService(client) {
       return course
     },
 
+    /** 'manage' | 'view' | 'none' — decides which tools to SHOW; RLS still enforces. */
+    async getAccess(courseId) {
+      return unwrap(await client.rpc('course_access', { p_course: courseId }), 'rpc.course_access') ?? 'none'
+    },
+
     async listMyEnrollments(userId) {
       return unwrap(
         await client

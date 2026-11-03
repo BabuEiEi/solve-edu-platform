@@ -96,11 +96,14 @@ describe('views render (smoke + XSS)', () => {
         listMyEnrollments: async () => [
           { course_id: 'k', lesson_progress: [{ lesson_id: 'l1', status: 'completed' }] },
         ],
+        getAccess: async () => 'view',
       },
     }
     await renderCourseOutlineView(el, { services, session: { user: { id: 'u1' } } }, { id: 'k' })
     expect(el.querySelector('[role=progressbar]').getAttribute('aria-valuenow')).toBe('50')
     expect(el.textContent).toContain('เรียนจบแล้ว')
+    expect(el.querySelector('a[href="#/learn/k/l2"]')).not.toBeNull()
+    expect(el.querySelector('a[href="#/courses/k/builder"]')).toBeNull()
   })
 
   it('approvals view lists scoped pending users and switches tabs', async () => {

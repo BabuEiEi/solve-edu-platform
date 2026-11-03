@@ -42,9 +42,10 @@ export async function renderCoursesView(el, { services }) {
 export async function renderCourseOutlineView(el, { services, session }, { id }) {
   render(el, loading)
   try {
-    const [course, enrollments] = await Promise.all([
+    const [course, enrollments, access] = await Promise.all([
       services.courses.getCourseOutline(id),
       services.courses.listMyEnrollments(session.user.id),
+      services.courses.getAccess(id),
     ])
     if (!course) {
       render(
@@ -63,7 +64,19 @@ export async function renderCourseOutlineView(el, { services, session }, { id })
       html`
         <a href="#/courses" class="text-sm text-brand-700 hover:underline">← หลักสูตรทั้งหมด</a>
         <div class="mt-3 flex flex-wrap items-start justify-between gap-3">
-          ${pageHeader(course.title, course.summary ?? '')} ${statusBadge(course.status)}
+          ${pageHeader(course.title, course.summary ?? '')}
+          <div class="flex items-center gap-2">
+            ${statusBadge(course.status)}
+            ${
+              access === 'manage'
+                ? html`<a
+                  href="#/courses/${course.id}/builder"
+                  class="rounded-lg border border-brand-200 px-3 py-1.5 text-sm font-medium text-brand-700 hover:bg-brand-50"
+                  >แก้ไขหลักสูตร</a
+                >`
+                : ''
+            }
+          </div>
         </div>
         ${
           percent !== null
@@ -96,7 +109,9 @@ export async function renderCourseOutlineView(el, { services, session }, { id })
                   ${u.lessons.map((l) => {
                     const s = statusOf(l.id)
                     return html`<li class="flex items-center justify-between gap-3 px-5 py-3 text-sm">
-                      <span class="text-ink-700">${l.title}</span>
+                      <a href="#/learn/${course.id}/${l.id}" class="text-ink-700 hover:text-brand-700 hover:underline"
+                        >${l.title}</a
+                      >
                       <span class="flex items-center gap-2">
                         ${l.status !== 'published' ? statusBadge(l.status) : ''}
                         ${s === 'completed' ? html`<span class="text-xs font-semibold text-emerald-700">✓ เรียนจบแล้ว</span>` : s === 'in_progress' ? html`<span class="text-xs text-sky-700">กำลังเรียน</span>` : ''}
@@ -107,7 +122,6 @@ export async function renderCourseOutlineView(el, { services, session }, { id })
               </li>`
           )}
         </ol>
-        <p class="mt-6 text-xs text-ink-400">หน้าเรียนบทเรียนและแบบทดสอบจะเพิ่มใน Phase 2</p>
       `
     )
   } catch (err) {

@@ -5,10 +5,12 @@
 
   --color-brand-50: #eef4ff;
   --color-brand-100: #dbe7fe;
+  --color-brand-200: #bfd3fd;
   --color-brand-300: #93b4fb;
   --color-brand-500: #3b6ff2;
   --color-brand-600: #2554d9;
   --color-brand-700: #1d42ae;
+  --color-brand-800: #1b3889;
 
   --color-ink-50: #f7f8fa;
   --color-ink-100: #eef0f4;
@@ -32,4 +34,56 @@ body {
 }
 code {
   @apply rounded bg-ink-100 px-1 py-0.5 text-[0.85em];
+}
+
+/* Sanitised lesson HTML (see shared/ui/sanitize.js) and the editor surface */
+.lesson-prose,
+.rich-editor .ProseMirror {
+  @apply text-[1.0625rem] leading-8 text-ink-800;
+}
+.lesson-prose > * + *,
+.rich-editor .ProseMirror > * + * {
+  @apply mt-4;
+}
+.lesson-prose h2,
+.rich-editor h2 {
+  @apply mt-8 text-xl font-semibold text-ink-900;
+}
+.lesson-prose h3,
+.rich-editor h3 {
+  @apply mt-6 text-lg font-semibold text-ink-900;
+}
+.lesson-prose h4 {
+  @apply font-semibold text-ink-900;
+}
+.lesson-prose ul,
+.rich-editor ul {
+  @apply list-disc pl-6;
+}
+.lesson-prose ol,
+.rich-editor ol {
+  @apply list-decimal pl-6;
+}
+.lesson-prose li + li {
+  @apply mt-1;
+}
+.lesson-prose a,
+.rich-editor a {
+  @apply font-medium text-brand-700 underline underline-offset-2;
+}
+.lesson-prose blockquote,
+.rich-editor blockquote {
+  @apply border-l-4 border-brand-200 pl-4 text-ink-600;
+}
+.lesson-prose pre {
+  @apply overflow-x-auto rounded-lg bg-ink-900 p-4 text-sm text-ink-50;
+}
+.lesson-prose hr {
+  @apply border-ink-200;
+}
+.rich-editor .ProseMirror {
+  @apply min-h-40 rounded-b-lg border border-t-0 border-ink-200 bg-white px-4 py-3 focus:outline-none;
+}
+.rich-editor .ProseMirror:focus-visible {
+  @apply ring-2 ring-brand-500/30;
 }
