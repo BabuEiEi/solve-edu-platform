@@ -96,11 +96,14 @@ describe('views render (smoke + XSS)', () => {
         listMyEnrollments: async () => [
           { course_id: 'k', lesson_progress: [{ lesson_id: 'l1', status: 'completed' }] },
         ],
+        getAccess: async () => 'view',
       },
     }
     await renderCourseOutlineView(el, { services, session: { user: { id: 'u1' } } }, { id: 'k' })
     expect(el.querySelector('[role=progressbar]').getAttribute('aria-valuenow')).toBe('50')
     expect(el.textContent).toContain('เรียนจบแล้ว')
+    expect(el.querySelector('a[href="#/learn/k/l2"]')).not.toBeNull()
+    expect(el.querySelector('a[href="#/courses/k/builder"]')).toBeNull()
   })
 
   it('approvals view lists scoped pending users and switches tabs', async () => {
@@ -133,5 +136,49 @@ describe('views render (smoke + XSS)', () => {
     await flush()
     expect(calls).toEqual(['pending', 'active'])
     expect(el.textContent).toContain('ไม่มีรายการ')
+  })
+
+  it('approvals: no action buttons on own row; active tab shows current affiliation', async () => {
+    const el = document.createElement('div')
+    const active = [
+      {
+        id: 'me',
+        full_name: 'ฉันเอง',
+        status: 'active',
+        created_at: '2026-11-02T08:00:00Z',
+        organization_memberships: [
+          { org_role: 'school_admin', ended_at: null, organizations: { name: 'โรงเรียน ก' } },
+        ],
+      },
+      {
+        id: 'other',
+        full_name: 'ครูอื่น',
+        status: 'active',
+        created_at: '2026-11-02T08:00:00Z',
+        organizations: { name: 'โรงเรียน ข' },
+        organization_memberships: [
+          { org_role: 'teacher', ended_at: '2026-11-01T00:00:00Z', organizations: { name: 'โรงเรียนเก่า' } },
+        ],
+      },
+    ]
+    const services = {
+      admin: {
+        listProfilesByStatus: async (s) => (s === 'active' ? active : []),
+        setProfileStatus: async () => {},
+      },
+    }
+    await renderApprovalsView(el, { services, session: { user: { id: 'me' } } })
+    el.querySelector('[data-action=tab][data-status=active]').click()
+    await flush()
+    await flush()
+    const [mine, other] = el.querySelectorAll('tbody tr')
+    expect(mine.querySelector('[data-action=set-status]')).toBeNull()
+    expect(mine.textContent).toContain('บัญชีของท่าน')
+    expect(mine.textContent).toContain('ผู้บริหารสถานศึกษา')
+    expect(mine.textContent).toContain('โรงเรียน ก')
+    expect(other.querySelector('[data-action=set-status][data-id=other]')).not.toBeNull()
+    expect(other.textContent).toContain('ยังไม่มีสังกัด')
+    expect(other.textContent).not.toContain('โรงเรียนเก่า')
+    expect(el.querySelector('thead').textContent).toContain('สังกัดปัจจุบัน')
   })
 })

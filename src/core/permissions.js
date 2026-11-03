@@ -25,6 +25,8 @@ export function deriveCapabilities(context) {
     isPlatformAdmin,
     canApproveUsers: active && (isPlatformAdmin || ORG_ADMIN_ROLES.some((r) => orgRoles.has(r))),
     canManagePrograms: active && (isPlatformAdmin || PROGRAM_MANAGER_ROLES.some((r) => orgRoles.has(r))),
+    // mirrors authz.can_create_course_in_org (platform admin, district admin/supervisor)
+    canCreateCourses: active && (isPlatformAdmin || PROGRAM_MANAGER_ROLES.some((r) => orgRoles.has(r))),
     isTrainee: active && cohortRoles.has('trainee'),
     isTrainer: active && cohortRoles.has('trainer'),
     isMentor: active && cohortRoles.has('mentor'),

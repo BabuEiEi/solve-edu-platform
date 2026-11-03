@@ -12,6 +12,11 @@ import { createAdminService } from './features/admin/service.js'
 import { createOrganizationService } from './features/organizations/service.js'
 import { createProgramService } from './features/programs/service.js'
 import { createCourseService } from './features/courses/service.js'
+import { createLessonService } from './features/lessons/service.js'
+import { createMediaService } from './features/lessons/media.js'
+import { createBuilderService } from './features/builder/service.js'
+import { createPreregistrationService } from './features/preregistration/service.js'
+import { mountRichTextEditor } from './shared/ui/richTextEditor.js'
 import {
   renderAuthScreen,
   renderPendingScreen,
@@ -19,8 +24,11 @@ import {
   renderProfileView,
 } from './features/profiles/views.js'
 import { renderApprovalsView } from './features/admin/views.js'
+import { renderImportView } from './features/preregistration/views.js'
 import { renderProgramsView } from './features/programs/views.js'
 import { renderCoursesView, renderCourseOutlineView } from './features/courses/views.js'
+import { renderLessonView } from './features/lessons/views.js'
+import { renderCourseBuilderView, renderLessonEditorView } from './features/builder/views.js'
 import { renderDashboard } from './features/dashboard.js'
 
 const root = document.getElementById('app')
@@ -31,7 +39,17 @@ const routes = compileRoutes([
   { path: '/programs', view: renderProgramsView, allow: (c) => c.isActive },
   { path: '/courses', view: renderCoursesView, allow: (c) => c.isActive },
   { path: '/courses/:id', view: renderCourseOutlineView, allow: (c) => c.isActive },
+  {
+    path: '/courses/:id/preview',
+    view: (el, ctx, p) => renderCourseOutlineView(el, ctx, { ...p, preview: true }),
+    allow: (c) => c.isActive,
+  },
+  // Builder routes are open to active users; course_access() + RLS decide what they can do.
+  { path: '/courses/:id/builder', view: renderCourseBuilderView, allow: (c) => c.isActive },
+  { path: '/courses/:id/builder/lessons/:lessonId', view: renderLessonEditorView, allow: (c) => c.isActive },
+  { path: '/learn/:courseId/:lessonId', view: renderLessonView, allow: (c) => c.isActive },
   { path: '/admin/approvals', view: renderApprovalsView, allow: (c) => c.canApproveUsers },
+  { path: '/admin/import', view: renderImportView, allow: (c) => c.canApproveUsers },
 ])
 
 function renderConfigMissing() {
@@ -58,6 +76,11 @@ async function boot() {
     organizations: createOrganizationService(supabase),
     programs: createProgramService(supabase),
     courses: createCourseService(supabase),
+    lessons: createLessonService(supabase),
+    media: createMediaService(supabase),
+    builder: createBuilderService(supabase),
+    preregistration: createPreregistrationService(supabase),
+    editor: { mount: mountRichTextEditor },
   }
   let state = { session: null, context: null, caps: null }
 
@@ -70,6 +93,12 @@ async function boot() {
       return renderAuthScreen(root, { auth })
     }
     render(root, centeredCard(loading))
+    // Apply any roster rows for this account's VERIFIED email before loading the
+    // context, so a pre-registered person lands directly on an active account.
+    // Failure must never block sign-in.
+    await services.preregistration
+      .claimMine()
+      .catch((err) => console.warn('[prereg] claim skipped', err?.code))
     try {
       state.context = await services.profiles.getMyContext(state.session.user.id)
     } catch (err) {

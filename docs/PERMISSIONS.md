@@ -1,4 +1,4 @@
-# Permissions Model — SolveEdu Platform (Phase 1)
+# Permissions Model — SolveEdu Platform (Phase 1 + 2A)
 
 > หลักการ: **GRANT กำหนดว่าแตะ "คอลัมน์" ใดได้ · RLS กำหนดว่าเห็น/แก้ "แถว" ใดได้ · Trigger รักษา invariant ที่ RLS ทำไม่ได้**
 > การซ่อนเมนูใน UI (`src/core/permissions.js`) เป็นเพียงความสะดวก ไม่ใช่การรักษาความปลอดภัย
@@ -57,6 +57,7 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `course_units` / `lessons` / `lesson_blocks` | `can_view_unit/lesson` | `can_manage_course` | ไม่รวม FK แม่ (ย้ายข้ามหลักสูตรไม่ได้) | `can_manage_course` |
 | `course_enrollments` | `can_view_enrollment` | `can_manage_cohort` + trigger: ต้องเป็น trainee active และหลักสูตรอยู่ในโครงการ | `status` | ❌ |
 | `lesson_progress` | `can_view_enrollment` | เจ้าของ enrollment active + trigger: บทเรียน published | `status, progress_percent` (เวลาประทับโดย server) | ❌ |
+| `preregistrations` (2A) | ผู้นำเข้า · platform admin · district/school admin ของหน่วยงานนั้น (มีอีเมล = PII) | `can_grant_org_role` **และ** (ถ้ามีรุ่น) `can_grant_cohort_role` — สิทธิ์เท่ากับการมอบบทบาทโดยตรง | `status` → `cancelled` เฉพาะแถว pending | ❌ |
 | `private.*` | ❌ ทุก role ของ client | ❌ | ❌ | ❌ |
 
 `anon` ไม่มีสิทธิ์ใด ๆ ใน Phase 1
@@ -69,6 +70,25 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `get_profile_contact(p_target)` | authenticated | ตนเอง หรือ `can_admin_user` |
 
 ทั้งสองฟังก์ชัน `REVOKE EXECUTE FROM PUBLIC, anon`
+
+## 4.1 RPC เพิ่มใน Phase 2A
+
+| RPC | ใครเรียกได้ | การตรวจภายใน |
+|---|---|---|
+| `course_access(p_course)` → `manage`/`view`/`none` | authenticated | SECURITY INVOKER; ตอบเฉพาะสิทธิ์ของผู้เรียก (ใช้ซ่อน/แสดงเครื่องมือเท่านั้น) |
+| `reorder_course_items(p_kind, p_parent, p_ids[])` | authenticated | SECURITY INVOKER (ไม่เกินสิทธิ์ RLS) · ต้องส่ง id ครบทุกรายการของ parent ไม่ซ้ำ · ผิด → `22023` · ไม่มีสิทธิ์ → `42501` |
+| `claim_my_preregistrations()` → จำนวนแถวที่ผูก | authenticated (anon ไม่ได้) | SECURITY DEFINER · ทำงานกับ `auth.uid()` เท่านั้น · อ่านอีเมลจาก `auth.users` และต้อง `email_confirmed_at` ไม่เป็น null · ตรวจซ้ำว่าผู้นำเข้า **ยังมีสิทธิ์มอบ** · เปิดใช้เฉพาะโปรไฟล์ `pending` (ไม่ปลดระงับ) · บันทึก audit `CLAIM_PREREGISTRATION` |
+
+## 4.2 Storage (`storage.objects`, bucket private ทั้งหมด)
+
+path = `<resource_id>/<random>.<ext>` — โฟลเดอร์แรกกำหนดสิทธิ์ผ่าน `authz.object_owner_id()` (path ผิดรูป → NULL → ปฏิเสธ ไม่ error)
+
+| Bucket | อ่าน / ขอ signed URL | เขียน / แก้ / ลบ | ข้อจำกัด |
+|---|---|---|---|
+| `lesson-media` | `authz.can_view_lesson(โฟลเดอร์แรก)` | `authz.can_manage_lesson(โฟลเดอร์แรก)` | 50 MiB · รูป/PDF/Office/mp4/webm (ไม่รับ `text/html`) |
+| `avatars` | `authz.can_view_profile(โฟลเดอร์แรก)` | เจ้าของโฟลเดอร์เท่านั้น (`= auth.uid()`) · `profiles.avatar_path` ต้องอยู่ในโฟลเดอร์ตนเอง | 2 MiB · png/jpeg/webp |
+
+`anon` ไม่มีสิทธิ์ใด ๆ · `lesson_blocks.object_path` ต้องอยู่ในโฟลเดอร์ของบทเรียนเดียวกับบล็อก และห้าม `..`
 
 ## 5. Audit
 
@@ -88,4 +108,10 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | เจ้าของเห็นข้อมูลของตน / Admin เปลี่ยนสถานะในขอบเขต + audit | ALLOW + AUDIT | `020` #4, #20, #24 |
 | Trainee เห็นบทเรียน draft / หลักสูตร draft | DENY | `050` #2–4, integration |
 | ปลอม `completed_at` / เขียน progress ใน enrollment คนอื่น | DENY | `060` #7, #9 |
-| ส่งข้อสอบซ้ำพร้อมกัน / เฉลยรั่ว | — | Phase 2 |
+| ส่งข้อสอบซ้ำพร้อมกัน / เฉลยรั่ว | — | Phase 2B |
+| Trainee อ่าน/อัปโหลดไฟล์ของบทเรียน draft หรือที่ตนไม่มีสิทธิ์ | DENY | `070` + `tests/integration/storage.test.js` |
+| ผู้เรียนเห็นหน่วย/บทเรียน draft; ผู้แก้เรียงลำดับข้ามหลักสูตร | DENY | `050`, `080` |
+| ฝัง `<script>`/`onerror`/`javascript:` ในบล็อกข้อความ | DENY (DB CHECK) | `080` |
+| นำเข้ารายชื่อนอกขอบเขต / มอบบทบาทสูงกว่าสิทธิ์ตน | DENY | `090` |
+| อีเมลยังไม่ยืนยัน / อีเมลไม่ตรงรายชื่อ / metadata ปลอม ผูกบัญชี | DENY (ไม่ผูก) | `090` + `tests/integration/preregistration.test.js` (GoTrue + Mailpit จริง) |
+| ผู้นำเข้าถูกถอนสิทธิ์ก่อนผู้ใช้ล็อกอินครั้งแรก | DENY (ไม่ผูก) | `090` #26 |

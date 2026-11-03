@@ -30,6 +30,11 @@ export function toUserMessage(error) {
   if (/Invalid login credentials/i.test(msg)) return 'อีเมลหรือรหัสผ่านไม่ถูกต้อง'
   if (/Email not confirmed/i.test(msg)) return 'กรุณายืนยันอีเมลก่อนเข้าสู่ระบบ'
   if (/Failed to fetch|NetworkError/i.test(msg)) return 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาตรวจสอบเครือข่าย'
+  // Storage API errors carry HTTP-ish statusCode + English messages
+  if (/row-level security|unauthorized|not authorized/i.test(msg)) return BY_CODE[42501]
+  if (/mime type|not supported/i.test(msg)) return 'ชนิดไฟล์ไม่รองรับ'
+  if (/maximum allowed size|payload too large|entity too large/i.test(msg)) return 'ไฟล์มีขนาดใหญ่เกินกำหนด'
+  if (/already exists|duplicate/i.test(msg)) return BY_CODE[23505]
   return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
 }
 

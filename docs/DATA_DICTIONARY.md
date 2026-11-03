@@ -1,4 +1,4 @@
-# Data Dictionary — SolveEdu Platform (Phase 1)
+# Data Dictionary — SolveEdu Platform (Phase 2A)
 
 > สร้างอัตโนมัติจากฐานข้อมูล Local ด้วย `scripts/db-local/gen-data-dictionary.py` — อย่าแก้ไขด้วยมือ  
 > ทุกตารางใน `public` เปิด RLS; สิทธิ์รายคอลัมน์ดู `PERMISSIONS.md`
@@ -20,6 +20,7 @@
 - [`lesson_blocks`](#lesson-blocks) — บล็อกเนื้อหาของบทเรียน; content_json ตรวจรูปแบบตาม block_type ด้วย CHECK
 - [`course_enrollments`](#course-enrollments) — การลงทะเบียนหลักสูตรภายใต้บริบทรุ่น (cohort) เสมอ
 - [`lesson_progress`](#lesson-progress) — ความก้าวหน้ารายบทเรียน; started_at/completed_at ประทับเวลาโดยเซิร์ฟเวอร์
+- [`preregistrations`](#preregistrations) — รายชื่อลงทะเบียนล่วงหน้าจาก CSV — ผูกบัญชีเมื่อผู้ใช้ล็อกอินด้วยอีเมลที่ยืนยันแล้วตรงกัน (claim_my_preregistrations)
 
 ## profiles
 
@@ -39,6 +40,7 @@
 
 **Constraints**
 
+- `profiles_avatar_path_own_folder`: `CHECK (((avatar_path IS NULL) OR (avatar_path ~~ ((id)::text \|\| '/%'::text))))`
 - `profiles_display_name_len`: `CHECK (((display_name IS NULL) OR (char_length(display_name) <= 100)))`
 - `profiles_full_name_len`: `CHECK ((char_length(full_name) <= 200))`
 - `profiles_status_check`: `CHECK ((status = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text])))`
@@ -369,6 +371,7 @@
 
 - `lesson_blocks_block_type_check`: `CHECK ((block_type = ANY (ARRAY['rich_text'::text, 'video'::text, 'image'::text, 'document'::text, 'link'::text, 'embed'::text, 'quiz_reference'::text])))`
 - `lesson_blocks_content_valid`: `CHECK (private.is_valid_lesson_block(block_type, content_json))`
+- `lesson_blocks_object_in_lesson_folder`: `CHECK ((((content_json ->> 'object_path'::text) IS NULL) OR (starts_with((content_json ->> 'object_path'::text), ((lesson_id)::text \|\| '/'::text)) AND ((content_json ->> 'object_path'::text) !~ '(^\|/)\.\.(/\|$)'::text))))`
 - `lesson_blocks_lesson_id_fkey`: `FOREIGN KEY (lesson_id) REFERENCES lessons(id) ON DELETE CASCADE`
 - `lesson_blocks_pkey`: `PRIMARY KEY (id)`
 - `lesson_blocks_order_unique`: `UNIQUE (lesson_id, display_order) DEFERRABLE INITIALLY DEFERRED`
@@ -430,3 +433,45 @@
 **Indexes**
 
 - `CREATE INDEX lesson_progress_lesson_idx ON public.lesson_progress USING btree (lesson_id)`
+
+## preregistrations
+
+รายชื่อลงทะเบียนล่วงหน้าจาก CSV — ผูกบัญชีเมื่อผู้ใช้ล็อกอินด้วยอีเมลที่ยืนยันแล้วตรงกัน (claim_my_preregistrations)
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `email` | text | ✓ |  |  |
+| `full_name` | text | ✓ | `''::text` |  |
+| `organization_id` | uuid | ✓ |  |  |
+| `org_role` | text | ✓ | `'teacher'::text` |  |
+| `cohort_id` | uuid |  |  |  |
+| `cohort_role` | text |  |  |  |
+| `status` | text | ✓ | `'pending'::text` |  |
+| `batch_id` | uuid |  |  |  |
+| `imported_by` | uuid |  | `auth.uid()` |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `claimed_by` | uuid |  |  |  |
+| `claimed_at` | timestamp with time zone |  |  |  |
+
+**Constraints**
+
+- `prereg_claim_state`: `CHECK (((status = 'claimed'::text) = ((claimed_by IS NOT NULL) AND (claimed_at IS NOT NULL))))`
+- `prereg_cohort_pair`: `CHECK (((cohort_id IS NULL) = (cohort_role IS NULL)))`
+- `prereg_email_format`: `CHECK (((email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'::text) AND (char_length(email) <= 254)))`
+- `prereg_email_normalised`: `CHECK ((email = lower(btrim(email))))`
+- `prereg_name_len`: `CHECK ((char_length(full_name) <= 200))`
+- `preregistrations_cohort_role_check`: `CHECK ((cohort_role = ANY (ARRAY['trainee'::text, 'trainer'::text, 'mentor'::text, 'coordinator'::text])))`
+- `preregistrations_org_role_check`: `CHECK ((org_role = ANY (ARRAY['district_admin'::text, 'supervisor'::text, 'school_admin'::text, 'teacher'::text])))`
+- `preregistrations_status_check`: `CHECK ((status = ANY (ARRAY['pending'::text, 'claimed'::text, 'cancelled'::text])))`
+- `preregistrations_claimed_by_fkey`: `FOREIGN KEY (claimed_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `preregistrations_cohort_id_fkey`: `FOREIGN KEY (cohort_id) REFERENCES cohorts(id) ON DELETE RESTRICT`
+- `preregistrations_imported_by_fkey`: `FOREIGN KEY (imported_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `preregistrations_organization_id_fkey`: `FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE RESTRICT`
+- `preregistrations_pkey`: `PRIMARY KEY (id)`
+
+**Indexes**
+
+- `CREATE INDEX prereg_email_pending_idx ON public.preregistrations USING btree (email) WHERE (status = 'pending'::text)`
+- `CREATE INDEX prereg_org_idx ON public.preregistrations USING btree (organization_id, status)`
+- `CREATE UNIQUE INDEX prereg_pending_unique ON public.preregistrations USING btree (email, organization_id, org_role, COALESCE(cohort_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE (status = 'pending'::text)`

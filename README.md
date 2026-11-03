@@ -3,7 +3,7 @@
 แพลตฟอร์มเดียวสำหรับอบรมพัฒนาครู ประเมินสมรรถนะ นิเทศ 6Es ติดตาม Coaching/PLC และวิเคราะห์ข้อมูลวิจัย
 สร้างใหม่จากการศึกษา `solve-edu-lms` และ `LMS` ตาม [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md)
 
-**สถานะ:** Phase 0 (Audit) + Phase 1 (Foundation, Schema, Auth, RLS) เสร็จ · ระบบทดลอง · **ยังไม่ Deploy**
+**สถานะ:** Phase 0–1 + Phase 2A (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อ CSV) เสร็จ · ระบบทดลอง · **ยังไม่ Deploy**
 
 ## Stack
 
