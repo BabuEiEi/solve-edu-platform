@@ -1,6 +1,6 @@
 # Architecture — SolveEdu Platform
 
-> สถานะ: **Phase 0–1 เสร็จ** (Audit, Foundation, Schema, Auth, RLS, Tests) · ยังไม่ Deploy · ยังไม่เชื่อม Supabase Remote
+> สถานะ: **Phase 0–1 เสร็จ + Phase 2A เสร็จ** (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อล่วงหน้า) · ยังไม่ Deploy · ยังไม่เชื่อม Supabase Remote · Assessment/Scoring อยู่ Phase 2B
 
 ## 1. ภาพรวม
 
@@ -44,6 +44,10 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261102090400_authz_helpers.sql` | ฟังก์ชันตรวจสิทธิ์ 23 ตัว |
 | `20261102090500_rls_policies_and_rpcs.sql` | REVOKE ALL → GRANT รายคอลัมน์ → RLS policies → RPC 2 ตัว |
 | `20261102090600_comments.sql` | คำอธิบายตาราง/คอลัมน์ (สร้าง data dictionary) |
+| `20261103090000_storage_buckets_policies.sql` | bucket `lesson-media`/`avatars` (private) + policy บน `storage.objects` ผ่าน helper `authz` |
+| `20261103090100_course_builder.sql` | `course_access`, `reorder_course_items`, ตรวจ rich text/path ใน DB |
+| `20261103090110_row_based_select_policies.sql` | แก้บั๊ก `INSERT … RETURNING` (SELECT policy ตัดสินจากคอลัมน์ของแถว) |
+| `20261103090200_preregistrations.sql` | `preregistrations` + `claim_my_preregistrations()` |
 
 ### เหตุผลการออกแบบสำคัญ
 
@@ -61,5 +65,10 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Helper เรียก `is_active_user()` ซ้ำหลายครั้งต่อแถว | ช้าเมื่อข้อมูลหลักหมื่นแถว | วัดด้วย `EXPLAIN ANALYZE` ใน Phase 5; พิจารณา cache ใน JWT custom claim หรือ materialized scope |
 | Trainer แก้หลักสูตรที่ใช้ร่วมหลายโครงการได้ | การแก้กระทบรุ่นอื่น | Phase 2: content versioning เมื่อ publish หรือ `course_editors` แยก |
 | `auth.users` ON DELETE CASCADE → profiles | ลบบัญชีแล้วโปรไฟล์หาย (แต่ RESTRICT จาก enrollment จะกันไว้) | กำหนด retention / soft-delete ก่อนใช้ข้อมูลจริง |
-| ยังไม่มี Storage policies | — | Phase 2 (avatar, lesson media) / Phase 3 (submissions) |
+| Storage ของ submissions/portfolio | ยังไม่มี bucket | Phase 3 |
+| UI อัปโหลด avatar | bucket + policy พร้อมแล้ว แต่ยังไม่มีหน้าจอ | Phase 2B/3 |
+| ไฟล์ที่ลบ/แทนที่ใน Builder | ลบไฟล์แบบ best-effort — อาจมีไฟล์กำพร้าถ้าเครือข่ายล้ม | งานล้างไฟล์กำพร้า (Phase 5) |
+| เว็บไซต์ยังไม่ส่งอีเมลเชิญ | ผู้ถูกนำเข้าต้องสมัครเอง (ยืนยันอีเมลแล้วผูกอัตโนมัติ) | ต้องมี SMTP จริงก่อน pilot |
+| `supabase start` ต้อง restart เมื่อแก้ `config.toml` (เช่น email confirmations) | `db reset` ไม่โหลด config Auth ใหม่ | `npx supabase stop && npx supabase start` |
+| Editor | Tiptap 3 (MIT) โหลดแบบ lazy; ผลลัพธ์ผ่าน DOMPurify เสมอ + DB CHECK | — |
 | ไม่ได้รัน `supabase start` (Docker image ถูกบล็อกใน workspace) | ยังไม่ยืนยันกับ GoTrue/Storage จริง | รันบนเครื่องผู้พัฒนาตาม README |

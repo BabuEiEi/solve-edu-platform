@@ -60,14 +60,14 @@
 | `solve` แนวคิด Auth + Approval + Google OAuth | **Rewrite** | `src/core/auth.js`, `features/profiles`, `features/admin`, RPC `admin_set_profile_status` | ✅ Phase 1 |
 | `solve` บทบาท `student/teacher/staff/admin` ใน `users_profile.role` | **Drop → Redesign** | membership 3 ระดับ (platform / organization / cohort) | ✅ Phase 1 |
 | `solve` Course listing | **Rewrite** | `features/courses` (Program → Course → Unit → Lesson → Block) | ✅ Phase 1 (อ่าน) |
-| `solve` Course CRUD UI | Rewrite | Course Builder | ⏳ Phase 2 (schema + RLS พร้อมแล้ว) |
+| `solve` Course CRUD UI | Rewrite | Course Builder (`features/builder`) | ✅ Phase 2A |
 | `solve` Quiz UI หลายรูปแบบ / Video Quiz | Take UI ideas, Rewrite scoring | `features/assessments` + server scoring | ⏳ Phase 2 |
 | `solve` Upload / Mentor Review | Rewrite (versioned attempts, rubric, private storage) | `features/assignments` | ⏳ Phase 3 |
 | `solve` Score Matrix / ExcelJS | Take concept | `features/analytics` (scope-aware, pseudonymized) | ⏳ Phase 5 |
 | `solve` audit-log pattern | **Take (ปรับ)** | `private.audit_logs` + trigger `private.audit_row()` | ✅ Phase 1 |
-| `LMS` Rich Text Lesson + Gallery | Take UX, Rewrite | `lesson_blocks` (`rich_text`, `image`, …) + editor ที่ยังได้รับการดูแล | ⏳ Phase 2 |
+| `LMS` Rich Text Lesson + Gallery | Take UX, Rewrite | `lesson_blocks` (`rich_text`, `image`, …) + Tiptap + DOMPurify + signed URL | ✅ Phase 2A |
 | `LMS` ภาพในโจทย์/ตัวเลือก | Take UX | Assessment items | ⏳ Phase 2 |
-| `LMS` CKEditor 4.22.1 | **Drop** | เลือก editor ที่ยังซัพพอร์ต + sanitize | ⏳ Phase 2 |
+| `LMS` CKEditor 4.22.1 | **Drop** | Tiptap 3 (MIT) + DOMPurify (MPL-2.0/Apache-2.0) | ✅ Phase 2A |
 | `LMS` Google Sheets / Apps Script backend / login | **Drop** | Supabase | ✅ |
 | `.env`, ข้อมูลผู้ใช้/คะแนนเดิม | **Drop** | ไม่ย้าย (ระบบทดลองใหม่) | ✅ |
 
