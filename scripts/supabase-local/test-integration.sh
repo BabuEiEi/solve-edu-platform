@@ -14,7 +14,7 @@ esac
 
 npx supabase db reset --local >/dev/null
 SOLVEEDU_REST_URL="$API_URL/rest/v1" \
-SOLVEEDU_STORAGE_URL="$API_URL/storage/v1" \
+SOLVEEDU_API_URL="$API_URL" \
 SOLVEEDU_JWT_SECRET="$JWT_SECRET" \
 SOLVEEDU_API_KEY="$PUBLISHABLE_KEY" \
   npx vitest run tests/integration

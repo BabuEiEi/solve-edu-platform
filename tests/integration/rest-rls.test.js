@@ -5,12 +5,12 @@
  * Uses the demo seed; mutates data, so the runner resets a dedicated database first.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest'
-import { createHmac } from 'node:crypto'
 import { PostgrestClient } from '@supabase/postgrest-js'
 import { createProfileService } from '../../src/features/profiles/service.js'
 import { createAdminService } from '../../src/features/admin/service.js'
 import { createCourseService } from '../../src/features/courses/service.js'
 import { createProgramService } from '../../src/features/programs/service.js'
+import { U, jwtFor } from './helpers.js'
 
 const URL = process.env.SOLVEEDU_REST_URL
 const SECRET = process.env.SOLVEEDU_JWT_SECRET
@@ -18,25 +18,11 @@ const SECRET = process.env.SOLVEEDU_JWT_SECRET
 const API_KEY = process.env.SOLVEEDU_API_KEY
 const run = URL && SECRET ? describe : describe.skip
 
-const U = {
-  teacher_a1: '00000000-0000-4000-a000-000000000008',
-  school_admin_a: '00000000-0000-4000-a000-000000000004',
-  school_admin_b: '00000000-0000-4000-a000-000000000005',
-  newcomer: '00000000-0000-4000-a000-000000000011',
-}
-
-const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url')
-function jwtFor(sub, role = 'authenticated') {
-  const head = b64({ alg: 'HS256', typ: 'JWT' })
-  const body = b64({ sub, role, aud: 'authenticated', exp: Math.floor(Date.now() / 1000) + 600 })
-  const sig = createHmac('sha256', SECRET).update(`${head}.${body}`).digest('base64url')
-  return `${head}.${body}.${sig}`
-}
 const clientAs = (key) =>
   new PostgrestClient(URL, {
     headers: {
       ...(API_KEY ? { apikey: API_KEY } : {}),
-      ...(key ? { Authorization: `Bearer ${jwtFor(U[key])}` } : {}),
+      ...(key ? { Authorization: `Bearer ${jwtFor(SECRET, U[key])}` } : {}),
     },
   })
 
