@@ -17,11 +17,13 @@
     "db:reset:pg": "scripts/db-local/reset.sh",
     "db:test:pg": "scripts/db-local/test.sh",
     "test:integration": "scripts/supabase-local/test-integration.sh",
+    "test:e2e": "npx supabase db reset --local && playwright test",
     "check": "npm run lint && npm run test && npm run build"
   },
   "license": "UNLICENSED",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.1",
     "@supabase/postgrest-js": "^2.118.0",
     "@tailwindcss/vite": "^4.3.3",
     "eslint": "^10.14.0",

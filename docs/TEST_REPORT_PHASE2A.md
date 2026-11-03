@@ -9,7 +9,7 @@
 | Integration (Supabase Local จริง) | `npm run test:integration` | ✅ PASS 36/36 (5 ไฟล์) |
 | `npm audit --omit=dev` | — | ✅ 0 vulnerabilities |
 | `scripts/db-local/test.sh` (PostgreSQL ล้วน ไม่มี Docker) | — | ⏭️ SKIP — เครื่องนี้ไม่มี `psql`; เพิ่ม storage shim แล้วแต่ **ยังไม่ได้รันจริง** |
-| E2E เบราว์เซอร์ (Playwright) | — | ⏭️ SKIP — ยังไม่ได้เขียน; UI ทดสอบด้วย jsdom + service จริง |
+| E2E เบราว์เซอร์จริง (Playwright, Chromium headless) | `npm run test:e2e` | ✅ PASS 3/3 — trainee เรียนจบบทเรียน · trainee เข้า builder/approvals ไม่ได้ · trainer เพิ่มวิดีโอ YouTube แล้ว trainee เห็น iframe `youtube-nocookie` โดยไม่มี CSP violation (ยังไม่ได้ตรวจว่าวิดีโอเล่นได้จริง ซึ่งขึ้นกับเจ้าของวิดีโอ) |
 | Google OAuth | — | ⏭️ SKIP — ต้องมี Client ID/Secret |
 
 ## pgTAP เพิ่มใน Phase 2A (+85 assertions)
@@ -36,7 +36,7 @@
 
 ## ข้อจำกัด / ความเสี่ยงคงเหลือ
 
-- ยังไม่มี E2E เบราว์เซอร์จริง (ไม่ได้ลองคลิกใน Chrome) และไม่ได้ทดสอบ `<iframe>` YouTube/Vimeo กับ CSP จริง
+- E2E ครอบคลุมเพียง 3 สถานการณ์ (ยังไม่ครอบคลุม นำเข้า CSV ผ่านหน้าจอ, อัปโหลดรูป, Vimeo) และรันเฉพาะ Chromium
 - ไม่ส่งอีเมลเชิญ: ผู้ถูกนำเข้าต้องสมัครเองด้วยอีเมลเดียวกัน; ต้องตั้ง SMTP จริงก่อน pilot (rate limit อีเมลใน `config.toml`)
 - ผู้ที่มีบัญชีอยู่แล้วและยัง active จะถูกผูกสิทธิ์ตามรายชื่อเมื่อล็อกอินครั้งถัดไป (ตั้งใจ)
 - Reorder/ลบไฟล์ใน Builder เป็น best-effort — อาจเหลือไฟล์กำพร้า

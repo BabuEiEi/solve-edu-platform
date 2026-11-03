@@ -17,3 +17,7 @@ coverage
 supabase/.branches
 supabase/.temp
 supabase/signing_keys.json
+
+# Playwright
+test-results
+playwright-report
