@@ -2,6 +2,20 @@ import { unwrap, AppError } from '../../core/errors.js'
 import { parseCsv } from '../../shared/utils/csv.js'
 
 export const MAX_ROWS = 500
+
+/** Column headers of the roster CSV — the single source for the template and the parser. */
+export const TEMPLATE_HEADER = ['email', 'full_name']
+export const TEMPLATE_FILENAME = 'roster-template.csv'
+
+/** Template content: BOM (so Excel reads Thai as UTF-8) + header + fictitious example rows. */
+export function rosterTemplateCsv() {
+  const rows = [
+    TEMPLATE_HEADER,
+    ['teacher.one@example.test', 'ครู ตัวอย่าง หนึ่ง'],
+    ['teacher.two@example.test', 'ครู ตัวอย่าง สอง'],
+  ]
+  return '\uFEFF' + rows.map((r) => r.join(',')).join('\r\n') + '\r\n'
+}
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 const HEADER_ALIASES = {
   email: ['email', 'e-mail', 'อีเมล'],

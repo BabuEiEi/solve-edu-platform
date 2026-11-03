@@ -9,7 +9,7 @@
 | Integration (Supabase Local จริง) | `npm run test:integration` | ✅ PASS 36/36 (5 ไฟล์) |
 | `npm audit --omit=dev` | — | ✅ 0 vulnerabilities |
 | `scripts/db-local/test.sh` (PostgreSQL ล้วน ไม่มี Docker) | — | ⏭️ SKIP — เครื่องนี้ไม่มี `psql`; เพิ่ม storage shim แล้วแต่ **ยังไม่ได้รันจริง** |
-| E2E เบราว์เซอร์จริง (Playwright, Chromium headless) | `npm run test:e2e` | ✅ PASS 3/3 — trainee เรียนจบบทเรียน · trainee เข้า builder/approvals ไม่ได้ · trainer เพิ่มวิดีโอ YouTube แล้ว trainee เห็น iframe `youtube-nocookie` โดยไม่มี CSP violation (ยังไม่ได้ตรวจว่าวิดีโอเล่นได้จริง ซึ่งขึ้นกับเจ้าของวิดีโอ) |
+| E2E เบราว์เซอร์จริง (Playwright, Chromium headless) | `npm run test:e2e` | ✅ PASS 4/4 — ดาวน์โหลดไฟล์ตัวอย่างนำเข้ารายชื่อแล้วอัปโหลดกลับผ่านโดยไม่ต้องแก้ · trainee เรียนจบบทเรียน · trainee เข้า builder/approvals ไม่ได้ · trainer เพิ่มวิดีโอ YouTube แล้ว trainee เห็น iframe `youtube-nocookie` โดยไม่มี CSP violation (ยังไม่ได้ตรวจว่าวิดีโอเล่นได้จริง ซึ่งขึ้นกับเจ้าของวิดีโอ) |
 | Google OAuth | — | ⏭️ SKIP — ต้องมี Client ID/Secret |
 
 ## pgTAP เพิ่มใน Phase 2A (+85 assertions)

@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
 import { parseCsv } from '../../src/shared/utils/csv.js'
-import { analyzeRoster, createPreregistrationService } from '../../src/features/preregistration/service.js'
+import {
+  analyzeRoster,
+  createPreregistrationService,
+  rosterTemplateCsv,
+  TEMPLATE_HEADER,
+} from '../../src/features/preregistration/service.js'
 import { renderImportView, grantableRoles, importableOrgs } from '../../src/features/preregistration/views.js'
 
 const flush = async (n = 6) => {
@@ -192,5 +197,44 @@ describe('import view', () => {
     expect(importRows).toHaveBeenCalledTimes(1)
     expect(importRows.mock.calls[0][0].map((r) => r.email)).toEqual(['ok@example.test'])
     expect(el.textContent).toContain('นำเข้าแล้ว 1 รายการ')
+  })
+})
+
+describe('roster template', () => {
+  it('has the exact headers the importer requires and every example row passes validation', () => {
+    const csv = rosterTemplateCsv()
+    expect(csv.startsWith('﻿')).toBe(true) // Excel opens Thai as UTF-8
+    expect(parseCsv(csv)[0]).toEqual(TEMPLATE_HEADER)
+    const result = analyzeRoster(csv)
+    expect(result.errorCount).toBe(0)
+    expect(result.validCount).toBe(2)
+    expect(result.rows.every((r) => r.email.endsWith('@example.test'))).toBe(true)
+  })
+})
+
+describe('import view template download', () => {
+  it('downloads roster-template.csv from a blob URL', async () => {
+    const el = document.createElement('div')
+    const services = {
+      organizations: { listActiveOrganizations: async () => [{ id: 'A', name: 'ก', parent_id: null }] },
+      programs: { listVisiblePrograms: async () => [] },
+      preregistration: { list: async () => [] },
+    }
+    const context = { orgMemberships: [{ organization_id: 'A', org_role: 'school_admin' }] }
+    URL.createObjectURL = vi.fn(() => 'blob:test')
+    URL.revokeObjectURL = vi.fn()
+    let downloaded = null
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloaded = { name: this.download, href: this.href }
+    })
+    await renderImportView(el, {
+      services,
+      context,
+      caps: { isPlatformAdmin: false, orgRoles: ['school_admin'] },
+    })
+    el.querySelector('[data-action=download-template]').click()
+    expect(downloaded).toEqual({ name: 'roster-template.csv', href: 'blob:test' })
+    expect(URL.createObjectURL.mock.calls[0][0].type).toContain('text/csv')
+    click.mockRestore()
   })
 })

@@ -3,7 +3,7 @@ import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../sh
 import { ROLE_LABELS } from '../../core/permissions.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
-import { analyzeRoster, MAX_ROWS } from './service.js'
+import { analyzeRoster, rosterTemplateCsv, TEMPLATE_FILENAME, MAX_ROWS } from './service.js'
 
 const input =
   'mt-1 block w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30'
@@ -28,6 +28,18 @@ export function importableOrgs(orgs, context, caps) {
       .map((m) => m.organization_id)
   )
   return orgs.filter((o) => mine.has(o.id) || mine.has(o.parent_id))
+}
+
+/** Save the template through a short-lived blob: URL (no server round trip). */
+function downloadTemplate() {
+  const url = URL.createObjectURL(new Blob([rosterTemplateCsv()], { type: 'text/csv;charset=utf-8' }))
+  const a = document.createElement('a')
+  a.href = url
+  a.download = TEMPLATE_FILENAME
+  document.body.append(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
 }
 
 export async function renderImportView(el, { services, context, caps }) {
@@ -99,6 +111,11 @@ export async function renderImportView(el, { services, context, caps }) {
         แถวแรกเป็นหัวตาราง ต้องมีคอลัมน์ <code>email</code> และอาจมี <code>full_name</code> · สูงสุด ${MAX_ROWS} แถว ·
         ใช้ข้อมูลสมมติ (<code>*.example.test</code>) เมื่อทดสอบ
       </p>
+      <div class="sm:col-span-2">
+        <button type="button" class="${secondary}" data-action="download-template">
+          ⬇ ดาวน์โหลดไฟล์ตัวอย่าง (${TEMPLATE_FILENAME})
+        </button>
+      </div>
       <div class="sm:col-span-2"><button class="${primary}" type="submit">ตรวจสอบไฟล์</button></div>
     </form>`
 
@@ -211,6 +228,7 @@ export async function renderImportView(el, { services, context, caps }) {
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return
     const { action, id } = b.dataset
+    if (action === 'download-template') return downloadTemplate()
     if (action === 'clear-preview') {
       analysis = null
       return draw()

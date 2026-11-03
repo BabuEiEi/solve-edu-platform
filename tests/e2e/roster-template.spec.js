@@ -1,0 +1,20 @@
+import { test, expect } from '@playwright/test'
+import { signIn } from './helpers.js'
+
+test('the downloaded roster template is accepted by the importer as-is', async ({ page }, testInfo) => {
+  await signIn(page, 'school.admin.a@example.test')
+  await page.goto('/#/admin/import')
+
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('[data-action=download-template]').click(),
+  ])
+  expect(download.suggestedFilename()).toBe('roster-template.csv')
+  const path = testInfo.outputPath('roster-template.csv')
+  await download.saveAs(path)
+
+  await page.locator('input[name=file]').setInputFiles(path)
+  await page.getByRole('button', { name: 'ตรวจสอบไฟล์' }).click()
+  await expect(page.getByText('ถูกต้อง 2')).toBeVisible()
+  await expect(page.getByText('มีข้อผิดพลาด 0')).toBeVisible()
+})
