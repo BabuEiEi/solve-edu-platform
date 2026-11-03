@@ -136,3 +136,49 @@ insert into public.course_enrollments (id, cohort_id, course_id, user_id, enroll
 insert into public.lesson_progress (enrollment_id, lesson_id, status) values
   ('70000000-0000-4000-a000-000000000001', '60000000-0000-4000-a000-000000000001', 'completed'),
   ('70000000-0000-4000-a000-000000000002', '60000000-0000-4000-a000-000000000001', 'in_progress');
+
+-- ---------------------------------------------------------------------
+-- Assessment: pretest (1 attempt, pass 60%) + formative quiz (3 attempts)
+-- Keys go straight into private (seed runs as postgres); published with
+-- the same content hash the publish RPC computes.
+-- ---------------------------------------------------------------------
+insert into public.instruments (id, owner_org_id, course_id, code, title, description, created_by) values
+  ('a1000000-0000-4000-a000-000000000001', '10000000-0000-4000-a000-000000000001', '40000000-0000-4000-a000-000000000001',
+   'AFL-101-PRE', 'แบบทดสอบความรู้ AfL (ทดลอง)', 'ข้อมูลสาธิตสำหรับทดสอบระบบเท่านั้น', '00000000-0000-4000-a000-000000000003');
+
+insert into public.instrument_versions (id, instrument_id, created_by) values
+  ('a2000000-0000-4000-a000-000000000001', 'a1000000-0000-4000-a000-000000000001', '00000000-0000-4000-a000-000000000003');
+
+insert into public.instrument_items (id, instrument_version_id, item_type, prompt, options_json, max_score, display_order) values
+  ('a3000000-0000-4000-a000-000000000001', 'a2000000-0000-4000-a000-000000000001', 'mcq_single',
+   'ข้อใดเป็นเป้าหมายหลักของการประเมินเพื่อพัฒนาการเรียนรู้ (AfL)',
+   '{"options":[{"id":"a","text":"ตัดสินผลการเรียนปลายภาค"},{"id":"b","text":"ใช้ข้อมูลปรับการเรียนการสอนระหว่างทาง"},{"id":"c","text":"จัดอันดับผู้เรียนในห้อง"},{"id":"d","text":"รายงานผลต่อผู้ปกครอง"}]}',
+   1, 1),
+  ('a3000000-0000-4000-a000-000000000002', 'a2000000-0000-4000-a000-000000000001', 'mcq_multiple',
+   'ข้อใดเป็นลักษณะของข้อมูลป้อนกลับที่ดี (เลือกได้มากกว่า 1 ข้อ)',
+   '{"options":[{"id":"a","text":"ทันเวลา"},{"id":"b","text":"เฉพาะเจาะจง"},{"id":"c","text":"เน้นบอกคะแนนเท่านั้น"},{"id":"d","text":"นำไปปฏิบัติได้"}]}',
+   2, 2),
+  ('a3000000-0000-4000-a000-000000000003', 'a2000000-0000-4000-a000-000000000001', 'true_false',
+   'ควรแจ้งเกณฑ์ความสำเร็จ (success criteria) ให้ผู้เรียนทราบก่อนเริ่มกิจกรรม', '{}', 1, 3),
+  ('a3000000-0000-4000-a000-000000000004', 'a2000000-0000-4000-a000-000000000001', 'numeric',
+   'ห้องเรียนมีนักเรียน 40 คน ผ่านเกณฑ์ 30 คน คิดเป็นร้อยละเท่าใด', '{"unit":"%"}', 1, 4);
+
+insert into private.instrument_answer_keys (item_id, answer_json, scoring_json, updated_by) values
+  ('a3000000-0000-4000-a000-000000000001', '{"correct":["b"]}', '{}', '00000000-0000-4000-a000-000000000003'),
+  ('a3000000-0000-4000-a000-000000000002', '{"correct":["a","b","d"]}', '{"mode":"all_or_nothing"}', '00000000-0000-4000-a000-000000000003'),
+  ('a3000000-0000-4000-a000-000000000003', '{"correct":true}', '{}', '00000000-0000-4000-a000-000000000003'),
+  ('a3000000-0000-4000-a000-000000000004', '{"value":75,"tolerance":0}', '{}', '00000000-0000-4000-a000-000000000003');
+
+update public.instrument_versions
+   set status = 'published', published_at = now(), published_by = '00000000-0000-4000-a000-000000000003',
+       content_hash = private.version_content_hash(id)
+ where id = 'a2000000-0000-4000-a000-000000000001';
+
+insert into public.assessment_assignments (id, instrument_version_id, cohort_id, course_id, purpose, title, instructions,
+                                           open_at, close_at, attempt_limit, passing_percent, status, created_by) values
+  ('a4000000-0000-4000-a000-000000000001', 'a2000000-0000-4000-a000-000000000001', '30000000-0000-4000-a000-000000000001',
+   '40000000-0000-4000-a000-000000000001', 'pretest', 'แบบทดสอบก่อนเรียน AfL', 'ทำได้ 1 ครั้ง เมื่อกดเริ่มแล้วจะนับเป็น 1 ครั้ง',
+   '2026-11-01 00:00+07', '2027-03-31 23:59+07', 1, 60, 'published', '00000000-0000-4000-a000-000000000006'),
+  ('a4000000-0000-4000-a000-000000000002', 'a2000000-0000-4000-a000-000000000001', '30000000-0000-4000-a000-000000000001',
+   '40000000-0000-4000-a000-000000000001', 'formative', 'แบบฝึกหัดทบทวน หน่วยที่ 1', null,
+   null, null, 3, 70, 'published', '00000000-0000-4000-a000-000000000006');

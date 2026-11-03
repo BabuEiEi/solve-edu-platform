@@ -42,6 +42,15 @@ as $$
     when 'enr_a1'         then '70000000-0000-4000-a000-000000000001'
     when 'enr_a2'         then '70000000-0000-4000-a000-000000000002'
     when 'enr_b1'         then '70000000-0000-4000-a000-000000000003'
+    -- assessment demo
+    when 'quiz'           then 'a1000000-0000-4000-a000-000000000001'
+    when 'quiz_v1'        then 'a2000000-0000-4000-a000-000000000001'
+    when 'q_single'       then 'a3000000-0000-4000-a000-000000000001'
+    when 'q_multiple'     then 'a3000000-0000-4000-a000-000000000002'
+    when 'q_truefalse'    then 'a3000000-0000-4000-a000-000000000003'
+    when 'q_numeric'      then 'a3000000-0000-4000-a000-000000000004'
+    when 'pretest'        then 'a4000000-0000-4000-a000-000000000001'
+    when 'formative'      then 'a4000000-0000-4000-a000-000000000002'
   end::uuid
 $$;
 
