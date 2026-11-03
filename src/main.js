@@ -14,6 +14,8 @@ import { createProgramService } from './features/programs/service.js'
 import { createCourseService } from './features/courses/service.js'
 import { createLessonService } from './features/lessons/service.js'
 import { createMediaService } from './features/lessons/media.js'
+import { createBuilderService } from './features/builder/service.js'
+import { mountRichTextEditor } from './shared/ui/richTextEditor.js'
 import {
   renderAuthScreen,
   renderPendingScreen,
@@ -24,6 +26,7 @@ import { renderApprovalsView } from './features/admin/views.js'
 import { renderProgramsView } from './features/programs/views.js'
 import { renderCoursesView, renderCourseOutlineView } from './features/courses/views.js'
 import { renderLessonView } from './features/lessons/views.js'
+import { renderCourseBuilderView, renderLessonEditorView } from './features/builder/views.js'
 import { renderDashboard } from './features/dashboard.js'
 
 const root = document.getElementById('app')
@@ -34,6 +37,14 @@ const routes = compileRoutes([
   { path: '/programs', view: renderProgramsView, allow: (c) => c.isActive },
   { path: '/courses', view: renderCoursesView, allow: (c) => c.isActive },
   { path: '/courses/:id', view: renderCourseOutlineView, allow: (c) => c.isActive },
+  {
+    path: '/courses/:id/preview',
+    view: (el, ctx, p) => renderCourseOutlineView(el, ctx, { ...p, preview: true }),
+    allow: (c) => c.isActive,
+  },
+  // Builder routes are open to active users; course_access() + RLS decide what they can do.
+  { path: '/courses/:id/builder', view: renderCourseBuilderView, allow: (c) => c.isActive },
+  { path: '/courses/:id/builder/lessons/:lessonId', view: renderLessonEditorView, allow: (c) => c.isActive },
   { path: '/learn/:courseId/:lessonId', view: renderLessonView, allow: (c) => c.isActive },
   { path: '/admin/approvals', view: renderApprovalsView, allow: (c) => c.canApproveUsers },
 ])
@@ -64,6 +75,8 @@ async function boot() {
     courses: createCourseService(supabase),
     lessons: createLessonService(supabase),
     media: createMediaService(supabase),
+    builder: createBuilderService(supabase),
+    editor: { mount: mountRichTextEditor },
   }
   let state = { session: null, context: null, caps: null }
 

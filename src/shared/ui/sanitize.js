@@ -40,8 +40,10 @@ const CONFIG = {
   RETURN_TRUSTED_TYPE: false,
 }
 
-const purifier = DOMPurify(globalThis.window)
-purifier.addHook('afterSanitizeAttributes', (node) => {
+// DOMPurify needs a DOM. Without one (e.g. plain Node) it is unsupported and
+// we FAIL CLOSED instead of passing HTML through unsanitised.
+const purifier = globalThis.window ? DOMPurify(globalThis.window) : null
+purifier?.addHook('afterSanitizeAttributes', (node) => {
   if (node.tagName === 'A') {
     if (!node.getAttribute('href')) node.removeAttribute('target')
     else {
@@ -53,6 +55,7 @@ purifier.addHook('afterSanitizeAttributes', (node) => {
 
 /** Sanitised HTML string (for saving). */
 export function sanitizeRichText(dirty) {
+  if (!purifier?.isSupported) throw new Error('sanitizeRichText requires a DOM (browser or jsdom)')
   return purifier.sanitize(String(dirty ?? ''), CONFIG).trim()
 }
 
