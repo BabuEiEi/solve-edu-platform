@@ -16,6 +16,7 @@ import { createLessonService } from './features/lessons/service.js'
 import { createMediaService } from './features/lessons/media.js'
 import { createBuilderService } from './features/builder/service.js'
 import { createPreregistrationService } from './features/preregistration/service.js'
+import { createAssessmentService } from './features/assessments/service.js'
 import { mountRichTextEditor } from './shared/ui/richTextEditor.js'
 import {
   renderAuthScreen,
@@ -29,6 +30,11 @@ import { renderProgramsView } from './features/programs/views.js'
 import { renderCoursesView, renderCourseOutlineView } from './features/courses/views.js'
 import { renderLessonView } from './features/lessons/views.js'
 import { renderCourseBuilderView, renderLessonEditorView } from './features/builder/views.js'
+import {
+  renderMyAssessmentsView,
+  renderAssessmentView,
+  renderAttemptResultView,
+} from './features/assessments/views.js'
 import { renderDashboard } from './features/dashboard.js'
 
 const root = document.getElementById('app')
@@ -48,6 +54,10 @@ const routes = compileRoutes([
   { path: '/courses/:id/builder', view: renderCourseBuilderView, allow: (c) => c.isActive },
   { path: '/courses/:id/builder/lessons/:lessonId', view: renderLessonEditorView, allow: (c) => c.isActive },
   { path: '/learn/:courseId/:lessonId', view: renderLessonView, allow: (c) => c.isActive },
+  // start_attempt / submit_attempt + RLS decide eligibility; the guard only needs an active account.
+  { path: '/assessments', view: renderMyAssessmentsView, allow: (c) => c.isActive },
+  { path: '/assessments/attempts/:attemptId', view: renderAttemptResultView, allow: (c) => c.isActive },
+  { path: '/assessments/:id', view: renderAssessmentView, allow: (c) => c.isActive },
   { path: '/admin/approvals', view: renderApprovalsView, allow: (c) => c.canApproveUsers },
   { path: '/admin/import', view: renderImportView, allow: (c) => c.canApproveUsers },
 ])
@@ -80,6 +90,8 @@ async function boot() {
     media: createMediaService(supabase),
     builder: createBuilderService(supabase),
     preregistration: createPreregistrationService(supabase),
+    assessments: createAssessmentService(supabase),
+    assessmentMedia: createMediaService(supabase, 'assessment-media'),
     editor: { mount: mountRichTextEditor },
   }
   let state = { session: null, context: null, caps: null }

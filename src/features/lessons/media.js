@@ -42,8 +42,9 @@ export function mediaPathFor(lessonId, ext, uuid = globalThis.crypto.randomUUID(
   return `${lessonId}/${uuid}.${ext}`
 }
 
-export function createMediaService(client) {
-  const bucket = () => client.storage.from(LESSON_MEDIA_BUCKET)
+/** `bucketName` lets other private buckets (e.g. assessment-media) reuse the same signing/upload code. */
+export function createMediaService(client, bucketName = LESSON_MEDIA_BUCKET) {
+  const bucket = () => client.storage.from(bucketName)
   return {
     async upload(lessonId, kind, file) {
       const ext = validateMediaFile(kind, file)
