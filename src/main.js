@@ -17,6 +17,8 @@ import { createMediaService } from './features/lessons/media.js'
 import { createBuilderService } from './features/builder/service.js'
 import { createPreregistrationService } from './features/preregistration/service.js'
 import { createAssessmentService } from './features/assessments/service.js'
+import { createQuizBuilderService } from './features/quizzes/service.js'
+import { renderCourseQuizzesView, renderQuizEditorView } from './features/quizzes/views.js'
 import { mountRichTextEditor } from './shared/ui/richTextEditor.js'
 import {
   renderAuthScreen,
@@ -53,6 +55,8 @@ const routes = compileRoutes([
   // Builder routes are open to active users; course_access() + RLS decide what they can do.
   { path: '/courses/:id/builder', view: renderCourseBuilderView, allow: (c) => c.isActive },
   { path: '/courses/:id/builder/lessons/:lessonId', view: renderLessonEditorView, allow: (c) => c.isActive },
+  { path: '/courses/:id/quizzes', view: renderCourseQuizzesView, allow: (c) => c.isActive },
+  { path: '/courses/:id/quizzes/:quizId', view: renderQuizEditorView, allow: (c) => c.isActive },
   { path: '/learn/:courseId/:lessonId', view: renderLessonView, allow: (c) => c.isActive },
   // start_attempt / submit_attempt + RLS decide eligibility; the guard only needs an active account.
   { path: '/assessments', view: renderMyAssessmentsView, allow: (c) => c.isActive },
@@ -91,6 +95,7 @@ async function boot() {
     builder: createBuilderService(supabase),
     preregistration: createPreregistrationService(supabase),
     assessments: createAssessmentService(supabase),
+    quizzes: createQuizBuilderService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),
     editor: { mount: mountRichTextEditor },
   }
