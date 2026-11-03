@@ -66,6 +66,9 @@ describe('sanitizeRichText', () => {
 
 describe('parseVideoInput', () => {
   it.each([
+    ['https://www.youtube.com/watch?v=gxyBiCWiQ_8', 'youtube', 'gxyBiCWiQ_8'],
+    ['https://www.youtube.com/watch?v=gxyBiCWiQ_8&t=30s&list=PL1', 'youtube', 'gxyBiCWiQ_8'],
+    ['https://youtu.be/gxyBiCWiQ_8', 'youtube', 'gxyBiCWiQ_8'],
     ['https://www.youtube.com/watch?v=dQw4w9WgXcQ', 'youtube', 'dQw4w9WgXcQ'],
     ['https://youtu.be/dQw4w9WgXcQ?t=10', 'youtube', 'dQw4w9WgXcQ'],
     ['https://www.youtube.com/embed/dQw4w9WgXcQ', 'youtube', 'dQw4w9WgXcQ'],
@@ -86,6 +89,10 @@ describe('parseVideoInput', () => {
 })
 
 describe('buildBlockContent', () => {
+  it('accepts the course YouTube link and stores only provider + video_id', () => {
+    const content = buildBlockContent('video', { url: 'https://www.youtube.com/watch?v=gxyBiCWiQ_8' })
+    expect(content).toEqual({ provider: 'youtube', video_id: 'gxyBiCWiQ_8', caption: '' })
+  })
   it('sanitises rich text and rejects empty text', () => {
     expect(buildBlockContent('rich_text', { html: '<p>ก<script>x</script></p>' })).toEqual({
       html: '<p>ก</p>',
@@ -135,6 +142,16 @@ describe('media rules', () => {
 })
 
 describe('renderBlock', () => {
+  it('embeds the course YouTube video through youtube-nocookie', () => {
+    const el = document.createElement('div')
+    render(
+      el,
+      html`${renderBlock({ block_type: 'video', content_json: { provider: 'youtube', video_id: 'gxyBiCWiQ_8' } })}`
+    )
+    expect(el.querySelector('iframe').getAttribute('src')).toBe(
+      'https://www.youtube-nocookie.com/embed/gxyBiCWiQ_8'
+    )
+  })
   const draw = (block, media) => {
     const el = document.createElement('div')
     render(el, html`${renderBlock(block, media)}`)
