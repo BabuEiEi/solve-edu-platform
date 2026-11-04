@@ -39,8 +39,40 @@ function choiceCard(type, name, value, content, checked) {
   </label>`
 }
 
-/** One slot's answer: a select when every choice is text (compact), otherwise picture cards; `chips` = small inline radios. */
-function slotControl(name, choices, selected, media, label, { chips = false } = {}) {
+/** "รูปที่ 2" / "รูปที่ 2 · คำบรรยาย": how a numbered choice is named in the gallery and in each row's select. */
+const galleryName = (c, k) => `รูปที่ ${k + 1}${c.text ? ` · ${c.text}` : ''}`
+
+/**
+ * Choices with pictures, shown once as a numbered gallery; every row then
+ * picks "รูปที่ N" from a select. Keeps the item short on a phone (the
+ * pictures are not repeated under each row).
+ */
+function choiceGallery(choices, media) {
+  return html`<ol class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3" data-gallery>
+    ${choices.map(
+      (
+        c,
+        k
+      ) => html`<li class="rounded-lg border border-ink-200 bg-white p-2 text-sm" data-gallery-item="${c.id}">
+        <span class="mb-1 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-600 px-1 text-xs font-bold text-white"
+          >${k + 1}</span
+        >
+        <div class="flex flex-col gap-1">${choiceLabel(c.text ? { ...c, text: '' } : c, media)}${c.text ? html`<span class="text-xs text-ink-600">${c.text}</span>` : ''}</div>
+      </li>`
+    )}
+  </ol>`
+}
+
+/** One slot's answer: a select when every choice is text (compact), otherwise picture cards; `chips` = small inline radios; `gallery` = select of numbered pictures. */
+function slotControl(name, choices, selected, media, label, { chips = false, gallery = false } = {}) {
+  if (gallery)
+    return html`<select name="${name}" aria-label="${label}" class="${field} w-full sm:w-auto">
+      <option value="">— เลือก —</option>
+      ${choices.map(
+        (c, k) =>
+          html`<option value="${c.id}" ${selected === c.id ? html`selected` : ''}>${galleryName(c, k)}</option>`
+      )}
+    </select>`
   if (chips)
     return html`<div role="radiogroup" aria-label="${label}" class="flex flex-wrap gap-2">
       ${choices.map(
@@ -126,7 +158,9 @@ function slotRows(item, saved, media) {
   const o = item.options_json ?? {}
   const lists = SLOT_LISTS[item.item_type]
   const chips = item.item_type === 'classification' || item.item_type === 'choice_matrix'
-  return html`<div class="space-y-3">
+  const choices = o[lists.choices] ?? []
+  const gallery = !chips && choices.some((c) => c.image_path)
+  return html`${gallery ? choiceGallery(choices, media) : ''}<div class="space-y-3">
     ${(o[lists.slots] ?? []).map((s, k) => {
       const label = item.item_type === 'image_labelling' ? `จุดที่ ${k + 1}` : entryText(s)
       return html`<div class="rounded-lg border border-ink-100 p-3" data-slot="${s.id}">
@@ -137,7 +171,7 @@ function slotRows(item, saved, media) {
               : choiceLabel(s, media)
           }
         </div>
-        ${slotControl(partName(item.id, s.id), o[lists.choices] ?? [], saved?.[s.id], media, `คำตอบของ ${label}`, { chips })}
+        ${slotControl(partName(item.id, s.id), choices, saved?.[s.id], media, `คำตอบของ ${label}`, { chips, gallery })}
       </div>`
     })}
   </div>`

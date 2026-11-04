@@ -137,7 +137,18 @@ describe('rendering the seven types', () => {
     const form = formWith(ITEMS)
     expect(form.querySelector('img[src="x"]')).toBeNull() // XSS entry text escaped
     expect(form.querySelectorAll('[data-ordering] li')).toHaveLength(3)
-    expect(form.querySelectorAll('input[type=radio][name="q:mat:l1"]')).toHaveLength(3) // r3 has an image → cards
+    // r3 has a picture: the choices are shown once as a numbered gallery, each row picks "รูปที่ N" (2C.1)
+    expect(form.querySelectorAll('[data-gallery] li')).toHaveLength(3)
+    expect(form.querySelectorAll('img[src="https://x.example.test/r3.png"]')).toHaveLength(1) // not repeated per row
+    const rowSelect = form.querySelector('select[name="q:mat:l1"]')
+    expect([...rowSelect.options].map((o) => o.textContent.trim())).toEqual([
+      '— เลือก —',
+      expect.stringMatching(/^รูปที่ 1/),
+      expect.stringMatching(/^รูปที่ 2/),
+      expect.stringMatching(/^รูปที่ 3/),
+    ])
+    expect(form.querySelectorAll('input[type=radio][name="q:mat:l1"]')).toHaveLength(0)
+    expect(form.querySelector('[data-item-id=cls] [data-gallery]')).toBeNull() // chips keep their own pictures
     expect(form.querySelectorAll('input[type=radio][name="q:cls:i1"]')).toHaveLength(2) // classification: chips
     expect(form.querySelectorAll('input[type=radio][name="q:mtx:w2"]')).toHaveLength(2)
     expect(form.querySelector('select[name="q:dd:b1"]')).not.toBeNull()
@@ -285,7 +296,7 @@ describe('exam page with the new types', () => {
       'b',
       'a',
     ])
-    expect(form.querySelector('[name="q:mat:l2"][value=r2]').checked).toBe(true) // restored
+    expect(form.querySelector('select[name="q:mat:l2"]').value).toBe('r2') // restored
 
     form.querySelector('[data-order-id=c] [data-move="1"]').click()
     await vi.advanceTimersByTimeAsync(0)
