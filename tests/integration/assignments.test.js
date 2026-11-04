@@ -42,7 +42,7 @@ run('Assignments and cohort results (Supabase Local)', () => {
       attempt_limit: 2,
       passing_percent: 60,
       open_at: null,
-      close_at: null,
+      close_at: '2027-03-31T16:59:00Z',
       instructions: null,
     })
     assignmentId = created.id
@@ -61,11 +61,36 @@ run('Assignments and cohort results (Supabase Local)', () => {
     await createAssessmentService(supabaseAs(env, 'teacher_a2')).start(assignmentId)
   })
 
-  it('trainer: whole cohort roster with names, every attempt, no per-item data on the wire', async () => {
-    const roster = await as('trainer').listRoster(COHORT, U.trainer)
-    expect(roster.map((r) => r.user_id).sort()).toEqual([U.teacher_a1, U.teacher_a2, U.teacher_b1].sort())
-    expect(roster.every((r) => r.name && r.name !== 'ไม่ทราบชื่อ')).toBe(true)
+  it('trainer: one results row per trainee (assignment_results), names included', async () => {
+    const rows = await as('trainer').results(assignmentId)
+    expect(rows.map((r) => r.user_id).sort()).toEqual([U.teacher_a1, U.teacher_a2, U.teacher_b1].sort())
+    expect(rows.every((r) => r.name && r.on_roster)).toBe(true)
+    expect(rows.find((r) => r.user_id === U.teacher_a1)).toMatchObject({
+      used: 1,
+      submitted: 1,
+      best_score: 0,
+    })
+    expect(rows.find((r) => r.user_id === U.teacher_a2)).toMatchObject({
+      used: 1,
+      submitted: 0,
+      in_progress: true,
+    })
+    expect(rows.find((r) => r.user_id === U.teacher_b1)).toMatchObject({ used: 0, best_score: null })
+    expect(JSON.stringify(rows)).not.toMatch(KEY_MARKERS)
+  })
 
+  it('item analysis: assessors only; fewer than 5 people → only the count', async () => {
+    expect(await as('trainer').itemStatistics(assignmentId)).toEqual({
+      n: 1,
+      min_n: 5,
+      suppressed: true,
+      basis: 'first_attempt',
+    })
+    await expect(as('mentor').itemStatistics(assignmentId)).rejects.toMatchObject({ code: '42501' })
+    await expect(as('teacher_a1').itemStatistics(assignmentId)).rejects.toMatchObject({ code: '42501' })
+  })
+
+  it('trainer: every attempt, no per-item data on the wire', async () => {
     const attempts = await as('trainer').listAttempts(assignmentId)
     expect(attempts.map((t) => [t.user_id, t.status]).sort()).toEqual(
       [
@@ -77,8 +102,8 @@ run('Assignments and cohort results (Supabase Local)', () => {
     expect(JSON.stringify(attempts)).not.toMatch(KEY_MARKERS)
   })
 
-  it('mentor: only the assigned trainee, in the roster and in the attempts', async () => {
-    expect((await as('mentor').listRoster(COHORT, U.mentor)).map((r) => r.user_id)).toEqual([U.teacher_a1])
+  it('mentor: only the assigned trainee, in the results and in the attempts', async () => {
+    expect((await as('mentor').results(assignmentId)).map((r) => r.user_id)).toEqual([U.teacher_a1])
     expect((await as('mentor').listAttempts(assignmentId)).map((t) => t.user_id)).toEqual([U.teacher_a1])
     await expect(as('mentor').update(assignmentId, { title: 'x' })).rejects.toThrow()
   })
@@ -98,6 +123,7 @@ run('Assignments and cohort results (Supabase Local)', () => {
   it('outsiders see nothing', async () => {
     expect(await as('school_admin_b').get(assignmentId)).toBeNull()
     expect(await as('school_admin_b').listAttempts(assignmentId)).toEqual([])
+    expect(await as('school_admin_b').results(assignmentId)).toEqual([])
     expect((await as('teacher_a2').listAttempts(assignmentId)).map((t) => t.user_id)).toEqual([U.teacher_a2])
   })
 })

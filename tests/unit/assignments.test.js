@@ -2,10 +2,16 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   toBangkokInput,
   fromBangkokInput,
+  bangkokInputLabel,
   buildAssignmentPayload,
   canAssessHint,
   traineeOnlyCohorts,
   summarizeResults,
+  difficultyLabel,
+  discriminationLabel,
+  reliabilityLabel,
+  choicesText,
+  itemStatsCsvRows,
   resultsCsvRows,
 } from '../../src/features/assignments/logic.js'
 import { createAssignmentService } from '../../src/features/assignments/service.js'
@@ -23,18 +29,34 @@ const settle = async () => {
   for (let i = 0; i < 5; i++) await flush()
 }
 
-const attempt = (over) => ({
-  id: 't',
+// A row of assignment_results (one per person)
+const person = (over) => ({
   user_id: 'u1',
-  attempt_no: 1,
-  status: 'submitted',
-  started_at: '2026-11-20T01:00:00Z',
-  submitted_at: '2026-11-20T01:30:00Z',
-  score: 3,
-  max_score: 5,
-  passed: true,
+  name: 'ครู ก',
+  on_roster: true,
+  used: 1,
+  extra: 0,
+  in_progress: false,
+  submitted: 1,
+  auto_submitted: 0,
+  first_score: 3,
+  first_max: 5,
+  best_score: 3,
+  best_max: 5,
+  best_passed: true,
+  last_submitted_at: '2026-11-20T01:30:00Z',
   ...over,
 })
+const nobody = {
+  used: 0,
+  submitted: 0,
+  first_score: null,
+  first_max: null,
+  best_score: null,
+  best_max: null,
+  best_passed: null,
+  last_submitted_at: null,
+}
 
 describe('assignment logic', () => {
   it('datetime-local values are Bangkok time, independent of the device zone', () => {
@@ -47,19 +69,41 @@ describe('assignment logic', () => {
     expect(() => fromBangkokInput('20/11/2569', 'เวลาเปิด')).toThrow(/เวลาเปิด/)
   })
 
+  it('date inputs are echoed in พ.ศ. (the native picker shows ค.ศ.)', () => {
+    expect(bangkokInputLabel('2027-03-31T16:00')).toBe('31 มี.ค. 2570 16:00 น.')
+    expect(bangkokInputLabel('')).toBe('')
+    expect(bangkokInputLabel('31/03/2027')).toBe('')
+  })
+
   it('payload: validates title, limit, pass mark and window', () => {
-    const base = { title: ' หลังเรียน ', purpose: 'posttest', attempt_limit: '2', passing_percent: '' }
+    const base = {
+      title: ' หลังเรียน ',
+      purpose: 'posttest',
+      attempt_limit: '2',
+      passing_percent: '',
+      close_at: '2027-03-31T16:00',
+    }
     expect(buildAssignmentPayload(base)).toEqual({
       title: 'หลังเรียน',
       instructions: null,
       open_at: null,
-      close_at: null,
+      close_at: '2027-03-31T16:00:00+07:00',
       attempt_limit: 2,
+      grace_minutes: 5,
       purpose: 'posttest',
       passing_percent: null,
+      time_limit_minutes: null,
     })
+    expect(buildAssignmentPayload({ ...base, time_limit_minutes: '30', grace_minutes: '0' })).toMatchObject({
+      time_limit_minutes: 30,
+      grace_minutes: 0,
+    })
+    expect(() => buildAssignmentPayload({ ...base, time_limit_minutes: '0' })).toThrow(/1–600/)
+    expect(() => buildAssignmentPayload({ ...base, time_limit_minutes: '15.5' })).toThrow(/1–600/)
+    expect(() => buildAssignmentPayload({ ...base, grace_minutes: '61' })).toThrow(/0–60/)
     expect(buildAssignmentPayload({ ...base, passing_percent: '60.5' }).passing_percent).toBe(60.5)
     expect(() => buildAssignmentPayload({ ...base, title: ' ' })).toThrow(AppError)
+    expect(() => buildAssignmentPayload({ ...base, close_at: '' })).toThrow(/วันเวลาปิดรับ/) // every assignment closes
     expect(() => buildAssignmentPayload({ ...base, attempt_limit: '0' })).toThrow(/1–20/)
     expect(() => buildAssignmentPayload({ ...base, attempt_limit: '1.5' })).toThrow(/1–20/)
     expect(() => buildAssignmentPayload({ ...base, passing_percent: '101' })).toThrow(/0–100/)
@@ -80,8 +124,10 @@ describe('assignment logic', () => {
       open_at: null,
       close_at: '2026-12-01T16:00:00+07:00',
       attempt_limit: 3,
+      grace_minutes: 5,
     })
     expect(p).not.toHaveProperty('passing_percent')
+    expect(p).not.toHaveProperty('time_limit_minutes')
     expect(p).not.toHaveProperty('purpose')
   })
 
@@ -100,45 +146,90 @@ describe('assignment logic', () => {
     expect([...traineeOnlyCohorts(context)]).toEqual(['C2'])
   })
 
-  it('summary: best attempt per person, not-started people counted, off-roster attempts kept', () => {
-    const roster = [
-      { user_id: 'u1', name: 'ข' },
-      { user_id: 'u2', name: 'ก' },
-      { user_id: 'u3', name: 'ค' },
-    ]
-    const attempts = [
-      attempt({ id: 'a1', score: 2, passed: false }),
-      attempt({ id: 'a2', attempt_no: 2, score: 4, submitted_at: '2026-11-21T01:00:00Z' }),
-      attempt({
-        id: 'b1',
-        user_id: 'u2',
-        status: 'in_progress',
-        submitted_at: null,
-        score: null,
-        passed: null,
+  it('summary from server rows: best attempt per person, not started counted, off-roster kept', () => {
+    const results = [
+      person({
+        user_id: 'u1',
+        name: 'ข',
+        used: 2,
+        submitted: 2,
+        first_score: 2,
+        best_score: 4,
+        last_submitted_at: '2026-11-21T01:00:00Z',
       }),
-      attempt({ id: 'x1', user_id: 'gone', score: 5, profiles: { full_name: 'ออกจากรุ่นแล้ว' } }),
+      person({ user_id: 'u2', name: 'ก', ...nobody, used: 1, in_progress: true }),
+      person({ user_id: 'u3', name: 'ค', ...nobody }),
+      person({ user_id: 'gone', name: 'ออกจากรุ่นแล้ว', on_roster: false, first_score: 5, best_score: 5 }),
     ]
-    const { rows, summary } = summarizeResults(roster, attempts, { passing_percent: 60 })
+    const { rows, summary } = summarizeResults(results, { passing_percent: 60, attempt_limit: 2 })
     const u1 = rows.find((r) => r.user_id === 'u1')
-    expect(u1).toMatchObject({ used: 2, status: 'submitted', lastSubmittedAt: '2026-11-21T01:00:00Z' })
-    expect(u1.first.id).toBe('a1')
-    expect(u1.best.id).toBe('a2')
-    expect(rows.find((r) => r.user_id === 'u2')).toMatchObject({ status: 'in_progress', best: null })
+    expect(u1).toMatchObject({
+      used: 2,
+      limit: 2,
+      status: 'submitted',
+      lastSubmittedAt: '2026-11-21T01:00:00Z',
+    })
+    expect(u1.first).toEqual({ score: 2, max_score: 5 })
+    expect(u1.best).toEqual({ score: 4, max_score: 5, passed: true })
+    expect(rows.find((r) => r.user_id === 'u2')).toMatchObject({
+      status: 'in_progress',
+      inProgress: true,
+      best: null,
+    })
     expect(rows.find((r) => r.user_id === 'u3')).toMatchObject({ status: 'not_started', used: 0 })
-    expect(rows.find((r) => r.user_id === 'gone')).toMatchObject({ offRoster: true, name: 'ออกจากรุ่นแล้ว' })
+    expect(rows.find((r) => r.user_id === 'gone')).toMatchObject({ offRoster: true })
     expect(rows.map((r) => r.name)).toEqual(['ก', 'ข', 'ค', 'ออกจากรุ่นแล้ว'])
     expect(summary).toEqual({ total: 4, started: 3, submitted: 2, average: 90, passed: 2 })
-    expect(summarizeResults(roster, [], { passing_percent: null }).summary).toMatchObject({
+    expect(summarizeResults([person({ ...nobody })], { passing_percent: null }).summary).toMatchObject({
       average: null,
       passed: null,
     })
   })
 
-  it('CSV: header + one row per person; formula-like names are neutralised', () => {
-    const { rows } = summarizeResults([{ user_id: 'u1', name: '=HYPERLINK("x")' }], [attempt()], {
-      passing_percent: 50,
+  it("extra attempts raise the person's limit; auto-submitted attempts are counted", () => {
+    const { rows } = summarizeResults([person({ used: 2, submitted: 2, extra: 1, auto_submitted: 1 })], {
+      attempt_limit: 1,
     })
+    expect(rows[0]).toMatchObject({ used: 2, extra: 1, limit: 2, autoSubmitted: 1 })
+  })
+
+  it('item analysis labels follow the usual guides (p .20–.80, D ≥ .20, reliability ≥ .70)', () => {
+    expect([0.1, 0.5, 0.9].map(difficultyLabel)).toEqual(['ยากมาก', 'พอเหมาะ', 'ง่ายมาก'])
+    expect([-0.1, 0.1, 0.3, 0.5].map(discriminationLabel)).toEqual([
+      'ติดลบ — ตรวจโจทย์/เฉลย',
+      'ต่ำ — ควรปรับปรุง',
+      'พอใช้',
+      'ดี',
+    ])
+    expect([0.95, 0.75, 0.559, 0.3, null].map(reliabilityLabel)).toEqual([
+      'สูงมาก',
+      'ยอมรับได้',
+      'ค่อนข้างต่ำ',
+      'ต่ำ',
+      'คำนวณไม่ได้',
+    ])
+    expect(choicesText({ b: 4, a: 1 })).toBe('a 1 · b 4')
+    expect(choicesText({ true: 3, false: 2 })).toBe('ผิด 2 · ถูก 3')
+    const rows = itemStatsCsvRows({
+      items: [
+        {
+          item_type: 'mcq_single',
+          prompt: '=cmd',
+          max_score: 1,
+          p: 0.667,
+          d: 0.5,
+          r_it: 0.403,
+          choices: { b: 4 },
+          blank: 1,
+        },
+      ],
+    })
+    expect(rows[1]).toEqual([1, 'mcq_single', '=cmd', 1, 0.667, 0.5, 0.403, 'b 4', 1])
+    expect(parseCsv(toCsv(rows))[1][2]).toBe("'=cmd") // formula-like prompt neutralised
+  })
+
+  it('CSV: header + one row per person; formula-like names are neutralised', () => {
+    const { rows } = summarizeResults([person({ name: '=HYPERLINK("x")' })], { passing_percent: 50 })
     const text = toCsv(resultsCsvRows(rows))
     expect(text.startsWith('﻿')).toBe(true)
     const parsed = parseCsv(text)
@@ -147,6 +238,8 @@ describe('assignment logic', () => {
       `'=HYPERLINK("x")`,
       'ส่งแล้ว',
       '1',
+      '0',
+      '0',
       '60',
       '60',
       '3',
@@ -217,29 +310,19 @@ describe('assignment service', () => {
     await expect(createAssignmentService(c).update('A1', { title: 'x' })).rejects.toThrow(/ไม่มีสิทธิ์/)
   })
 
-  it('roster = cohort trainees ∪ own mentees, de-duplicated; attempts select no per-item data', async () => {
-    const c = fakeClient((q) =>
-      q.table === 'cohort_memberships'
-        ? { data: [{ user_id: 'u1', profiles: { full_name: 'หนึ่ง' } }], error: null }
-        : q.table === 'mentor_assignments'
-          ? {
-              data: [
-                { trainee_id: 'u1', profiles: { full_name: 'หนึ่ง' } },
-                { trainee_id: 'u2', profiles: { display_name: 'สอง' } },
-              ],
-              error: null,
-            }
-          : { data: [], error: null }
-    )
+  it('results and item analysis are RPCs; attempts select no per-item data', async () => {
+    const c = fakeClient({ data: [], error: null })
+    c.rpc = vi.fn(async () => ({ data: [], error: null }))
     const svc = createAssignmentService(c)
-    expect(await svc.listRoster('C', 'me')).toEqual([
-      { user_id: 'u1', name: 'หนึ่ง' },
-      { user_id: 'u2', name: 'สอง' },
+    await svc.results('A1')
+    await svc.itemStatistics('A1')
+    expect(c.rpc.mock.calls).toEqual([
+      ['assignment_results', { p_assignment: 'A1' }],
+      ['item_statistics', { p_assignment: 'A1' }],
     ])
-    expect(c.calls[1].ops).toContainEqual(['eq', 'mentor_id', 'me'])
     await svc.listAttempts('A1')
     const select = c.calls.at(-1).ops.find(([op]) => op === 'select')[1]
-    expect(select).not.toMatch(/awarded_score|response|answer/)
+    expect(select).not.toMatch(/awarded_score|response|answer|draft/)
   })
 })
 
@@ -254,7 +337,7 @@ describe('assignment views', () => {
     attempt_limit: 2,
     passing_percent: 60,
     open_at: null,
-    close_at: null,
+    close_at: '2027-03-31T16:59:00Z',
     instructions: null,
     cohorts: { id: 'C1', code: 'C1', name: 'รุ่น 1' },
     courses: { id: 'K', title: 'AfL' },
@@ -264,17 +347,57 @@ describe('assignment views', () => {
       instruments: { id: 'I1', title: 'Quiz', course_id: 'K' },
     },
   }
+  const STATS = {
+    n: 6,
+    min_n: 5,
+    suppressed: false,
+    basis: 'first_attempt',
+    group_size: 2,
+    k: 2,
+    max_score: 5,
+    mean_score: 2.5,
+    sd_score: 1.71,
+    reliability: 0.559,
+    reliability_kind: 'kr20',
+    items: [
+      {
+        item_id: 'i1',
+        display_order: 1,
+        item_type: 'mcq_single',
+        prompt: XSS,
+        max_score: 1,
+        p: 0.667,
+        d: 0.5,
+        r_it: 0.403,
+        blank: 1,
+        choices: { a: 1, b: 4 },
+      },
+      {
+        item_id: 'i2',
+        display_order: 2,
+        item_type: 'true_false',
+        prompt: 'ข้อสอง',
+        max_score: 1,
+        p: 0.95,
+        d: -0.1,
+        r_it: null,
+        blank: 0,
+        choices: { true: 5, false: 1 },
+      },
+    ],
+  }
   const trainer = { cohortMemberships: [{ cohort_id: 'C1', cohort_role: 'trainer' }] }
   const mentor = { cohortMemberships: [{ cohort_id: 'C1', cohort_role: 'mentor' }] }
   const makeServices = (overrides = {}) => ({
     assignments: {
       get: vi.fn(async () => assignment),
-      listAttempts: vi.fn(async () => [attempt({ user_id: 'u1' })]),
-      listRoster: vi.fn(async () => [
-        { user_id: 'u1', name: XSS },
-        { user_id: 'u2', name: 'ครู ข' },
+      results: vi.fn(async () => [
+        person({ user_id: 'u1', name: XSS }),
+        person({ user_id: 'u2', name: 'ครู ข', ...nobody }),
       ]),
+      itemStatistics: vi.fn(async () => STATS),
       update: vi.fn(async () => ({ id: 'A1' })),
+      grantExtraAttempt: vi.fn(async () => {}),
       listVisible: vi.fn(async () => [assignment, { ...assignment, id: 'A2', cohort_id: 'C2' }]),
       getVersion: vi.fn(async () => ({
         id: 'V1',
@@ -300,6 +423,11 @@ describe('assignment views', () => {
     expect(el.querySelector('[data-summary]').textContent).toContain('1 / 2')
     expect(el.querySelectorAll('[data-results] tbody tr')).toHaveLength(2)
     expect(el.textContent).toContain('ยังไม่เริ่ม')
+    expect(el.querySelector('[data-date-label=close_at]').textContent).toBe('31 มี.ค. 2570 23:59 น.')
+    const close = el.querySelector('input[name=close_at]')
+    close.value = '2027-01-15T09:30'
+    close.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(el.querySelector('[data-date-label=close_at]').textContent).toBe('15 ม.ค. 2570 09:30 น.')
     expect(el.querySelector('select[name=purpose]').disabled).toBe(true)
     expect(el.querySelector('input[name=passing_percent]').disabled).toBe(true)
     expect(el.querySelector('[data-action=delete]')).toBeNull()
@@ -313,17 +441,98 @@ describe('assignment views', () => {
     expect(el.textContent).toContain('บันทึกการตั้งค่าแล้ว')
   })
 
+  it('detail (trainer): +1 attempt asks for a reason and grants it to that person', async () => {
+    const el = document.createElement('div')
+    const services = makeServices()
+    await renderAssignmentDetailView(el, ctx(services, trainer), { id: 'A1' })
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce(null).mockReturnValueOnce('สัญญาณขาด')
+    const button = el.querySelector('tr[data-user-id=u2] [data-action=grant-extra]')
+    button.click() // cancelled
+    expect(services.assignments.grantExtraAttempt).not.toHaveBeenCalled()
+    el.querySelector('tr[data-user-id=u2] [data-action=grant-extra]').click()
+    await settle()
+    expect(services.assignments.grantExtraAttempt).toHaveBeenCalledWith('A1', 'u2', 'สัญญาณขาด')
+    expect(el.textContent).toContain('ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ครู ข แล้ว')
+    expect(el.querySelector('input[name=time_limit_minutes]').disabled).toBe(true) // frozen with attempts
+    prompt.mockRestore()
+  })
+
+  it('detail (trainer): item analysis with labels, escaped prompts, no key', async () => {
+    const el = document.createElement('div')
+    await renderAssignmentDetailView(el, ctx(makeServices(), trainer), { id: 'A1' })
+    const section = el.querySelector('[data-item-analysis]')
+    expect(section.querySelector('img')).toBeNull()
+    expect(section.querySelector('[data-reliability]').textContent).toBe('0.559')
+    expect(section.textContent).toContain('KR-20')
+    expect(section.textContent).toContain('ค่อนข้างต่ำ')
+    const row1 = section.querySelector('[data-item-row="1"]').textContent
+    expect(row1).toContain('0.67')
+    expect(row1).toContain('พอเหมาะ')
+    expect(row1).toContain('a 1 · b 4')
+    const row2 = section.querySelector('[data-item-row="2"]').textContent
+    expect(row2).toContain('ง่ายมาก')
+    expect(row2).toContain('ติดลบ — ตรวจโจทย์/เฉลย')
+    expect(row2).toContain('ผิด 1 · ถูก 5')
+    expect(section.textContent).toContain('ระบบไม่ระบุว่าตัวเลือกใดเป็นคำตอบที่ถูก')
+  })
+
+  it('item analysis: too few people, or an error, does not hide the results', async () => {
+    const el = document.createElement('div')
+    await renderAssignmentDetailView(
+      el,
+      ctx(
+        makeServices({ itemStatistics: vi.fn(async () => ({ n: 3, min_n: 5, suppressed: true })) }),
+        trainer
+      ),
+      { id: 'A1' }
+    )
+    expect(el.querySelector('[data-item-analysis]').textContent).toContain('ต้องมีผู้ส่งอย่างน้อย 5 คน')
+    const el2 = document.createElement('div')
+    await renderAssignmentDetailView(
+      el2,
+      ctx(
+        makeServices({
+          itemStatistics: vi.fn(async () => {
+            throw Object.assign(new Error('x'), { code: '42501' })
+          }),
+        }),
+        trainer
+      ),
+      { id: 'A1' }
+    )
+    expect(el2.querySelectorAll('[data-results] tbody tr')).toHaveLength(2)
+    expect(el2.querySelector('[data-item-analysis]').textContent).toContain('วิเคราะห์ข้อสอบไม่สำเร็จ')
+  })
+
   it('detail (mentor): results only, no settings form', async () => {
     const el = document.createElement('div')
-    await renderAssignmentDetailView(el, ctx(makeServices(), mentor), { id: 'A1' })
+    const services = makeServices()
+    await renderAssignmentDetailView(el, ctx(services, mentor), { id: 'A1' })
+    expect(services.assignments.itemStatistics).not.toHaveBeenCalled()
+    expect(el.querySelector('[data-item-analysis]')).toBeNull()
     expect(el.querySelector('form[data-form=assignment]')).toBeNull()
+    expect(el.querySelector('[data-action=grant-extra]')).toBeNull()
     expect(el.textContent).toContain('แสดงเฉพาะผู้เรียนที่ท่านมีสิทธิ์ดูผล')
+  })
+
+  it('a draft without a closing time cannot be published', async () => {
+    const el = document.createElement('div')
+    const services = makeServices({
+      get: vi.fn(async () => ({ ...assignment, status: 'draft', close_at: null })),
+      results: vi.fn(async () => [person({ ...nobody })]),
+    })
+    await renderAssignmentDetailView(el, ctx(services, trainer), { id: 'A1' })
+    expect(el.querySelector('input[name=close_at]').required).toBe(true)
+    el.querySelector('[data-action=publish]').click()
+    await settle()
+    expect(services.assignments.update).not.toHaveBeenCalled()
+    expect(el.textContent).toContain('กรุณากำหนดวันเวลาปิดรับ')
   })
 
   it('detail: SE004 from the server is shown in Thai', async () => {
     const el = document.createElement('div')
     const services = makeServices({
-      listAttempts: vi.fn(async () => []),
+      results: vi.fn(async () => [person({ ...nobody })]),
       update: vi.fn(async () => {
         throw Object.assign(new Error('x'), { code: 'SE004' })
       }),
@@ -352,6 +561,7 @@ describe('assignment views', () => {
     await renderNewAssignmentView(el, ctx(services, trainer), { versionId: 'V1' })
     expect([...el.querySelectorAll('select[name=cohort_id] option')].map((o) => o.value)).toEqual(['C1'])
     el.querySelector('input[name=passing_percent]').value = '70'
+    el.querySelector('input[name=close_at]').value = '2027-03-31T16:00'
     const form = el.querySelector('form[data-form=assignment]')
     form.requestSubmit(form.querySelector('button[value=published]'))
     await settle()

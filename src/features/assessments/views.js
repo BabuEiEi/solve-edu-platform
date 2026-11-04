@@ -10,18 +10,15 @@ import {
   buildResponses,
   readAnswers,
   itemMediaPaths,
-  loadDraft,
-  saveDraft,
-  clearDraft,
+  answersFromResponses,
+  clockOffset,
+  remainingMs,
+  formatRemaining,
 } from './logic.js'
 
-const storage = () => {
-  try {
-    return globalThis.localStorage ?? null
-  } catch {
-    return null
-  }
-}
+const AUTOSAVE_DELAY_MS = 800
+const LEAVE_PROMPT = 'ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่'
+const AUTOSAVE_RETRY_MS = 10_000
 
 const primaryBtn =
   'rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-60'
@@ -43,6 +40,9 @@ export const resultBadge = (passed) =>
         >`
       : ''
 
+export const timeLimitText = (a) =>
+  a.time_limit_minutes ? `${a.time_limit_minutes} นาทีต่อครั้ง` : 'ไม่จำกัด (ภายในช่วงเปิด–ปิด)'
+
 export function windowText(a) {
   if (a.open_at && a.close_at)
     return `เปิด ${formatThaiDateTime(a.open_at)} – ปิด ${formatThaiDateTime(a.close_at)}`
@@ -56,7 +56,7 @@ function stateText(a, s) {
   if (s.window === 'closed') return 'ปิดรับแล้ว'
   if (s.inProgress) return 'กำลังทำอยู่ — ทำต่อได้'
   if (s.remaining === 0) return 'ทำครบจำนวนครั้งแล้ว'
-  return `ทำได้อีก ${s.remaining} จาก ${a.attempt_limit} ครั้ง`
+  return `ทำได้อีก ${s.remaining} จาก ${s.limit} ครั้ง`
 }
 
 const traineeCohortIds = (context) =>
@@ -228,9 +228,15 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''}
         <section class="rounded-xl border border-ink-200 bg-white p-5 text-sm">
           ${assignment.instructions ? html`<p class="whitespace-pre-line text-ink-700">${assignment.instructions}</p>` : ''}
-          <dl class="mt-3 grid gap-2 sm:grid-cols-3">
-            <div><dt class="text-ink-500">จำนวนครั้งที่ทำได้</dt><dd class="font-semibold">${assignment.attempt_limit} ครั้ง</dd></div>
+          <dl class="mt-3 grid gap-2 sm:grid-cols-4">
+            <div>
+              <dt class="text-ink-500">จำนวนครั้งที่ทำได้</dt>
+              <dd class="font-semibold">
+                ${state.limit} ครั้ง${state.limit > assignment.attempt_limit ? ` (รวมสิทธิ์เพิ่ม ${state.limit - assignment.attempt_limit})` : ''}
+              </dd>
+            </div>
             <div><dt class="text-ink-500">ใช้ไปแล้ว</dt><dd class="font-semibold">${state.used} ครั้ง</dd></div>
+            <div><dt class="text-ink-500">เวลาทำ</dt><dd class="font-semibold">${timeLimitText(assignment)}</dd></div>
             <div>
               <dt class="text-ink-500">เกณฑ์ผ่าน</dt>
               <dd class="font-semibold">
@@ -243,6 +249,11 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
               state.canStart
                 ? html`<p class="mb-3 text-ink-600">
                       เมื่อกดเริ่ม ระบบจะนับเป็น 1 ครั้งทันที แม้ยังไม่ได้ส่งคำตอบ (เหลือ ${state.remaining} ครั้ง)
+                      ${
+                        assignment.time_limit_minutes || assignment.close_at
+                          ? ' · เวลาเริ่มนับทันที เมื่อหมดเวลาระบบจะส่งคำตอบที่บันทึกไว้ให้อัตโนมัติ'
+                          : ''
+                      }
                     </p>
                     <button data-action="start-attempt" class="${primaryBtn}">เริ่มทำแบบทดสอบ</button>`
                 : html`<p class="font-medium text-ink-700">${stateText(assignment, state)}</p>`
@@ -271,7 +282,10 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
     )
 
   // ---------- exam ----------
+  const resultPath = (attemptId) => `/assessments/attempts/${attemptId}`
+
   const startExam = async (attempt) => {
+    if (attempt.timed_out) return navigate(resultPath(attempt.attempt_id))
     render(el, loading)
     let items, media
     try {
@@ -280,61 +294,263 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
     } catch (err) {
       return render(el, alertBox(toUserMessage(err)))
     }
-    const store = storage()
-    const draft = loadDraft(store, attempt.attempt_id)
+    const saved = answersFromResponses(items, attempt.draft)
     let confirmUnanswered = false
+    let finished = false
+    let saving = false
+    let pending = false // a change arrived while a save was in flight
+    let saveTimer = null
+    let tick = null
+    let lastSaved = JSON.stringify(attempt.draft ?? {})
+    // Every save/submit is numbered from this page's base; the server keeps only newer ones.
+    let seq = attempt.draft_seq ?? null
+    const nextSeq = () => (seq === null ? null : ++seq)
 
     render(
       el,
-      html`<div class="flex flex-wrap items-center gap-2">${purposeChip(assignment.purpose)}
+      html`${
+        attempt.deadline_at
+          ? html`<div
+                class="sticky top-12 z-10 mb-4 flex items-center justify-between gap-3 rounded-xl border border-brand-200 bg-white/95 px-4 py-2 text-sm shadow-sm backdrop-blur lg:top-2"
+                data-timer
+              >
+                <span>ส่งภายใน ${formatThaiDateTime(attempt.deadline_at)}</span>
+                <span>เหลือเวลา <strong class="tabular-nums" data-remaining></strong></span>
+              </div>
+              <p class="sr-only" aria-live="assertive" data-time-alert></p>`
+          : ''
+      }
+        <div class="flex flex-wrap items-center gap-2">${purposeChip(assignment.purpose)}
           <span class="text-sm text-ink-500">ครั้งที่ ${attempt.attempt_no} · เริ่ม ${formatThaiDateTime(attempt.started_at)}</span>
         </div>
-        ${pageHeader(assignment.title, assignment.close_at ? `ส่งก่อน ${formatThaiDateTime(assignment.close_at)}` : '')}
+        ${pageHeader(assignment.title, '')}
+        <div data-slot="top" aria-live="assertive"></div>
+        <p class="mb-4 text-xs text-ink-500">
+          ระบบบันทึกคำตอบอัตโนมัติ ถ้าเบราว์เซอร์ถามก่อนปิดหน้า แปลว่ายังบันทึกไม่เสร็จ ให้กดอยู่ในหน้านี้สักครู่
+        </p>
         <form data-form="attempt" class="space-y-4" novalidate>
-          ${items.map((item, i) => renderItem(item, i, draft, media))}
+          ${items.map((item, i) => renderItem(item, i, saved, media))}
           <div data-slot="message" aria-live="polite"></div>
           <div class="flex flex-wrap items-center gap-3 pt-2">
             <button type="submit" class="${primaryBtn}">ส่งคำตอบ</button>
-            <span class="text-xs text-ink-500">คำตอบถูกพักไว้ในเครื่องนี้จนกว่าจะส่ง</span>
+            <span class="text-xs text-ink-500" data-save-status data-state="saved" aria-live="polite"
+              >ระบบบันทึกคำตอบให้อัตโนมัติระหว่างทำ</span
+            >
           </div>
         </form>`
     )
     const form = el.querySelector('form[data-form=attempt]')
     const slot = el.querySelector('[data-slot=message]')
+    const saveStatus = el.querySelector('[data-save-status]')
     const say = (msg, kind = 'error') => render(slot, msg ? alertBox(msg, kind) : html``)
-
-    form.oninput = () => {
-      confirmUnanswered = false
-      saveDraft(store, attempt.attempt_id, readAnswers(form, items))
+    const stop = () => {
+      clearTimeout(saveTimer)
+      clearInterval(tick)
     }
-    form.onsubmit = async (e) => {
-      e.preventDefault()
+    // A page opened later (another device, or this one after a reload) took over.
+    const superseded = () => {
+      finished = true
+      stop()
+      detach()
+      form.querySelectorAll('input, button').forEach((c) => (c.disabled = true))
+      const top = el.querySelector('[data-slot=top]')
+      render(
+        top,
+        html`<div class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert" data-superseded>
+          <span class="flex-1">มีการทำต่อจากอีกเครื่องแล้ว กรุณาโหลดหน้าใหม่</span>
+          <button type="button" class="${primaryBtn}" data-reload>โหลดหน้าใหม่</button>
+        </div>`
+      )
+      top.querySelector('[data-reload]').onclick = () => window.location.reload()
+      top.scrollIntoView?.({ block: 'center' })
+    }
+
+    const done = () => {
+      finished = true
+      stop()
+      detach()
+      navigate(resultPath(attempt.attempt_id))
+    }
+
+    // ---------- autosave (server draft) ----------
+    // data-state: saved = what is on screen is stored on the server; dirty / saving / error otherwise.
+    const onScreen = () =>
+      JSON.stringify(buildResponses(items, readAnswers(form, items), { lenient: true }).responses)
+    const saveNow = async () => {
+      if (finished || !form.isConnected) return
+      if (saving) {
+        pending = true
+        return
+      }
+      const body = onScreen()
+      if (body === lastSaved) {
+        saveStatus.dataset.state = 'saved'
+        return
+      }
+      saving = true
+      saveStatus.dataset.state = 'saving'
+      try {
+        const r = await services.assessments.saveDraft(attempt.attempt_id, JSON.parse(body), nextSeq())
+        if (r?.finalized) return done() // time was up: submitted from earlier saved answers
+        if (r?.stale) return superseded()
+        lastSaved = body
+        saveStatus.textContent = `บันทึกคำตอบแล้ว ${formatThaiDateTime(r?.saved_at ?? new Date())}`
+        saveStatus.dataset.state = onScreen() === lastSaved ? 'saved' : 'dirty'
+      } catch (err) {
+        if (err?.code === 'SE003') return done()
+        saveStatus.textContent = 'บันทึกไม่สำเร็จ — ระบบจะลองใหม่อัตโนมัติ'
+        saveStatus.dataset.state = 'error'
+        saveTimer = setTimeout(saveNow, AUTOSAVE_RETRY_MS)
+      } finally {
+        saving = false
+        if (pending && !finished) {
+          pending = false
+          saveNow()
+        }
+      }
+      return undefined
+    }
+
+    // ---------- submit (button, or time up) ----------
+    const submitNow = async ({ timeUp = false } = {}) => {
+      if (finished) return
       let built
       try {
-        built = buildResponses(items, readAnswers(form, items))
+        built = buildResponses(items, readAnswers(form, items), { lenient: timeUp })
       } catch (err) {
         return say(toUserMessage(err))
       }
-      if (built.unanswered.length && !confirmUnanswered) {
+      if (!timeUp && built.unanswered.length && !confirmUnanswered) {
         confirmUnanswered = true
         return say(
           `ยังไม่ได้ตอบ ${built.unanswered.length} ข้อ (ข้อ ${built.unanswered.join(', ')}) — ข้อที่ไม่ตอบจะได้ 0 คะแนน กด "ส่งคำตอบ" อีกครั้งเพื่อยืนยัน`,
           'info'
         )
       }
-      const button = form.querySelector('button[type=submit]')
-      button.disabled = true
+      finished = true
+      stop()
+      form.querySelectorAll('input, button').forEach((c) => (c.disabled = true))
+      if (timeUp) say('หมดเวลา — กำลังส่งคำตอบ', 'info')
       try {
-        await services.assessments.submit(attempt.attempt_id, built.responses)
-        clearDraft(store, attempt.attempt_id)
-        navigate(`/assessments/attempts/${attempt.attempt_id}`)
+        await services.assessments.submit(attempt.attempt_id, built.responses, nextSeq())
+        navigate(resultPath(attempt.attempt_id))
       } catch (err) {
-        // Already submitted (e.g. another tab): the result page shows the stored score.
-        if (err?.code === 'SE003') return navigate(`/assessments/attempts/${attempt.attempt_id}`)
-        button.disabled = false
+        // Already submitted (another tab, or the server finalised it): show the stored result.
+        if (err?.code === 'SE003') return navigate(resultPath(attempt.attempt_id))
+        if (err?.code === 'SE005') return superseded()
+        if (timeUp) {
+          return say('หมดเวลา และส่งไม่สำเร็จ — ระบบจะให้คะแนนจากคำตอบที่บันทึกไว้ล่าสุดโดยอัตโนมัติ', 'info')
+        }
+        finished = false
+        form.querySelectorAll('input, button').forEach((c) => (c.disabled = false))
         say(toUserMessage(err))
       }
+      return undefined
     }
+
+    // A choice is saved at once; typing (numeric answers) waits for a short pause,
+    // or saves as soon as the trainee leaves the field.
+    form.onchange = (e) => {
+      if (e.target?.type !== 'text') return
+      clearTimeout(saveTimer)
+      saveNow()
+    }
+    form.oninput = (e) => {
+      confirmUnanswered = false
+      saveStatus.dataset.state = 'dirty'
+      saveStatus.textContent = 'กำลังบันทึก…'
+      clearTimeout(saveTimer)
+      saveTimer = setTimeout(saveNow, e.target?.type === 'text' ? AUTOSAVE_DELAY_MS : 0)
+    }
+    form.onsubmit = (e) => {
+      e.preventDefault()
+      submitNow()
+    }
+
+    // ---------- countdown ----------
+    if (attempt.deadline_at) {
+      const offset = clockOffset(attempt.server_now)
+      const remainingEl = el.querySelector('[data-remaining]')
+      const timerEl = el.querySelector('[data-timer]')
+      const alertEl = el.querySelector('[data-time-alert]')
+      const announced = new Set()
+      const update = () => {
+        if (!form.isConnected) return stop() // left the page
+        const ms = remainingMs(attempt.deadline_at, offset)
+        remainingEl.textContent = formatRemaining(ms)
+        for (const min of [5, 1]) {
+          if (ms <= min * 60_000 && ms > 0 && !announced.has(min)) {
+            announced.add(min)
+            alertEl.textContent = `เหลือเวลา ${min} นาที`
+            timerEl.classList.add('border-amber-400', 'bg-amber-50')
+          }
+        }
+        if (ms <= 0) submitNow({ timeUp: true })
+        return undefined
+      }
+      update()
+      tick = setInterval(update, 1000)
+    }
+
+    // ---------- leaving with unsaved answers ----------
+    const unsaved = () => !finished && saveStatus.dataset.state !== 'saved'
+    // Prompts only while this exam is on screen; a stale page removes its own listeners.
+    const promptNeeded = () => {
+      if (!form.isConnected) {
+        detach()
+        return false
+      }
+      return unsaved()
+    }
+    // Keepalive: the browser completes it even if the page is frozen or closed right after.
+    const flushKeepalive = () => {
+      if (!unsaved()) return
+      const body = onScreen()
+      if (body !== lastSaved)
+        services.assessments.saveDraftKeepalive?.(attempt.attempt_id, JSON.parse(body), nextSeq())
+    }
+    // Closing the tab / reloading: browsers show their own wording, not ours.
+    const onBeforeUnload = (e) => {
+      if (!promptNeeded()) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    const onPageHide = () => flushKeepalive()
+    // Switching apps or locking the phone hides the page; it may never come back.
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushKeepalive()
+      else saveNow() // back again: reconcile with the server and refresh the status
+    }
+    // Links and sign-out inside the app: our own Thai prompt.
+    const onLeaveClick = (e) => {
+      const target = e.target.closest?.('a[href^="#"], [data-action="sign-out"]')
+      if (!target || form.contains(target) || !promptNeeded()) return
+      if (!window.confirm(LEAVE_PROMPT)) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
+      flushKeepalive()
+    }
+    const onHashChange = () => {
+      if (form.isConnected) return
+      flushKeepalive()
+      stop()
+      detach()
+    }
+    function detach() {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      window.removeEventListener('pagehide', onPageHide)
+      window.removeEventListener('hashchange', onHashChange)
+      document.removeEventListener('visibilitychange', onVisibility)
+      document.removeEventListener('click', onLeaveClick, true)
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    window.addEventListener('pagehide', onPageHide)
+    window.addEventListener('hashchange', onHashChange)
+    document.addEventListener('visibilitychange', onVisibility)
+    document.addEventListener('click', onLeaveClick, true)
+    return undefined
   }
 
   el.onclick = async (e) => {
@@ -351,8 +567,9 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
     }
   }
 
-  if (state.inProgress && state.window === 'open') {
-    // Resume through the RPC so the server re-checks eligibility.
+  if (state.inProgress) {
+    // Resume through the RPC: the server re-checks eligibility and, if time is
+    // up, submits from the saved answers (timed_out) instead of resuming.
     try {
       return await startExam(await services.assessments.start(assignment.id))
     } catch (err) {
@@ -430,6 +647,13 @@ export async function renderAttemptResultView(el, { services }, { attemptId }) {
         ${
           assignment.passing_percent !== null && assignment.passing_percent !== undefined
             ? html`<p class="mt-3 text-sm text-ink-500">เกณฑ์ผ่าน ${Number(assignment.passing_percent)}%</p>`
+            : ''
+        }
+        ${
+          attempt.auto_submitted
+            ? html`<p class="mt-3 rounded-lg bg-sky-50 px-3 py-2 text-sm text-sky-800" data-auto-submitted>
+                หมดเวลา — ระบบส่งคำตอบที่บันทึกไว้ล่าสุดให้อัตโนมัติ
+              </p>`
             : ''
         }
         <p class="mt-4 text-xs text-ink-400">ระบบแสดงคะแนนรวมเท่านั้น ไม่แสดงเฉลยรายข้อ</p>

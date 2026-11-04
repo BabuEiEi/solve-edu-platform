@@ -6,15 +6,24 @@ import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { toCsv } from '../../shared/utils/csv.js'
 import { downloadText } from '../../shared/ui/download.js'
 import { PURPOSE_LABELS, attemptPercent } from '../assessments/logic.js'
-import { purposeChip, resultBadge, windowText } from '../assessments/views.js'
+import { purposeChip, resultBadge, windowText, timeLimitText } from '../assessments/views.js'
 import {
   ATTEMPT_LIMIT_MAX,
+  TIME_LIMIT_MAX,
+  GRACE_MAX,
+  GRACE_DEFAULT,
   toBangkokInput,
+  bangkokInputLabel,
   buildAssignmentPayload,
   canAssessHint,
   traineeOnlyCohorts,
   summarizeResults,
   resultsCsvRows,
+  difficultyLabel,
+  discriminationLabel,
+  reliabilityLabel,
+  choicesText,
+  itemStatsCsvRows,
 } from './logic.js'
 
 const input =
@@ -31,6 +40,31 @@ const LIST_PATH = '/staff/assessments'
 const cohortLabel = (c) => (c ? `${c.name} (${c.code})` : '—')
 const versionText = (v) =>
   v ? `${v.instruments?.title ?? 'แบบทดสอบ'} · ฉบับที่ ${v.version_no}` : 'แบบทดสอบ'
+
+/** datetime-local + its value echoed as พ.ศ. (kept current by watchDateLabels). */
+function dateField(name, text, value, { required = false } = {}) {
+  const v = toBangkokInput(value)
+  return html`<label class="${label}"
+    >${text}<input
+      name="${name}"
+      type="datetime-local"
+      value="${v}"
+      class="${input}"
+      ${required ? html`required` : ''}
+    />
+    <span class="mt-1 block text-xs font-normal text-ink-500" data-date-label="${name}" aria-live="polite"
+      >${bangkokInputLabel(v)}</span
+    >
+  </label>`
+}
+
+function watchDateLabels(el) {
+  el.oninput = (e) => {
+    const name = e.target.matches?.('input[type=datetime-local]') ? e.target.name : null
+    const out = name && e.target.form?.querySelector(`[data-date-label="${name}"]`)
+    if (out) out.textContent = bangkokInputLabel(e.target.value)
+  }
+}
 
 /** Settings shared by "create" and "edit". `locked`: an attempt exists (server freezes purpose / pass mark). */
 function settingsFields(a, { locked = false } = {}) {
@@ -59,12 +93,7 @@ function settingsFields(a, { locked = false } = {}) {
         ${locked ? html`disabled` : ''}
       />
     </label>
-    <label class="${label}"
-      >เปิดให้ทำ (เวลาไทย)<input name="open_at" type="datetime-local" value="${toBangkokInput(a.open_at)}" class="${input}"
-    /></label>
-    <label class="${label}"
-      >ปิดรับ (เวลาไทย)<input name="close_at" type="datetime-local" value="${toBangkokInput(a.close_at)}" class="${input}"
-    /></label>
+    ${dateField('open_at', 'เปิดให้ทำ (เวลาไทย)', a.open_at)} ${dateField('close_at', 'ปิดรับ (เวลาไทย) — บังคับ', a.close_at, { required: true })}
     <label class="${label}"
       >จำนวนครั้งที่ทำได้
       <input
@@ -79,13 +108,43 @@ function settingsFields(a, { locked = false } = {}) {
       />
     </label>
     <p class="self-end text-xs text-ink-500">
-      เว้นเวลาเปิด/ปิดว่างได้ (ไม่จำกัดช่วงเวลา) · การกดเริ่มทำนับเป็น 1 ครั้งทันที
+      เว้นเวลาเปิดว่างได้ (เปิดทันทีเมื่อเผยแพร่) · ต้องกำหนดเวลาปิดรับ เมื่อถึงเวลาระบบปิดและส่งคำตอบที่บันทึกไว้ให้ทุกคน · การกดเริ่มทำนับเป็น 1 ครั้งทันที
+    </p>
+    <label class="${label}"
+      >เวลาทำต่อครั้ง (นาที)
+      <input
+        name="time_limit_minutes"
+        type="number"
+        min="1"
+        max="${TIME_LIMIT_MAX}"
+        step="1"
+        value="${a.time_limit_minutes ?? ''}"
+        placeholder="เว้นว่าง = ใช้แค่ช่วงเปิด–ปิด"
+        class="${input}"
+        ${locked ? html`disabled` : ''}
+      />
+    </label>
+    <label class="${label}"
+      >ช่วงผ่อนผันหลังหมดเวลา (นาที)
+      <input
+        name="grace_minutes"
+        type="number"
+        min="0"
+        max="${GRACE_MAX}"
+        step="1"
+        value="${a.grace_minutes ?? GRACE_DEFAULT}"
+        class="${input}"
+      />
+    </label>
+    <p class="text-xs text-ink-500 sm:col-span-2">
+      เวลาทำนับจากที่ผู้เรียนกดเริ่ม และไม่เกินเวลาปิดรับ · เมื่อหมดเวลา ระบบส่งคำตอบที่บันทึกไว้ให้อัตโนมัติ ·
+      ช่วงผ่อนผันกันเน็ตช้าตอนกดส่ง (ผู้เรียนไม่เห็นเวลาส่วนนี้)
     </p>
     ${
       locked
         ? html`<p class="rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-600 sm:col-span-2">
-            มีผู้เริ่มทำแล้ว จึงแก้ประเภทและเกณฑ์ผ่านไม่ได้ เพื่อให้ผลที่บันทึกไว้ยังตรงกับเกณฑ์เดิม
-            (แก้ช่วงเวลา จำนวนครั้ง ชื่อ และคำชี้แจงได้)
+            มีผู้เริ่มทำแล้ว จึงแก้ประเภท เกณฑ์ผ่าน และเวลาทำไม่ได้ เพื่อให้ทุกคนสอบภายใต้เงื่อนไขเดียวกัน
+            (แก้ช่วงเวลาเปิด–ปิด จำนวนครั้ง ช่วงผ่อนผัน ชื่อ และคำชี้แจงได้)
           </p>`
         : ''
     }
@@ -206,6 +265,7 @@ export async function renderNewAssignmentView(el, { services, caps, context }, {
         }`
     )
 
+  watchDateLabels(el)
   el.onsubmit = async (e) => {
     e.preventDefault()
     const form = e.target
@@ -249,7 +309,7 @@ const PERSON_STATUS = {
 
 const pct = (t) => (t ? `${attemptPercent(t)}%` : '—')
 
-function resultsTable(rows, assignment) {
+function resultsTable(rows, canEdit) {
   if (rows.length === 0) return emptyState('ยังไม่มีผู้เรียนในรายชื่อที่ท่านดูได้')
   return html`<div class="overflow-x-auto rounded-xl border border-ink-200 bg-white">
     <table class="min-w-full text-sm" data-results>
@@ -262,6 +322,7 @@ function resultsTable(rows, assignment) {
           <th scope="col" class="px-4 py-2 font-medium">สูงสุด</th>
           <th scope="col" class="px-4 py-2 font-medium">ผล</th>
           <th scope="col" class="px-4 py-2 font-medium">ส่งล่าสุด</th>
+          ${canEdit ? html`<th scope="col" class="px-4 py-2 font-medium"><span class="sr-only">จัดการ</span></th>` : ''}
         </tr>
       </thead>
       <tbody class="divide-y divide-ink-100">
@@ -270,12 +331,36 @@ function resultsTable(rows, assignment) {
             <td class="px-4 py-2 text-ink-900">
               ${r.name}${r.offRoster ? html` <span class="text-xs text-ink-400">(ไม่อยู่ในรายชื่อแล้ว)</span>` : ''}
             </td>
-            <td class="px-4 py-2">${PERSON_STATUS[r.status]}</td>
-            <td class="px-4 py-2 text-ink-600">${r.used} / ${assignment.attempt_limit}</td>
+            <td class="px-4 py-2">
+              ${PERSON_STATUS[r.status]}
+              ${r.autoSubmitted ? html`<span class="block text-xs text-ink-400">ส่งอัตโนมัติ ${r.autoSubmitted} ครั้ง</span>` : ''}
+            </td>
+            <td class="px-4 py-2 text-ink-600">
+              ${r.used} / ${r.limit}${r.extra ? html` <span class="text-xs text-ink-400">(เพิ่ม ${r.extra})</span>` : ''}
+            </td>
             <td class="px-4 py-2 text-ink-600">${pct(r.first)}</td>
             <td class="px-4 py-2 font-semibold text-ink-900">${pct(r.best)}</td>
             <td class="px-4 py-2">${r.best ? resultBadge(r.best.passed) : ''}</td>
             <td class="px-4 py-2 text-ink-500">${r.lastSubmittedAt ? formatThaiDateTime(r.lastSubmittedAt) : '—'}</td>
+            ${
+              canEdit
+                ? html`<td class="px-4 py-2 text-right">
+                    ${
+                      r.offRoster
+                        ? ''
+                        : html`<button
+                            type="button"
+                            class="rounded-md border border-ink-200 px-2 py-1 text-xs text-ink-700 hover:bg-ink-50"
+                            data-action="grant-extra"
+                            data-user-id="${r.user_id}"
+                            data-name="${r.name}"
+                          >
+                            +1 ครั้ง
+                          </button>`
+                    }
+                  </td>`
+                : ''
+            }
           </tr>`
         )}
       </tbody>
@@ -283,15 +368,77 @@ function resultsTable(rows, assignment) {
   </div>`
 }
 
-export async function renderAssignmentDetailView(el, { services, session, caps, context }, { id }) {
+const fmt = (x, digits = 2) => (x === null || x === undefined ? '—' : Number(x).toFixed(digits))
+
+/** Item analysis for cohort assessors (aggregates of first attempts; never the key). */
+function itemAnalysis(stats) {
+  if (!stats) return ''
+  if (stats.error)
+    return html`<section class="mt-8" data-item-analysis>${alertBox(`วิเคราะห์ข้อสอบไม่สำเร็จ: ${stats.error}`)}</section>`
+  const head = html`<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <h2 class="text-sm font-semibold text-ink-700">วิเคราะห์ข้อสอบ</h2>
+    ${stats.suppressed ? '' : html`<button type="button" class="${secondary}" data-action="export-items">ดาวน์โหลดผลวิเคราะห์ (CSV)</button>`}
+  </div>`
+  if (stats.suppressed)
+    return html`<section class="mt-8" data-item-analysis>
+      ${head}${emptyState(`ต้องมีผู้ส่งอย่างน้อย ${stats.min_n} คนจึงจะวิเคราะห์ได้ (ตอนนี้ ${stats.n} คน)`)}
+    </section>`
+  const kind = stats.reliability_kind === 'kr20' ? 'KR-20' : 'Cronbach α'
+  return html`<section class="mt-8" data-item-analysis>
+    ${head}
+    <p class="mb-3 text-sm text-ink-600">
+      ผู้สอบ ${stats.n} คน (ใช้ครั้งแรกของแต่ละคน) · คะแนนเฉลี่ย ${fmt(stats.mean_score)} / ${Number(stats.max_score)} · SD ${fmt(stats.sd_score)}
+      · ความเชื่อมั่น (${kind}) <strong data-reliability>${fmt(stats.reliability, 3)}</strong> ${reliabilityLabel(stats.reliability)}
+    </p>
+    <div class="overflow-x-auto rounded-xl border border-ink-200 bg-white">
+      <table class="min-w-full text-sm" data-items>
+        <thead class="bg-ink-50 text-left text-xs text-ink-500">
+          <tr>
+            <th scope="col" class="px-3 py-2 font-medium">ข้อ</th>
+            <th scope="col" class="px-3 py-2 font-medium">โจทย์</th>
+            <th scope="col" class="px-3 py-2 font-medium">ความยาก (p)</th>
+            <th scope="col" class="px-3 py-2 font-medium">อำนาจจำแนก (D)</th>
+            <th scope="col" class="px-3 py-2 font-medium">r</th>
+            <th scope="col" class="px-3 py-2 font-medium">ตัวเลือกที่ถูกเลือก</th>
+            <th scope="col" class="px-3 py-2 font-medium">ไม่ตอบ</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-ink-100">
+          ${stats.items.map(
+            (it, i) => html`<tr data-item-row="${i + 1}">
+              <td class="px-3 py-2 font-semibold text-ink-700">${i + 1}</td>
+              <td class="max-w-xs truncate px-3 py-2 text-ink-700" title="${it.prompt}">${it.prompt}</td>
+              <td class="px-3 py-2">${fmt(it.p)} <span class="block text-xs text-ink-400">${difficultyLabel(it.p)}</span></td>
+              <td class="px-3 py-2">${fmt(it.d)} <span class="block text-xs text-ink-400">${discriminationLabel(it.d)}</span></td>
+              <td class="px-3 py-2 text-ink-600">${fmt(it.r_it)}</td>
+              <td class="px-3 py-2 text-ink-600">${choicesText(it.choices) || '—'}</td>
+              <td class="px-3 py-2 text-ink-600">${it.blank}</td>
+            </tr>`
+          )}
+        </tbody>
+      </table>
+    </div>
+    <p class="mt-2 text-xs text-ink-400">
+      p = สัดส่วนคะแนนที่ได้ (0–1) · D = กลุ่มสูง − กลุ่มต่ำ (27% ละ ${stats.group_size} คน) · r = สหสัมพันธ์ข้อกับคะแนนรวมที่เหลือ ·
+      เกณฑ์แปลผลเป็นแนวทางทั่วไป · ระบบไม่ระบุว่าตัวเลือกใดเป็นคำตอบที่ถูก (เฉลยอ่านกลับไม่ได้)
+    </p>
+  </section>`
+}
+
+export async function renderAssignmentDetailView(el, { services, caps, context }, { id }) {
   render(el, loading)
-  let assignment, attempts, roster
+  let assignment, results, stats
+  let canEdit = false
   const load = async () => {
     assignment = await services.assignments.get(id)
     if (!assignment) return
-    ;[attempts, roster] = await Promise.all([
-      services.assignments.listAttempts(id),
-      services.assignments.listRoster(assignment.cohort_id, session.user.id),
+    canEdit = canAssessHint(caps, context, assignment.cohort_id)
+    ;[results, stats] = await Promise.all([
+      services.assignments.results(id),
+      // Item analysis is for cohort assessors; a failure there must not hide the results.
+      canEdit
+        ? services.assignments.itemStatistics(id).catch((err) => ({ error: toUserMessage(err) }))
+        : null,
     ])
   }
   try {
@@ -305,14 +452,13 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
       html`${pageHeader('ไม่พบแบบทดสอบ')}${emptyState('ไม่พบการมอบหมายนี้ หรือท่านไม่มีสิทธิ์เข้าถึง')}`
     )
 
-  const canEdit = canAssessHint(caps, context, assignment.cohort_id)
   let message = null
   let tone = 'success'
   let busy = false
 
   const draw = () => {
-    const { rows, summary } = summarizeResults(roster, attempts, assignment)
-    const locked = attempts.length > 0
+    const { rows, summary } = summarizeResults(results, assignment)
+    const locked = rows.some((r) => r.used > 0)
     const judged = summary.passed !== null
     render(
       el,
@@ -332,7 +478,7 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
             judged ? `${summary.passed} / ${summary.submitted}` : '—',
             judged ? `เกณฑ์ ${Number(assignment.passing_percent)}%` : 'ไม่ได้กำหนดเกณฑ์ผ่าน'
           )}
-          ${statCard('จำนวนครั้งที่ทำได้', `${assignment.attempt_limit} ครั้ง`)}
+          ${statCard('จำนวนครั้งที่ทำได้', `${assignment.attempt_limit} ครั้ง`, `เวลาทำ ${timeLimitText(assignment)}`)}
         </section>
 
         <section class="mt-6">
@@ -341,9 +487,10 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
             ${rows.length ? html`<button type="button" class="${secondary}" data-action="export">ดาวน์โหลด CSV</button>` : ''}
           </div>
           ${canEdit ? '' : html`<p class="mb-2 text-xs text-ink-500">แสดงเฉพาะผู้เรียนที่ท่านมีสิทธิ์ดูผล</p>`}
-          ${resultsTable(rows, assignment)}
+          ${resultsTable(rows, canEdit)}
           <p class="mt-2 text-xs text-ink-400">ระบบแสดงคะแนนรวมรายครั้งเท่านั้น ไม่แสดงคะแนนหรือเฉลยรายข้อ</p>
         </section>
+        ${canEdit ? itemAnalysis(stats) : ''}
 
         ${
           canEdit
@@ -398,19 +545,44 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
     if (!b || b.disabled) return undefined
     switch (b.dataset.action) {
       case 'export': {
-        const { rows } = summarizeResults(roster, attempts, assignment)
+        const { rows } = summarizeResults(results, assignment)
         return downloadText(
           `results-${assignment.cohorts?.code ?? 'cohort'}-${assignment.id.slice(0, 8)}.csv`,
           toCsv(resultsCsvRows(rows))
         )
       }
+      case 'export-items':
+        return downloadText(
+          `item-analysis-${assignment.cohorts?.code ?? 'cohort'}-${assignment.id.slice(0, 8)}.csv`,
+          toCsv(itemStatsCsvRows(stats))
+        )
+      case 'grant-extra': {
+        const reason = window.prompt(
+          `ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ${b.dataset.name}\nเหตุผล (ไม่บังคับ เช่น สัญญาณขาด):`,
+          ''
+        )
+        if (reason === null) return undefined
+        return run(
+          () => services.assignments.grantExtraAttempt(id, b.dataset.userId, reason),
+          `ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ${b.dataset.name} แล้ว`
+        )
+      }
       case 'publish':
+        if (!assignment.close_at) {
+          message = 'กรุณากำหนดวันเวลาปิดรับและบันทึกการตั้งค่าก่อนเผยแพร่'
+          tone = 'error'
+          return draw()
+        }
         return run(
           () => services.assignments.update(id, { status: 'published' }),
           'เผยแพร่แล้ว — ผู้เรียนในรุ่นเห็นแบบทดสอบนี้แล้ว'
         )
       case 'close-now':
-        if (!window.confirm('ปิดรับคำตอบตอนนี้? ผู้ที่ยังไม่ได้ส่งจะส่งไม่ได้ (แก้เวลาปิดเพื่อเปิดใหม่ได้)'))
+        if (
+          !window.confirm(
+            'ปิดรับคำตอบตอนนี้? ผู้ที่กำลังทำจะถูกส่งคำตอบที่บันทึกไว้อัตโนมัติหลังช่วงผ่อนผัน (แก้เวลาปิดเพื่อเปิดใหม่ได้)'
+          )
+        )
           return undefined
         return run(
           () => services.assignments.update(id, { close_at: new Date().toISOString() }),
@@ -436,13 +608,14 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
     return undefined
   }
 
+  watchDateLabels(el)
   el.onsubmit = (e) => {
     e.preventDefault()
     if (e.target.dataset.form !== 'assignment') return
     let patch
     try {
       patch = buildAssignmentPayload(Object.fromEntries(new FormData(e.target)), {
-        locked: attempts.length > 0,
+        locked: results.some((r) => r.used > 0),
       })
     } catch (err) {
       message = toUserMessage(err)

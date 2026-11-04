@@ -27,6 +27,7 @@
 - [`assessment_assignments`](#assessment-assignments) — การมอบหมายฉบับที่เผยแพร่แล้วให้รุ่น (และหลักสูตร) พร้อมช่วงเวลา จำนวนครั้ง และเกณฑ์ผ่าน
 - [`assessment_attempts`](#assessment-attempts) — ครั้งที่ทำแบบทดสอบ — เขียนโดย RPC ฝั่ง server เท่านั้น (คะแนน เวลาเริ่ม/ส่ง ไม่มาจาก browser)
 - [`assessment_responses`](#assessment-responses) — คำตอบรายข้อ — client อ่านได้เฉพาะคำตอบ ไม่ได้รับ awarded_score รายข้อ
+- [`assessment_extra_attempts`](#assessment-extra-attempts) — สิทธิ์ทำเพิ่มรายบุคคล (+1 ครั้งต่อแถว) — แก้/ลบไม่ได้; ผู้มอบและเวลาบันทึกโดย server
 
 ## profiles
 
@@ -589,21 +590,26 @@
 | `title` | text | ✓ |  |  |
 | `instructions` | text |  |  |  |
 | `open_at` | timestamp with time zone |  |  |  |
-| `close_at` | timestamp with time zone |  |  |  |
+| `close_at` | timestamp with time zone |  |  | เวลาปิดรับ — บังคับเมื่อเผยแพร่ (ทุกครั้งที่ทำจึงมีเส้นตาย และถูกปิดอัตโนมัติเสมอ) |
 | `attempt_limit` | integer | ✓ | `1` |  |
 | `passing_percent` | numeric(5,2) |  |  | เกณฑ์ผ่าน (%) ต่อการมอบหมาย; null = ไม่ตัดสินผ่าน/ไม่ผ่าน |
 | `status` | text | ✓ | `'draft'::text` |  |
 | `created_by` | uuid |  | `auth.uid()` |  |
 | `created_at` | timestamp with time zone | ✓ | `now()` |  |
 | `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+| `time_limit_minutes` | integer |  |  | เวลาทำต่อครั้ง (นาที); null = ใช้เฉพาะช่วงเปิด–ปิด — ตรึงเมื่อมีผู้เริ่มทำ |
+| `grace_minutes` | integer | ✓ | `5` | ช่วงผ่อนผันหลังเส้นตาย (นาที) ที่ยังรับคำตอบ — กันเน็ตช้าตอนส่ง |
 
 **Constraints**
 
 - `assessment_assignments_attempt_limit_check`: `CHECK (((attempt_limit >= 1) AND (attempt_limit <= 20)))`
+- `assessment_assignments_grace_minutes_check`: `CHECK (((grace_minutes >= 0) AND (grace_minutes <= 60)))`
 - `assessment_assignments_instructions_check`: `CHECK (((instructions IS NULL) OR (char_length(instructions) <= 5000)))`
 - `assessment_assignments_passing_percent_check`: `CHECK (((passing_percent IS NULL) OR ((passing_percent >= (0)::numeric) AND (passing_percent <= (100)::numeric))))`
+- `assessment_assignments_published_close`: `CHECK (((status <> 'published'::text) OR (close_at IS NOT NULL)))`
 - `assessment_assignments_purpose_check`: `CHECK ((purpose = ANY (ARRAY['pretest'::text, 'posttest'::text, 'formative'::text])))`
 - `assessment_assignments_status_check`: `CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text])))`
+- `assessment_assignments_time_limit_minutes_check`: `CHECK (((time_limit_minutes IS NULL) OR ((time_limit_minutes >= 1) AND (time_limit_minutes <= 600))))`
 - `assessment_assignments_title_check`: `CHECK (((char_length(title) >= 1) AND (char_length(title) <= 300)))`
 - `assessment_assignments_window`: `CHECK (((open_at IS NULL) OR (close_at IS NULL) OR (close_at > open_at)))`
 - `assessment_assignments_cohort_id_fkey`: `FOREIGN KEY (cohort_id) REFERENCES cohorts(id) ON DELETE RESTRICT`
@@ -635,11 +641,16 @@
 | `passed` | boolean |  |  |  |
 | `correct_count` | integer |  |  | จำนวนข้อที่ได้คะแนนเต็ม — แสดงผู้เรียนได้ (ไม่บอกว่าข้อไหน) |
 | `item_count` | integer |  |  |  |
+| `draft_json` | jsonb |  |  | คำตอบที่บันทึกระหว่างทำ — ไม่ GRANT ให้ client (ผู้เรียนรับคืนผ่าน start_attempt เท่านั้น); ใช้ให้คะแนนเมื่อหมดเวลา; ล้างเมื่อส่งแล้ว |
+| `draft_saved_at` | timestamp with time zone |  |  |  |
+| `auto_submitted` | boolean | ✓ | `false` | true = ระบบส่งให้เมื่อหมดเวลา (คะแนนจากคำตอบที่บันทึกไว้) |
+| `draft_seq` | bigint | ✓ | `0` | ลำดับการบันทึกคำตอบล่าสุดที่รับไว้ — ไม่ GRANT ให้ client; กันคำขอที่มาช้าทับคำตอบใหม่ |
 
 **Constraints**
 
 - `assessment_attempts_attempt_no_check`: `CHECK ((attempt_no >= 1))`
 - `assessment_attempts_correct_count_check`: `CHECK (((correct_count IS NULL) OR (correct_count >= 0)))`
+- `assessment_attempts_draft_shape`: `CHECK (((draft_json IS NULL) OR ((jsonb_typeof(draft_json) = 'object'::text) AND (octet_length((draft_json)::text) <= 65536))))`
 - `assessment_attempts_item_count_check`: `CHECK (((item_count IS NULL) OR (item_count >= 0)))`
 - `assessment_attempts_score_range`: `CHECK (((score IS NULL) OR ((score >= (0)::numeric) AND (max_score >= (0)::numeric) AND (score <= max_score))))`
 - `assessment_attempts_scored`: `CHECK (((status = 'in_progress'::text) OR ((score IS NOT NULL) AND (max_score IS NOT NULL))))`
@@ -683,3 +694,28 @@
 **Indexes**
 
 - `CREATE INDEX assessment_responses_item_idx ON public.assessment_responses USING btree (item_id)`
+
+## assessment_extra_attempts
+
+สิทธิ์ทำเพิ่มรายบุคคล (+1 ครั้งต่อแถว) — แก้/ลบไม่ได้; ผู้มอบและเวลาบันทึกโดย server
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `assignment_id` | uuid | ✓ |  |  |
+| `user_id` | uuid | ✓ |  |  |
+| `reason` | text |  |  |  |
+| `granted_by` | uuid |  | `auth.uid()` |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `assessment_extra_attempts_reason_check`: `CHECK (((reason IS NULL) OR (char_length(reason) <= 500)))`
+- `assessment_extra_attempts_assignment_id_fkey`: `FOREIGN KEY (assignment_id) REFERENCES assessment_assignments(id) ON DELETE RESTRICT`
+- `assessment_extra_attempts_granted_by_fkey`: `FOREIGN KEY (granted_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `assessment_extra_attempts_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE RESTRICT`
+- `assessment_extra_attempts_pkey`: `PRIMARY KEY (id)`
+
+**Indexes**
+
+- `CREATE INDEX assessment_extra_attempts_idx ON public.assessment_extra_attempts USING btree (assignment_id, user_id)`

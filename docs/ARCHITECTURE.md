@@ -55,6 +55,11 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261103090320_assessment_attempts.sql` | `start_attempt` / `submit_attempt` (advisory lock, ให้คะแนนฝั่ง server) |
 | `20261103090330_assessment_media.sql` | bucket `assessment-media` + policy |
 | `20261103090340_assessment_assignment_guard.sql` | หลังมีผู้เริ่มทำ ห้ามแก้เกณฑ์ผ่าน/ประเภท/หลักสูตร หรือย้อนเป็นร่าง (SE004) |
+| `20261104090000_attempt_timing.sql` | (2B.1) เวลาทำต่อครั้ง, ช่วงผ่อนผัน, `save_attempt_draft`, ส่งอัตโนมัติเมื่อหมดเวลา (lazy + `pg_cron`), `assessment_extra_attempts` |
+| `20261104090100_close_required_drafts_private.sql` | (2B.1) เผยแพร่ต้องมีเวลาปิดรับ · ถอนสิทธิ์อ่าน `draft_json` จาก client |
+| `20261104090200_draft_sequence.sql` | (2B.1) ลำดับการบันทึก (`draft_seq`, `stale`, SE005) · audit attempts เฉพาะคอลัมน์หลักฐาน |
+| `20261104090300_results_and_item_statistics.sql` | (2B.1) `assignment_results` (invoker) · `item_statistics` (p, D, r, ตัวเลือก, KR-20/α) |
+| `20261104090400_assessment_media_cleanup.sql` | (2B.1) ลบ/เขียนทับรูปข้อสอบได้เฉพาะที่ไม่มีข้อใดใช้ |
 
 ### เหตุผลการออกแบบสำคัญ
 
@@ -77,9 +82,10 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `auth.users` ON DELETE CASCADE → profiles | ลบบัญชีแล้วโปรไฟล์หาย (แต่ RESTRICT จาก enrollment จะกันไว้) | กำหนด retention / soft-delete ก่อนใช้ข้อมูลจริง |
 | Storage ของ submissions/portfolio | ยังไม่มี bucket | Phase 3 |
 | UI อัปโหลด avatar | bucket + policy พร้อมแล้ว แต่ยังไม่มีหน้าจอ | Phase 3 |
-| ครั้งที่เริ่มแล้วไม่ส่ง (2B) | ค้างเป็น "กำลังทำ" ตลอดไป และส่งหลังปิดรับไม่ได้ (ไม่มีช่วงผ่อนผัน) | งานปิดอัตโนมัติ/ผ่อนผันหลัง `close_at` |
-| รูปข้อสอบไม่ถูกลบ (2B) | ฉบับเก่า/ฉบับ clone ใช้ไฟล์ร่วมกัน จึงไม่ลบ → มีไฟล์กำพร้าได้ | งานล้างไฟล์ที่ไม่มีข้อใดอ้างถึง (Phase 5) |
-| ผลของรุ่นคำนวณสรุปใน browser (2B) | ดึง attempts ทั้งรุ่นทุกครั้ง; รุ่นหลักพันคนจะช้า | view/RPC สรุปฝั่ง server เมื่อมีข้อมูลจริง |
+| ครั้งที่เริ่มแล้วไม่ส่ง | 2B.1: ปิดอัตโนมัติจากคำตอบที่บันทึกไว้ เมื่อเลยเส้นตาย+ผ่อนผัน · การมอบหมายที่เผยแพร่ต้องมีเวลาปิดรับ (CHECK) จึงมีเส้นตายเสมอ | — |
+| `pg_cron` (2B.1) | ต้องมีบน Supabase จริง (มีให้ใช้แล้ว) · ถ้าไม่มี ระบบยังปิดเมื่อผู้เรียนกลับมาเปิด/บันทึก/ส่ง | ตรวจ `cron.job` หลัง deploy |
+| รูปข้อสอบที่ไม่ได้ใช้ | 2B.1: ผู้สร้างกด "ล้างรูปที่ไม่ได้ใช้" ได้ (ไฟล์ที่ไม่มีข้อใดใช้และเก่ากว่า 24 ชม.; DB กันไฟล์ที่ใช้อยู่) · ยังไม่มีงานล้างอัตโนมัติทั้งระบบ | Edge Function ตามเวลา (Phase 5) ถ้าจำเป็น |
+| ผลของรุ่น (2B.1) | สรุปบน server แล้ว (`assignment_results` หนึ่งแถวต่อคน) — ยังไม่แบ่งหน้า; รุ่นหลักพันคนอาจต้องแบ่งหน้า | วัดเมื่อมีข้อมูลจริง |
 | ไฟล์ที่ลบ/แทนที่ใน Builder | ลบไฟล์แบบ best-effort — อาจมีไฟล์กำพร้าถ้าเครือข่ายล้ม | งานล้างไฟล์กำพร้า (Phase 5) |
 | เว็บไซต์ยังไม่ส่งอีเมลเชิญ | ผู้ถูกนำเข้าต้องสมัครเอง (ยืนยันอีเมลแล้วผูกอัตโนมัติ) | ต้องมี SMTP จริงก่อน pilot |
 | `supabase start` ต้อง restart เมื่อแก้ `config.toml` (เช่น email confirmations) | `db reset` ไม่โหลด config Auth ใหม่ | `npx supabase stop && npx supabase start` |

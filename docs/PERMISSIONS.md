@@ -1,4 +1,4 @@
-# Permissions Model — SolveEdu Platform (Phase 1 + 2A + 2B)
+# Permissions Model — SolveEdu Platform (Phase 1 + 2A + 2B + 2B.1)
 
 > หลักการ: **GRANT กำหนดว่าแตะ "คอลัมน์" ใดได้ · RLS กำหนดว่าเห็น/แก้ "แถว" ใดได้ · Trigger รักษา invariant ที่ RLS ทำไม่ได้**
 > การซ่อนเมนูใน UI (`src/core/permissions.js`) เป็นเพียงความสะดวก ไม่ใช่การรักษาความปลอดภัย
@@ -43,6 +43,7 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `is_cohort_assessor(cohort)` (2B) | `can_manage_cohort` (ผู้จัดการโครงการ, coordinator) หรือ trainer ของรุ่น — มอบหมายแบบทดสอบและเห็นผลทั้งรุ่น |
 | `can_view_version(v)` / `can_view_instrument(i)` (2B) | ผู้สร้าง · assessor/mentor ของรุ่นที่ได้รับมอบหมาย · ผู้เรียน **หลังเริ่มทำแล้วเท่านั้น** (ดูข้อสอบล่วงหน้าไม่ได้) |
 | `can_view_attempt(assignment, user)` / `can_view_attempt_id(t)` (2B) | ตนเอง · assessor ของรุ่น · mentor ของผู้เรียนคนนั้น |
+| `can_assess_assignment(a)` (2B.1) | `is_cohort_assessor` ของรุ่นที่การมอบหมายนั้นอยู่ |
 
 ## 3. Matrix ต่อตาราง
 
@@ -65,8 +66,9 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `instrument_versions` (2B) | ผู้สร้าง หรือ `can_view_version` | `instrument_id` เท่านั้น (เลขฉบับ/สถานะโดย server; ร่างได้ทีละ 1) | ❌ — publish/clone ผ่าน RPC | ❌ |
 | `instrument_items` (2B) | `can_view_version` | ผู้สร้าง + trigger: เฉพาะฉบับ draft · `options_json` ห้ามมีเฉลย | ไม่รวม `instrument_version_id` (draft เท่านั้น) | ผู้สร้าง (draft เท่านั้น) |
 | `private.instrument_answer_keys` (2B) | ❌ ทุก role ของ client — **ตั้งได้แต่อ่านกลับไม่ได้** | ผ่าน `set_item_key` | ผ่าน `set_item_key` | ❌ |
-| `assessment_assignments` (2B) | assessor · mentor ของรุ่น · trainee ของรุ่นเฉพาะที่ `published` | assessor + มองเห็นฉบับ + trigger: ฉบับต้อง published, หลักสูตรต้องอยู่ในโครงการของรุ่น | ไม่รวม `instrument_version_id, cohort_id` · **หลังมีผู้เริ่มทำ: `passing_percent, purpose, course_id` แก้ไม่ได้ และย้อนเป็น draft ไม่ได้ (SE004)** | assessor, เฉพาะ `draft` (มี attempt แล้ว → FK RESTRICT) |
-| `assessment_attempts` (2B) | `can_view_attempt` | ❌ — `start_attempt` | ❌ — `submit_attempt` | ❌ |
+| `assessment_assignments` (2B) | assessor · mentor ของรุ่น · trainee ของรุ่นเฉพาะที่ `published` | assessor + มองเห็นฉบับ + trigger: ฉบับต้อง published, หลักสูตรต้องอยู่ในโครงการของรุ่น · CHECK: เผยแพร่ได้เมื่อมี `close_at` เท่านั้น (2B.1) | ไม่รวม `instrument_version_id, cohort_id` · **หลังมีผู้เริ่มทำ: `passing_percent, purpose, course_id, time_limit_minutes` แก้ไม่ได้ และย้อนเป็น draft ไม่ได้ (SE004)** | assessor, เฉพาะ `draft` (มี attempt แล้ว → FK RESTRICT) |
+| `assessment_attempts` (2B) | `can_view_attempt` — **ไม่มี `draft_json`** (คำตอบระหว่างทำเป็นของผู้เรียนจนกว่าจะส่ง; ผู้เรียนรับคืนผ่าน `start_attempt` เท่านั้น) · `draft_saved_at` เห็นได้ | ❌ — `start_attempt` | ❌ — `save_attempt_draft` / `submit_attempt` / งานปิดอัตโนมัติ | ❌ |
+| `assessment_extra_attempts` (2B.1) | `can_view_attempt(assignment, user)` | `can_assess_assignment` (`assignment_id, user_id, reason`) + trigger: ผู้รับต้องเป็น trainee active ของรุ่น · `granted_by`/`created_at` โดย server | ❌ (append-only) | ❌ |
 | `assessment_responses` (2B) | `can_view_attempt_id` — **ไม่มี `awarded_score`, `graded_*`** | ❌ — `submit_attempt` | ❌ | ❌ |
 | `preregistrations` (2A) | ผู้นำเข้า · platform admin · district/school admin ของหน่วยงานนั้น (มีอีเมล = PII) | `can_grant_org_role` **และ** (ถ้ามีรุ่น) `can_grant_cohort_role` — สิทธิ์เท่ากับการมอบบทบาทโดยตรง | `status` → `cancelled` เฉพาะแถว pending | ❌ |
 | `private.*` | ❌ ทุก role ของ client | ❌ | ❌ | ❌ |
@@ -98,8 +100,16 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `item_key_status(p_version)` → `(item_id, has_key, key_valid)` | ผู้สร้างข้อสอบ | คืนเพียงสถานะ ไม่คืนเนื้อหาเฉลย |
 | `publish_instrument_version(p_version)` → `content_hash` | ผู้สร้างข้อสอบ | draft + มีอย่างน้อย 1 ข้อ + ทุกข้อมีเฉลยที่ถูกต้อง · ล็อก `FOR UPDATE` · hash ครอบเฉพาะเนื้อหาข้อ (ไม่รวมเฉลย — กันการเดาเฉลยจาก hash) |
 | `clone_instrument_version(p_version)` → uuid ฉบับร่างใหม่ | ผู้สร้างข้อสอบ | ร่างได้ทีละ 1 ฉบับ (`23505`) · คัดลอกข้อ+เฉลยฝั่ง server · audit `CLONE_VERSION` |
-| `start_attempt(p_assignment)` → `(attempt_id, attempt_no, started_at, resumed)` | trainee active ของรุ่น | assignment `published` + อยู่ในช่วงเวลา (SE001) · ครั้งที่เริ่มแล้วนับทันที (SE002) · มีครั้งที่ค้างอยู่ → ทำต่อ · advisory lock ต่อ (assignment, คน) + partial unique index |
-| `submit_attempt(p_attempt, p_responses)` → คะแนนรวม | เจ้าของ attempt | ยังไม่ส่ง (SE003) · ยังไม่ปิด (SE001) · คำตอบต้องเป็นข้อของฉบับนั้นและรูปแบบถูก (22023) · ให้คะแนนจาก `private.instrument_answer_keys` · ประทับ `submitted_at`/`score`/`passed` · คืนเฉพาะคะแนนรวม |
+| `start_attempt(p_assignment)` → `(attempt_id, attempt_no, started_at, resumed, deadline_at, server_now, draft, timed_out)` | trainee active ของรุ่น | assignment `published` · ครั้งที่ค้างอยู่ → ทำต่อ (ถ้ายังไม่เลยเส้นตาย+ผ่อนผัน) หรือ **ส่งอัตโนมัติจากคำตอบที่บันทึกไว้** (`timed_out`, ไม่เริ่มครั้งใหม่ในคำขอเดียวกัน) · ครั้งใหม่: อยู่ในช่วงเวลา (SE001) · จำนวนครั้ง = `attempt_limit` + สิทธิ์ทำเพิ่มของคนนั้น (SE002) · advisory lock ต่อ (assignment, คน) + partial unique index |
+| `save_attempt_draft(p_attempt, p_responses, p_seq = null)` → `(saved_at, finalized, stale)` (2B.1) | เจ้าของ attempt | ยังไม่ส่ง (SE003) · ตรวจรูปแบบเหมือนตอนส่ง (22023) · เลยเส้นตาย+ผ่อนผันแล้ว → ไม่บันทึก แต่ส่งอัตโนมัติจากคำตอบที่บันทึกไว้ก่อนหน้า (`finalized = true`) · `p_seq` ไม่ใหม่กว่า `draft_seq` → ไม่บันทึก (`stale = true`) |
+| `submit_attempt(p_attempt, p_responses, p_seq = null)` → คะแนนรวม + `auto_submitted` | เจ้าของ attempt | ยังไม่ส่ง (SE003) · หน้าที่ถูกหน้าใหม่กว่าแทนที่ส่งไม่ได้ (SE005) · ภายในเส้นตาย+ผ่อนผัน: ให้คะแนนคำตอบที่ส่ง · เลยแล้ว: **ไม่ใช้คำตอบที่ส่งมาช้า** ให้คะแนนจากคำตอบที่บันทึกไว้ · ให้คะแนนจาก `private.instrument_answer_keys` · ประทับ `submitted_at`/`score`/`passed` · คืนเฉพาะคะแนนรวม |
+| `assignment_results(p_assignment)` (2B.1) | authenticated | **SECURITY INVOKER** — RLS ของผู้เรียกกำหนดแถว: assessor เห็นทั้งรุ่น, mentor เห็นผู้ที่ดูแล, trainee เห็นตนเอง, คนนอกได้ผลว่าง · หนึ่งแถวต่อคน (ครั้งแรก/สูงสุด/สถานะ/สิทธิ์เพิ่ม) |
+| `item_statistics(p_assignment)` → jsonb (2B.1) | assessor ของรุ่น (mentor/trainee/คนนอก → 42501) | SECURITY DEFINER (ต้องอ่าน `awarded_score`) · คืนเฉพาะค่ารวม: p, D (27%), r item-total, จำนวนที่เลือกแต่ละตัวเลือก, KR-20/α · ใช้ครั้งแรกของแต่ละคน · **น้อยกว่า 5 คนคืนแค่จำนวน** · **ไม่ระบุตัวเลือกที่ถูก** (ไม่อ่านเฉลย) |
+| `private.finalize_expired_attempts()` (2B.1) | `pg_cron` ทุก 1 นาที (client เรียกไม่ได้) | ปิดครั้งที่เลยเส้นตาย+ผ่อนผันด้วยคำตอบที่บันทึกไว้ · lock เดียวกับ RPC · แต่ละแถวใน subtransaction |
+
+เส้นตาย = ค่าที่มาก่อนระหว่าง `started_at + time_limit_minutes` กับ `close_at` (ค่าปัจจุบันของการมอบหมาย) · ช่วงผ่อนผัน `grace_minutes` ค่าเริ่มต้น 5 นาที
+
+ลำดับการบันทึก (2B.1): `start_attempt` คืน `draft_seq` เป็นเลขฐานของหน้านั้น (สูงกว่าค่าที่เก็บไว้ 1,000,000) · หน้าบวกเลขทีละ 1 ทุกครั้งที่บันทึก/ส่ง · server รับเฉพาะเลขที่ใหม่กว่า → คำขอที่มาช้าไม่ทับคำตอบใหม่ และหน้าที่เปิดล่าสุดชนะ (`draft_seq` ไม่ GRANT ให้ client)
 
 ไม่รับคะแนนหรือเวลาจาก client (ทดสอบว่าไม่มีพารามิเตอร์ `p_score`, `p_started_at`, `p_submitted_at`, `p_passed`)
 
@@ -111,7 +121,7 @@ path = `<resource_id>/<random>.<ext>` — โฟลเดอร์แรกก�
 |---|---|---|---|
 | `lesson-media` | `authz.can_view_lesson(โฟลเดอร์แรก)` | `authz.can_manage_lesson(โฟลเดอร์แรก)` | 50 MiB · รูป/PDF/Office/mp4/webm (ไม่รับ `text/html`) |
 | `avatars` | `authz.can_view_profile(โฟลเดอร์แรก)` | เจ้าของโฟลเดอร์เท่านั้น (`= auth.uid()`) · `profiles.avatar_path` ต้องอยู่ในโฟลเดอร์ตนเอง | 2 MiB · png/jpeg/webp |
-| `assessment-media` (2B) | `can_manage_instrument(โฟลเดอร์แรก)` หรือ `can_view_instrument(โฟลเดอร์แรก)` — ผู้เรียนเห็นรูปหลังเริ่มทำแล้วเท่านั้น | `can_manage_instrument(โฟลเดอร์แรก)` | 5 MiB · png/jpeg/webp/gif · path `<instrument_id>/<uuid>.<ext>` |
+| `assessment-media` (2B) | `can_manage_instrument(โฟลเดอร์แรก)` หรือ `can_view_instrument(โฟลเดอร์แรก)` — ผู้เรียนเห็นรูปหลังเริ่มทำแล้วเท่านั้น | เพิ่ม: `can_manage_instrument(โฟลเดอร์แรก)` · แก้/ลบ (2B.1): ต้องเป็นผู้สร้าง **และ** `not authz.assessment_media_in_use(name)` — รูปที่ข้อใดของฉบับใดยังใช้อยู่ (รวมฉบับที่เผยแพร่) ลบหรือเขียนทับไม่ได้ | 5 MiB · png/jpeg/webp/gif · path `<instrument_id>/<uuid>.<ext>` |
 
 `anon` ไม่มีสิทธิ์ใด ๆ · `lesson_blocks.object_path` ต้องอยู่ในโฟลเดอร์ของบทเรียนเดียวกับบล็อก และห้าม `..`
 
@@ -119,7 +129,7 @@ path = `<resource_id>/<random>.<ext>` — โฟลเดอร์แรกก�
 
 `private.audit_logs` (append-only, client อ่านไม่ได้) บันทึกอัตโนมัติเมื่อ INSERT/UPDATE/DELETE ใน `organization_memberships`, `platform_role_assignments`, `cohort_memberships`, `mentor_assignments` และทุกครั้งที่เรียก `admin_set_profile_status` (actor, ค่าเดิม, ค่าใหม่, เหตุผล)
 
-Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (สร้าง/แก้/ลบ) · ทุกการแก้/ลบ `assessment_attempts` หลังสร้าง · การเปลี่ยนสถานะ `instrument_versions` · `SET_ANSWER_KEY` (ไม่เก็บเนื้อหาเฉลย) · `CLONE_VERSION`
+Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (สร้าง/แก้/ลบ) · การแก้คอลัมน์หลักฐานของ `assessment_attempts` (สถานะ เวลา คะแนน — **ไม่รวมการบันทึกคำตอบระหว่างทำ** ตั้งแต่ 2B.1) และการลบ · การเปลี่ยนสถานะ `instrument_versions` · `SET_ANSWER_KEY` (ไม่เก็บเนื้อหาเฉลย) · `CLONE_VERSION`
 
 ## 6. Policy Test Matrix → ไฟล์ทดสอบ
 
@@ -142,6 +152,13 @@ Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (ส�
 | mentor/trainee/admin ต่างเขต มอบหมายหรือแก้การมอบหมาย | DENY | `140` |
 | แก้เกณฑ์ผ่าน/ประเภทหลังมีผู้ทำแล้ว (ผลเดิมเพี้ยน) | DENY (SE004) | `140` (mutation test ยืนยัน) + `tests/integration/assignments.test.js` |
 | mentor เห็นผลของผู้เรียนที่ไม่ได้ดูแล / trainee เห็นผลคนอื่น | DENY | `100`, `140` + integration + E2E |
+| ส่งคำตอบหลังหมดเวลาเพื่อแก้คำตอบ / บันทึกคำตอบลง attempt ของคนอื่น | DENY (ใช้คำตอบที่บันทึกก่อนหมดเวลา) / DENY | `150` (mutation test ยืนยัน) + `tests/integration/attempt-timing.test.js` |
+| ให้สิทธิ์ทำเพิ่มแก่ตนเอง / mentor ให้สิทธิ์ / ปลอม `granted_by` / แก้หรือลบสิทธิ์ | DENY | `150` + integration |
+| วิทยากร/ครูพี่เลี้ยง (หรือผู้เรียนเองผ่าน REST) อ่านคำตอบระหว่างทำ | DENY (42501) | `150` (mutation test ยืนยัน) + integration |
+| เผยแพร่การมอบหมายโดยไม่มีเวลาปิดรับ | DENY (23514) | `140` (mutation test ยืนยัน) |
+| การบันทึกที่มาช้าทับคำตอบใหม่ / หน้าเก่า (อีกเครื่อง) บันทึกหรือส่งหลังมีหน้าใหม่ | DENY (`stale`, SE005) | `160` (mutation test ยืนยัน) + integration + E2E สองเครื่อง |
+| mentor/trainee/คนนอก ดูผลวิเคราะห์ข้อสอบ · ผลวิเคราะห์เปิดเผยรายบุคคลหรือเฉลย | DENY | `170` + integration |
+| ลบหรือเขียนทับรูปข้อสอบที่ยังใช้อยู่ (แม้เป็นผู้สร้าง) | DENY | `180` (mutation test ยืนยัน) + integration ผ่าน Storage API จริง |
 | Trainee อ่าน/อัปโหลดไฟล์ของบทเรียน draft หรือที่ตนไม่มีสิทธิ์ | DENY | `070` + `tests/integration/storage.test.js` |
 | ผู้เรียนเห็นหน่วย/บทเรียน draft; ผู้แก้เรียงลำดับข้ามหลักสูตร | DENY | `050`, `080` |
 | ฝัง `<script>`/`onerror`/`javascript:` ในบล็อกข้อความ | DENY (DB CHECK) | `080` |

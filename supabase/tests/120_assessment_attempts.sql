@@ -14,7 +14,7 @@ grant select on all_right to authenticated;
 
 -- ---------- privileges ----------
 select ok(not has_function_privilege('anon', 'public.start_attempt(uuid)', 'execute')
-      and not has_function_privilege('anon', 'public.submit_attempt(uuid,jsonb)', 'execute'),
+      and not has_function_privilege('anon', 'public.submit_attempt(uuid,jsonb,bigint)', 'execute'),
   'anon cannot execute start/submit');
 select ok(not has_function_privilege('authenticated', 'private.score_response(text,jsonb,jsonb,jsonb)', 'execute')
       and not has_function_privilege('authenticated', 'private.response_error(text,jsonb,jsonb)', 'execute'),
@@ -71,7 +71,7 @@ select is((select count(*)::int from information_schema.parameters p
             join information_schema.routines r on r.specific_name = p.specific_name
            where r.routine_name = 'submit_attempt' and p.parameter_mode = 'OUT'
              and p.parameter_name not in ('attempt_id', 'score', 'max_score', 'percent', 'passed',
-                                          'correct_count', 'item_count', 'submitted_at')),
+                                          'correct_count', 'item_count', 'submitted_at', 'auto_submitted')),
   0, 'submit returns totals only (no per-item correctness, no key)');
 select throws_ok($$ select * from public.submit_attempt(
                      (select id from public.assessment_attempts where assignment_id = tests.uid('pretest')),
@@ -157,17 +157,18 @@ select is((select status from public.assessment_attempts where id = (select id f
 reset role;
 
 -- ---------- time window ----------
-update public.assessment_assignments set close_at = now() - interval '1 minute', open_at = null
+-- past close_at + grace (5 min): the late payload is ignored, saved answers (none) are scored (see 150)
+update public.assessment_assignments set close_at = now() - interval '10 minutes', open_at = null
  where id = tests.uid('formative');
 select tests.authenticate_as('teacher_b1');
-select throws_ok($$ select * from public.submit_attempt((select id from c_attempt), (select body from all_right)) $$,
-  'SE001', null, 'Submitting after close_at is refused');
+select results_eq($$ select score, auto_submitted from public.submit_attempt((select id from c_attempt), (select body from all_right)) $$,
+  $$ values (0.00::numeric, true) $$, 'Submitting after close_at + grace scores the saved answers, not the late payload');
 reset role;
 select tests.authenticate_as('teacher_a2');
 select throws_ok($$ select * from public.start_attempt(tests.uid('formative')) $$, 'SE001', null,
   'Starting after close_at is refused');
 reset role;
-update public.assessment_assignments set open_at = now() + interval '1 day', close_at = null
+update public.assessment_assignments set open_at = now() + interval '1 day', close_at = now() + interval '2 days'
  where id = tests.uid('formative');
 select tests.authenticate_as('teacher_a2');
 select throws_ok($$ select * from public.start_attempt(tests.uid('formative')) $$, 'SE001', null,

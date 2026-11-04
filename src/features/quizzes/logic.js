@@ -112,6 +112,26 @@ export function publishBlockers(items = [], statuses = {}) {
 }
 
 /** The version an author lands on: the open draft, else the newest. */
+export const UNUSED_MEDIA_MIN_AGE_MS = 24 * 60 * 60 * 1000
+
+/**
+ * Images in the quiz folder that no item of any version uses, and that are
+ * old enough not to be an upload whose item is still being written. The
+ * database refuses to delete anything still in use anyway.
+ */
+export function unusedMedia(
+  files = [],
+  usedPaths = [],
+  now = new Date(),
+  minAgeMs = UNUSED_MEDIA_MIN_AGE_MS
+) {
+  const used = new Set(usedPaths)
+  return files
+    .filter((f) => !used.has(f.path))
+    .filter((f) => f.created_at && now - new Date(f.created_at) >= minAgeMs)
+    .map((f) => f.path)
+}
+
 export function defaultVersion(versions = []) {
   const sorted = [...versions].sort((a, b) => b.version_no - a.version_no)
   return sorted.find((v) => v.status === 'draft') ?? sorted[0] ?? null

@@ -1,12 +1,13 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import {
   assignmentState,
   parseNumericAnswer,
   buildResponses,
   itemMediaPaths,
-  loadDraft,
-  saveDraft,
-  clearDraft,
+  answersFromResponses,
+  clockOffset,
+  remainingMs,
+  formatRemaining,
 } from '../../src/features/assessments/logic.js'
 import {
   createAssessmentService,
@@ -91,6 +92,17 @@ describe('assignmentState', () => {
     )
     expect(closed).toMatchObject({ window: 'closed', canStart: false })
   })
+  it('extra attempts granted to the caller raise the limit', () => {
+    const s = assignmentState(
+      { ...base, assessment_extra_attempts: [{ id: 'x1' }] },
+      [
+        { attempt_no: 1, status: 'submitted' },
+        { attempt_no: 2, status: 'submitted' },
+      ],
+      now
+    )
+    expect(s).toMatchObject({ limit: 3, remaining: 1, canStart: true })
+  })
 })
 
 describe('answers → submit payload', () => {
@@ -125,36 +137,36 @@ describe('answers → submit payload', () => {
   })
 })
 
-describe('local draft', () => {
-  it('round-trips and clears', () => {
-    const mem = new Map()
-    const storage = {
-      getItem: (k) => mem.get(k) ?? null,
-      setItem: (k, v) => mem.set(k, v),
-      removeItem: (k) => mem.delete(k),
-    }
-    saveDraft(storage, 't1', { i1: 'b' })
-    expect(loadDraft(storage, 't1')).toEqual({ i1: 'b' })
-    clearDraft(storage, 't1')
-    expect(loadDraft(storage, 't1')).toEqual({})
+describe('server draft and countdown helpers', () => {
+  it('lenient build (autosave, time up) leaves out a half-typed number instead of failing', () => {
+    expect(buildResponses(ITEMS, { i1: 'a', i4: '7x' }, { lenient: true }).responses).toEqual({
+      i1: { choice: 'a' },
+    })
   })
-  it('never throws when storage is unavailable or corrupt', () => {
-    const broken = {
-      getItem: () => {
-        throw new Error('denied')
-      },
-      setItem: () => {
-        throw new Error('quota')
-      },
-      removeItem: () => {
-        throw new Error('denied')
-      },
+
+  it('saved responses restore the form answers they came from', () => {
+    const responses = {
+      i1: { choice: 'b' },
+      i2: { choices: ['a', 'b'] },
+      i3: { value: false },
+      i4: { value: 75 },
     }
-    expect(loadDraft(broken, 't1')).toEqual({})
-    expect(() => saveDraft(broken, 't1', {})).not.toThrow()
-    expect(() => clearDraft(broken, 't1')).not.toThrow()
-    expect(loadDraft({ getItem: () => '{not json' }, 't1')).toEqual({})
-    expect(loadDraft(null, 't1')).toEqual({})
+    const answers = answersFromResponses(ITEMS, responses)
+    expect(answers).toEqual({ i1: 'b', i2: ['a', 'b'], i3: 'false', i4: '75' })
+    expect(buildResponses(ITEMS, answers).responses).toEqual(responses)
+    expect(answersFromResponses(ITEMS, null)).toEqual({})
+  })
+
+  it('countdown uses the server clock, not the device clock', () => {
+    const server = '2026-11-20T01:00:00Z'
+    const deviceTwoMinutesFast = new Date('2026-11-20T01:02:00Z').getTime()
+    const offset = clockOffset(server, deviceTwoMinutesFast)
+    expect(offset).toBe(-120_000)
+    expect(remainingMs('2026-11-20T01:30:00Z', offset, deviceTwoMinutesFast)).toBe(30 * 60_000)
+    expect(formatRemaining(754_000)).toBe('12:34')
+    expect(formatRemaining(3_723_000)).toBe('1:02:03')
+    expect(formatRemaining(400)).toBe('0:01') // rounds up: never shows 0:00 while time remains
+    expect(formatRemaining(-5000)).toBe('0:00')
   })
 })
 
@@ -197,10 +209,11 @@ describe('assessment service', () => {
 
   it('submit sends only the attempt id and answers (no score, no timestamps)', async () => {
     const c = fakeClient({ data: [{ score: 1 }], error: null })
-    const out = await createAssessmentService(c).submit('t1', { i1: { choice: 'b' } })
+    const out = await createAssessmentService(c).submit('t1', { i1: { choice: 'b' } }, 7)
     expect(c.rpc).toHaveBeenCalledWith('submit_attempt', {
       p_attempt: 't1',
       p_responses: { i1: { choice: 'b' } },
+      p_seq: 7,
     })
     expect(out).toEqual({ score: 1 })
   })
@@ -215,6 +228,35 @@ describe('assessment service', () => {
     expect(toUserMessage({ code: 'SE001' })).toMatch(/ยังไม่เปิดหรือปิดรับ/)
     expect(toUserMessage({ code: 'SE002' })).toMatch(/ครบจำนวนครั้ง/)
     expect(toUserMessage({ code: 'SE003' })).toMatch(/ส่งคำตอบ/)
+  })
+
+  it('keepalive save: raw POST with the latest token, browser finishes it after the page closes', async () => {
+    let listener
+    const client = { auth: { onAuthStateChange: (cb) => (listener = cb) } }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[]'))
+    const svc = createAssessmentService(client, { restUrl: 'https://x.example.test/rest/v1', apiKey: 'pk' })
+    expect(svc.saveDraftKeepalive('t1', {})).toBe(false) // no session yet: nothing sent
+    listener('TOKEN_REFRESHED', { access_token: 'tok2' })
+    expect(svc.saveDraftKeepalive('t1', { i1: { choice: 'a' } }, 9)).toBe(true)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://x.example.test/rest/v1/rpc/save_attempt_draft')
+    expect(init).toMatchObject({ method: 'POST', keepalive: true })
+    expect(init.headers).toMatchObject({ apikey: 'pk', Authorization: 'Bearer tok2' })
+    expect(JSON.parse(init.body)).toEqual({ p_attempt: 't1', p_responses: { i1: { choice: 'a' } }, p_seq: 9 })
+    fetchMock.mockRestore()
+  })
+
+  it('saveDraft sends only the attempt id and answers', async () => {
+    const c = fakeClient({ data: [{ saved_at: 'x', finalized: false }], error: null })
+    expect(await createAssessmentService(c).saveDraft('t1', { i1: { choice: 'a' } })).toEqual({
+      saved_at: 'x',
+      finalized: false,
+    })
+    expect(c.rpc).toHaveBeenCalledWith('save_attempt_draft', {
+      p_attempt: 't1',
+      p_responses: { i1: { choice: 'a' } },
+      p_seq: null,
+    })
   })
 })
 
@@ -290,7 +332,7 @@ describe('assessment views', () => {
 
     form.requestSubmit()
     await flush()
-    expect(svc.submit).toHaveBeenCalledWith('t1', { i1: { choice: 'b' }, i4: { value: 75 } })
+    expect(svc.submit).toHaveBeenCalledWith('t1', { i1: { choice: 'b' }, i4: { value: 75 } }, null) // no base: unordered
     expect(window.location.hash).toBe('#/assessments/attempts/t1')
     el.remove()
   })
@@ -349,6 +391,371 @@ describe('assessment views', () => {
     expect(el.textContent).toContain('3 / 4 ข้อ')
     expect(el.textContent).toContain('ผ่านเกณฑ์')
     expect(el.querySelector('img')).toBeNull()
+    expect(el.querySelector('[data-auto-submitted]')).toBeNull()
+  })
+
+  it('result page says when the server submitted on time-out', async () => {
+    const el = document.createElement('div')
+    const svc = {
+      getAttempt: async () => ({
+        id: 't1',
+        assignment_id: 'a1',
+        attempt_no: 1,
+        status: 'submitted',
+        submitted_at: '2026-11-20T02:00:00Z',
+        score: 1,
+        max_score: 5,
+        passed: false,
+        correct_count: 1,
+        item_count: 4,
+        auto_submitted: true,
+        assessment_assignments: { title: 't', purpose: 'pretest', passing_percent: 60 },
+      }),
+    }
+    await renderAttemptResultView(el, ctx(svc), { attemptId: 't1' })
+    expect(el.querySelector('[data-auto-submitted]').textContent).toContain(
+      'ส่งคำตอบที่บันทึกไว้ล่าสุดให้อัตโนมัติ'
+    )
+  })
+})
+
+describe('exam: server autosave and countdown', () => {
+  const T0 = new Date('2026-11-20T01:00:00Z')
+  const timed = {
+    id: 'a1',
+    title: 'หลังเรียน',
+    purpose: 'posttest',
+    open_at: null,
+    close_at: null,
+    attempt_limit: 1,
+    time_limit_minutes: 10,
+    grace_minutes: 5,
+    passing_percent: 60,
+    status: 'published',
+    instrument_version_id: 'v1',
+    assessment_attempts: [{ id: 't1', attempt_no: 1, status: 'in_progress' }],
+  }
+  const started = (over = {}) => ({
+    attempt_id: 't1',
+    attempt_no: 1,
+    started_at: T0.toISOString(),
+    resumed: true,
+    deadline_at: new Date(T0.getTime() + 10 * 60_000).toISOString(),
+    server_now: T0.toISOString(),
+    draft: { i1: { choice: 'a' } },
+    timed_out: false,
+    draft_seq: 1_000_000,
+    ...over,
+  })
+  const ctx = (assessments) => ({
+    session: { user: { id: 'u1' } },
+    context: { cohortMemberships: [] },
+    services: { assessments, assessmentMedia: { signedUrls: async () => ({}) } },
+  })
+  const mount = async (svc) => {
+    const el = document.createElement('div')
+    document.body.append(el)
+    await renderAssessmentView(el, ctx(svc), { id: 'a1' })
+    await vi.advanceTimersByTimeAsync(0)
+    return el
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(T0)
+    window.location.hash = ''
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    document.body.replaceChildren()
+  })
+
+  it('resume restores saved answers; typing saves to the server after a pause', async () => {
+    const svc = {
+      getAssignment: async () => timed,
+      start: vi.fn(async () => started()),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(async () => ({ saved_at: T0.toISOString(), finalized: false })),
+    }
+    const el = await mount(svc)
+    const form = el.querySelector('form[data-form=attempt]')
+    expect(form.querySelector('input[name="q:i1"][value=a]').checked).toBe(true) // restored from the server
+    expect(el.querySelector('[data-remaining]').textContent).toBe('10:00')
+    expect(el.textContent).toContain(
+      'ถ้าเบราว์เซอร์ถามก่อนปิดหน้า แปลว่ายังบันทึกไม่เสร็จ ให้กดอยู่ในหน้านี้สักครู่'
+    )
+
+    const status = el.querySelector('[data-save-status]')
+    const tf = form.querySelector('input[name="q:i3"][value=true]')
+    tf.checked = true
+    tf.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(status.dataset.state).toBe('dirty')
+    await vi.advanceTimersByTimeAsync(0) // a choice is saved at once
+    expect(svc.saveDraft).toHaveBeenLastCalledWith(
+      't1',
+      { i1: { choice: 'a' }, i3: { value: true } },
+      1_000_001
+    )
+    expect(status.textContent).toContain('บันทึกคำตอบแล้ว')
+    expect(status.dataset.state).toBe('saved')
+
+    const num = form.querySelector('input[name="q:i4"]')
+    num.value = '7'
+    num.dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(600)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(1) // typing waits for a pause (0.8 s)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(2)
+    expect(svc.saveDraft).toHaveBeenLastCalledWith(
+      't1',
+      { i1: { choice: 'a' }, i3: { value: true }, i4: { value: 7 } },
+      1_000_002 // each save gets the next number
+    )
+
+    num.value = '75'
+    num.dispatchEvent(new Event('input', { bubbles: true }))
+    num.dispatchEvent(new Event('change', { bubbles: true })) // leaving the field saves at once
+    await vi.advanceTimersByTimeAsync(0)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(3) // the pending debounce found nothing new
+  })
+
+  it('a change made while a save is in flight is saved right after it (not dropped)', async () => {
+    let release
+    const svc = {
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi
+        .fn()
+        .mockImplementationOnce(() => new Promise((r) => (release = r)))
+        .mockResolvedValue({ saved_at: T0.toISOString(), finalized: false }),
+    }
+    const el = await mount(svc)
+    const status = el.querySelector('[data-save-status]')
+    const pick = (sel) => {
+      const i = el.querySelector(sel)
+      i.checked = true
+      i.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    pick('input[name="q:i1"][value=b]')
+    await vi.advanceTimersByTimeAsync(0)
+    pick('input[name="q:i3"][value=false]') // arrives while the first save is pending
+    await vi.advanceTimersByTimeAsync(0)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(1)
+    expect(status.dataset.state).not.toBe('saved')
+    release({ saved_at: T0.toISOString(), finalized: false })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(2)
+    expect(svc.saveDraft).toHaveBeenLastCalledWith(
+      't1',
+      { i1: { choice: 'b' }, i3: { value: false } },
+      1_000_002
+    )
+    expect(status.dataset.state).toBe('saved')
+  })
+
+  it('time up → submits what is on screen without the unanswered prompt', async () => {
+    const svc = {
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(),
+      submit: vi.fn(async () => ({ score: 0 })),
+    }
+    const el = await mount(svc)
+    el.querySelector('input[name="q:i4"]').value = '7x' // half-typed: left out, not an error
+    await vi.advanceTimersByTimeAsync(5 * 60_000 + 1000)
+    expect(el.querySelector('[data-time-alert]').textContent).toBe('เหลือเวลา 5 นาที')
+    await vi.advanceTimersByTimeAsync(5 * 60_000)
+    expect(svc.submit).toHaveBeenCalledTimes(1)
+    expect(svc.submit).toHaveBeenCalledWith('t1', { i1: { choice: 'a' } }, 1_000_001)
+    expect(window.location.hash).toBe('#/assessments/attempts/t1')
+  })
+
+  it('another page took over (stale save) → banner, inputs disabled, no more saves or prompts', async () => {
+    const svc = {
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(async () => ({ saved_at: null, finalized: false, stale: true })),
+      saveDraftKeepalive: vi.fn(),
+      submit: vi.fn(),
+    }
+    const el = await mount(svc)
+    const b = el.querySelector('input[name="q:i1"][value=b]')
+    b.checked = true
+    b.dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(el.querySelector('[data-superseded]').textContent).toContain(
+      'มีการทำต่อจากอีกเครื่องแล้ว กรุณาโหลดหน้าใหม่'
+    )
+    expect([...el.querySelectorAll('form input, form button')].every((c) => c.disabled)).toBe(true)
+    const e = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(e)
+    expect(e.defaultPrevented).toBe(false) // nothing of this page's is pending any more
+    await vi.advanceTimersByTimeAsync(20 * 60_000) // the countdown stopped: no time-up submit
+    expect(svc.submit).not.toHaveBeenCalled()
+  })
+
+  it('submitting from a page another device took over (SE005) shows the same banner', async () => {
+    const svc = {
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(),
+      submit: vi.fn(async () => {
+        throw Object.assign(new Error('x'), { code: 'SE005' })
+      }),
+    }
+    const el = await mount(svc)
+    const form = el.querySelector('form[data-form=attempt]')
+    form.requestSubmit()
+    await vi.advanceTimersByTimeAsync(0)
+    form.requestSubmit() // confirm unanswered items
+    await vi.advanceTimersByTimeAsync(0)
+    expect(el.querySelector('[data-superseded]')).not.toBeNull()
+    expect(window.location.hash).not.toBe('#/assessments/attempts/t1')
+  })
+
+  it('the server says time was up while saving → go to the result', async () => {
+    const svc = {
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(async () => ({ saved_at: null, finalized: true })),
+    }
+    const el = await mount(svc)
+    const b = el.querySelector('input[name="q:i1"][value=b]')
+    b.checked = true
+    b.dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(window.location.hash).toBe('#/assessments/attempts/t1')
+  })
+
+  it('reopening an expired attempt shows its result instead of the exam', async () => {
+    const svc = {
+      getAssignment: async () => timed,
+      start: vi.fn(async () => started({ timed_out: true, resumed: false, draft: null })),
+      getItems: vi.fn(),
+    }
+    const el = await mount(svc)
+    expect(svc.getItems).not.toHaveBeenCalled()
+    expect(el.querySelector('form[data-form=attempt]')).toBeNull()
+    expect(window.location.hash).toBe('#/assessments/attempts/t1')
+  })
+
+  describe('leaving with unsaved answers', () => {
+    const svcWith = () => ({
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(async () => ({ saved_at: T0.toISOString(), finalized: false })),
+      saveDraftKeepalive: vi.fn(() => true),
+    })
+    const typeNumber = (el, v) => {
+      const num = el.querySelector('input[name="q:i4"]')
+      num.value = v
+      num.dispatchEvent(new Event('input', { bubbles: true })) // debounced: still unsaved
+    }
+    const beforeUnload = () => {
+      const e = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(e)
+      return e.defaultPrevented
+    }
+    const setVisibility = (state) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+    afterEach(() => {
+      delete document.visibilityState
+      vi.restoreAllMocks()
+    })
+
+    it('closing or reloading asks first while answers are unsaved, not once they are saved', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      expect(beforeUnload()).toBe(false) // restored answers are already on the server
+      typeNumber(el, '75')
+      expect(el.querySelector('[data-save-status]').textContent).toBe('กำลังบันทึก…')
+      expect(beforeUnload()).toBe(true)
+      await vi.advanceTimersByTimeAsync(1600)
+      expect(svc.saveDraft).toHaveBeenCalledTimes(1)
+      expect(beforeUnload()).toBe(false)
+    })
+
+    it('switching apps sends a keepalive save of what is on screen; coming back reconciles', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      typeNumber(el, '75')
+      setVisibility('hidden')
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledWith(
+        't1',
+        { i1: { choice: 'a' }, i4: { value: 75 } },
+        1_000_001
+      )
+      setVisibility('visible')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(svc.saveDraft).toHaveBeenCalledWith('t1', { i1: { choice: 'a' }, i4: { value: 75 } }, 1_000_002)
+    })
+
+    it('the page being closed (pagehide) sends a keepalive save', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      typeNumber(el, '12')
+      window.dispatchEvent(new Event('pagehide'))
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledWith(
+        't1',
+        { i1: { choice: 'a' }, i4: { value: 12 } },
+        1_000_001
+      )
+    })
+
+    it('links inside the app ask "ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่"; cancel stays, OK saves then leaves', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      const nav = document.createElement('a')
+      nav.href = '#/assessments'
+      document.body.append(nav)
+      typeNumber(el, '75')
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+
+      const stay = new MouseEvent('click', { bubbles: true, cancelable: true })
+      nav.dispatchEvent(stay)
+      expect(confirm).toHaveBeenLastCalledWith('ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่')
+      expect(stay.defaultPrevented).toBe(true)
+      expect(svc.saveDraftKeepalive).not.toHaveBeenCalled()
+
+      const go = new MouseEvent('click', { bubbles: true, cancelable: true })
+      nav.dispatchEvent(go)
+      expect(go.defaultPrevented).toBe(false)
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledTimes(1)
+    })
+
+    it('no prompt when everything is saved; listeners are removed after leaving the page', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      const confirm = vi.spyOn(window, 'confirm')
+      const nav = document.createElement('a')
+      nav.href = '#/assessments'
+      document.body.append(nav)
+      nav.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      expect(confirm).not.toHaveBeenCalled()
+
+      typeNumber(el, '75')
+      el.remove() // the router replaced the view
+      window.dispatchEvent(new Event('hashchange'))
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledTimes(1) // final save on the way out
+      expect(beforeUnload()).toBe(false)
+    })
+  })
+
+  it('overview tells the trainee the time limit before they start', async () => {
+    const svc = { getAssignment: async () => ({ ...timed, assessment_attempts: [] }) }
+    const el = await mount(svc)
+    expect(el.textContent).toContain('10 นาทีต่อครั้ง')
+    expect(el.textContent).toContain('ระบบจะส่งคำตอบที่บันทึกไว้ให้อัตโนมัติ')
   })
 })
 

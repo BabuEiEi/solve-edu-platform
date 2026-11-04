@@ -1,6 +1,5 @@
 import { unwrap, AppError } from '../../core/errors.js'
 import { ASSIGNMENT_COLUMNS, ATTEMPT_COLUMNS } from '../assessments/service.js'
-import { personName } from './logic.js'
 
 const WITH_CONTEXT = `${ASSIGNMENT_COLUMNS}, created_at, cohorts ( id, code, name ), courses ( id, title ),
   instrument_versions ( id, version_no, instruments ( id, code, title, course_id ) )`
@@ -114,6 +113,31 @@ export function createAssignmentService(client) {
       )
     },
 
+    /** Extra attempts granted on this assignment (RLS: assessors all, mentor/trainee their own scope). */
+    async listExtraAttempts(assignmentId) {
+      return (
+        unwrap(
+          await client
+            .from('assessment_extra_attempts')
+            .select('id, user_id, reason, created_at')
+            .eq('assignment_id', assignmentId),
+          'assignments.extras'
+        ) ?? []
+      )
+    },
+
+    /** +1 attempt for one trainee; granted_by and the time are recorded by the server. */
+    async grantExtraAttempt(assignmentId, userId, reason) {
+      unwrap(
+        await client.from('assessment_extra_attempts').insert({
+          assignment_id: assignmentId,
+          user_id: userId,
+          reason: String(reason ?? '').trim() || null,
+        }),
+        'assignments.grant_extra'
+      )
+    },
+
     /** Attempts the caller may see, with the person's name. Never per-item scores. */
     async listAttempts(assignmentId) {
       return (
@@ -128,31 +152,22 @@ export function createAssignmentService(client) {
       )
     },
 
-    /**
-     * Who should have taken the test: the cohort's active trainees (visible to
-     * assessors) plus the caller's own mentees (all a mentor can see).
-     */
-    async listRoster(cohortId, userId) {
-      const [members, mentees] = await Promise.all([
-        client
-          .from('cohort_memberships')
-          .select('user_id, profiles!cohort_memberships_user_id_fkey ( full_name, display_name )')
-          .eq('cohort_id', cohortId)
-          .eq('cohort_role', 'trainee')
-          .eq('status', 'active'),
-        client
-          .from('mentor_assignments')
-          .select('trainee_id, profiles!mentor_assignments_trainee_id_fkey ( full_name, display_name )')
-          .eq('cohort_id', cohortId)
-          .eq('mentor_id', userId)
-          .is('ended_at', null),
-      ])
-      const people = new Map()
-      for (const m of unwrap(members, 'assignments.roster') ?? [])
-        people.set(m.user_id, { user_id: m.user_id, name: personName(m.profiles) })
-      for (const m of unwrap(mentees, 'assignments.mentees') ?? [])
-        people.set(m.trainee_id, { user_id: m.trainee_id, name: personName(m.profiles) })
-      return [...people.values()]
+    /** One row per person (assignment_results — the caller's RLS decides who). */
+    async results(assignmentId) {
+      return (
+        unwrap(
+          await client.rpc('assignment_results', { p_assignment: assignmentId }),
+          'assignments.results'
+        ) ?? []
+      )
+    },
+
+    /** Aggregated item analysis for cohort assessors (item_statistics); never per person, never the key. */
+    async itemStatistics(assignmentId) {
+      return unwrap(
+        await client.rpc('item_statistics', { p_assignment: assignmentId }),
+        'assignments.item_stats'
+      )
     },
   }
 }

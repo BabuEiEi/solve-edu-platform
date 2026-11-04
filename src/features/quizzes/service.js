@@ -1,5 +1,6 @@
 import { unwrap, AppError } from '../../core/errors.js'
 import { ITEM_COLUMNS } from '../assessments/service.js'
+import { itemMediaPaths } from '../assessments/logic.js'
 
 export const INSTRUMENT_COLUMNS = 'id, owner_org_id, course_id, code, title, description, status, created_at'
 export const VERSION_COLUMNS = 'id, instrument_id, version_no, status, published_at, content_hash, created_at'
@@ -120,6 +121,19 @@ export function createQuizBuilderService(client) {
         await client.rpc('reorder_course_items', { p_kind: 'item', p_parent: versionId, p_ids: ids }),
         'quizzes.reorder'
       )
+    },
+
+    /** Every image path any item of any version of the quiz refers to. */
+    async usedMediaPaths(instrumentId) {
+      const rows =
+        unwrap(
+          await client
+            .from('instrument_items')
+            .select('media_path, options_json, instrument_versions!inner ( instrument_id )')
+            .eq('instrument_versions.instrument_id', instrumentId),
+          'quizzes.used_media'
+        ) ?? []
+      return itemMediaPaths(rows)
     },
 
     async setKey(itemId, { answer, scoring }) {

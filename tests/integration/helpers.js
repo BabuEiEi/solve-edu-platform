@@ -34,6 +34,16 @@ export function jwtFor(secret, sub, role = 'authenticated') {
   return `${head}.${body}.${sig}`
 }
 
+/**
+ * The API's clock (HTTP Date header, 1 s resolution). Compare server timestamps
+ * with this, not the laptop clock: the Docker VM clock can drift from it
+ * (seen: 24 min after Docker Desktop restarted).
+ */
+export async function serverNow({ url, apiKey }) {
+  const res = await fetch(`${url}/rest/v1/`, { method: 'HEAD', headers: { apikey: apiKey } })
+  return new Date(res.headers.get('date')).getTime()
+}
+
 /** Full supabase-js client acting as a demo user (Data API + Storage). */
 export function supabaseAs({ url, apiKey, secret }, key) {
   return createClient(url, apiKey, {

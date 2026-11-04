@@ -26,11 +26,11 @@ update public.instrument_versions
    set status = 'published', published_at = now(), content_hash = 'fixture'
  where id = '81000000-0000-4000-a000-000000000001';
 
-insert into public.assessment_assignments (id, instrument_version_id, cohort_id, course_id, purpose, title, attempt_limit, passing_percent, status) values
+insert into public.assessment_assignments (id, instrument_version_id, cohort_id, course_id, purpose, title, attempt_limit, passing_percent, status, close_at) values
   ('83000000-0000-4000-a000-000000000001', '81000000-0000-4000-a000-000000000001', tests.uid('cohort'), tests.uid('course'),
-   'pretest', 'Pretest AfL', 1, 60, 'published'),
+   'pretest', 'Pretest AfL', 1, 60, 'published', now() + interval '30 days'),
   ('83000000-0000-4000-a000-000000000002', '81000000-0000-4000-a000-000000000001', tests.uid('cohort'), null,
-   'formative', 'ยังไม่เผยแพร่', 3, null, 'draft');
+   'formative', 'ยังไม่เผยแพร่', 3, null, 'draft', null);
 
 insert into public.assessment_attempts (id, assignment_id, user_id, attempt_no, status, started_at, submitted_at, score, max_score, passed) values
   ('84000000-0000-4000-a000-000000000001', '83000000-0000-4000-a000-000000000001', tests.uid('teacher_a1'), 1,
@@ -237,7 +237,7 @@ select ok(exists (select 1 from private.audit_logs
                    where table_name = 'public.assessment_attempts'
                      and record_id = '84000000-0000-4000-a000-000000000001'
                      and action = 'UPDATE'),
-  'Any change to an attempt is audited');
+  'Changes to an attempt''s evidence (score, status, times) are audited');
 
 -- ---------- revocation ----------
 update public.cohort_memberships set status = 'withdrawn'

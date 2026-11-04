@@ -63,9 +63,23 @@ export function createMediaService(client, bucketName = LESSON_MEDIA_BUCKET) {
       return Object.fromEntries(rows.filter((r) => r.signedUrl && !r.error).map((r) => [r.path, r.signedUrl]))
     },
 
+    /** Paths actually removed — the bucket's policies may refuse some (e.g. images still in use). */
     async remove(paths) {
-      if (!paths?.length) return
-      unwrap(await bucket().remove(paths), 'storage.remove')
+      if (!paths?.length) return []
+      const rows = unwrap(await bucket().remove(paths), 'storage.remove') ?? []
+      return rows.map((r) => r.name)
+    },
+
+    /** Files directly in `folder`: [{ path, created_at }] (folder placeholders left out). */
+    async list(folder) {
+      const rows =
+        unwrap(
+          await bucket().list(folder, { limit: 1000, sortBy: { column: 'created_at', order: 'asc' } }),
+          'storage.list'
+        ) ?? []
+      return rows
+        .filter((o) => o.id && o.name !== '.emptyFolderPlaceholder')
+        .map((o) => ({ path: `${folder}/${o.name}`, created_at: o.created_at }))
     },
   }
 }

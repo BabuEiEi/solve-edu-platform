@@ -17,6 +17,7 @@ import {
   keyState,
   publishBlockers,
   defaultVersion,
+  unusedMedia,
 } from './logic.js'
 
 const input =
@@ -408,6 +409,10 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''}
         <div class="space-y-4">
           ${versionBar()} ${statusPanel()} ${assignmentPanel()}
+          <section class="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-ink-200 bg-white p-4 text-sm" data-media-cleanup>
+            <span class="text-ink-600">รูปที่อัปโหลดแล้วไม่มีข้อใดใช้ (ทุกฉบับ) และเก่ากว่า 24 ชั่วโมง ลบได้ — รูปที่ยังใช้อยู่ระบบไม่ยอมให้ลบ</span>
+            <button type="button" class="${secondary}" data-action="clean-media">ล้างรูปที่ไม่ได้ใช้</button>
+          </section>
           <ol class="space-y-3">${items.map(itemCard)}</ol>
           ${
             isDraft()
@@ -431,10 +436,10 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     if (busy) return
     busy = true
     try {
-      await fn()
+      const result = await fn()
       editing = null
       await load()
-      message = okMessage
+      message = typeof okMessage === 'function' ? okMessage(result) : okMessage
       tone = 'success'
     } catch (err) {
       message = toUserMessage(err)
@@ -492,6 +497,35 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
       ? await services.quizzes.updateItem(existing.id, item)
       : await services.quizzes.addItem(version.id, item, nextOrder(items))
     if (key) await services.quizzes.setKey(saved.id, key)
+  }
+
+  const cleanMedia = async () => {
+    let candidates
+    try {
+      const [files, used] = await Promise.all([
+        services.assessmentMedia.list(instrument.id),
+        services.quizzes.usedMediaPaths(instrument.id),
+      ])
+      candidates = unusedMedia(files, used)
+    } catch (err) {
+      message = toUserMessage(err)
+      tone = 'error'
+      return draw()
+    }
+    if (candidates.length === 0) {
+      message = 'ไม่มีรูปที่ไม่ได้ใช้ให้ลบ (รูปที่อัปโหลดภายใน 24 ชั่วโมงจะยังไม่ถูกลบ)'
+      tone = 'success'
+      return draw()
+    }
+    if (!window.confirm(`ลบรูปที่ไม่มีข้อใดใช้ ${candidates.length} ไฟล์? ลบแล้วกู้คืนไม่ได้`))
+      return undefined
+    return run(
+      () => services.assessmentMedia.remove(candidates),
+      (removed) =>
+        removed.length === candidates.length
+          ? `ลบรูปที่ไม่ได้ใช้แล้ว ${removed.length} ไฟล์`
+          : `ลบแล้ว ${removed.length} จาก ${candidates.length} ไฟล์ — ที่เหลือถูกใช้อยู่ ระบบจึงไม่ลบ`
+    )
   }
 
   el.onclick = (e) => {
@@ -561,6 +595,8 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         return run(async () => {
           selectedVersionId = await services.quizzes.clone(version.id)
         }, 'สร้างฉบับร่างใหม่แล้ว (คัดลอกข้อและเฉลยจากฉบับเดิม)')
+      case 'clean-media':
+        return cleanMedia()
     }
     return undefined
   }
