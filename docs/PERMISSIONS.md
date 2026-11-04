@@ -104,7 +104,7 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `save_attempt_draft(p_attempt, p_responses, p_seq = null)` → `(saved_at, finalized, stale)` (2B.1) | เจ้าของ attempt | ยังไม่ส่ง (SE003) · ตรวจรูปแบบเหมือนตอนส่ง (22023) · เลยเส้นตาย+ผ่อนผันแล้ว → ไม่บันทึก แต่ส่งอัตโนมัติจากคำตอบที่บันทึกไว้ก่อนหน้า (`finalized = true`) · `p_seq` ไม่ใหม่กว่า `draft_seq` → ไม่บันทึก (`stale = true`) |
 | `submit_attempt(p_attempt, p_responses, p_seq = null)` → คะแนนรวม + `auto_submitted` | เจ้าของ attempt | ยังไม่ส่ง (SE003) · หน้าที่ถูกหน้าใหม่กว่าแทนที่ส่งไม่ได้ (SE005) · ภายในเส้นตาย+ผ่อนผัน: ให้คะแนนคำตอบที่ส่ง · เลยแล้ว: **ไม่ใช้คำตอบที่ส่งมาช้า** ให้คะแนนจากคำตอบที่บันทึกไว้ · ให้คะแนนจาก `private.instrument_answer_keys` · ประทับ `submitted_at`/`score`/`passed` · คืนเฉพาะคะแนนรวม |
 | `assignment_results(p_assignment)` (2B.1) | authenticated | **SECURITY INVOKER** — RLS ของผู้เรียกกำหนดแถว: assessor เห็นทั้งรุ่น, mentor เห็นผู้ที่ดูแล, trainee เห็นตนเอง, คนนอกได้ผลว่าง · หนึ่งแถวต่อคน (ครั้งแรก/สูงสุด/สถานะ/สิทธิ์เพิ่ม) |
-| `item_statistics(p_assignment)` → jsonb (2B.1) | assessor ของรุ่น (mentor/trainee/คนนอก → 42501) | SECURITY DEFINER (ต้องอ่าน `awarded_score`) · คืนเฉพาะค่ารวม: p, D (27%), r item-total, จำนวนที่เลือกแต่ละตัวเลือก, KR-20/α · ใช้ครั้งแรกของแต่ละคน · **น้อยกว่า 5 คนคืนแค่จำนวน** · **ไม่ระบุตัวเลือกที่ถูก** (ไม่อ่านเฉลย) |
+| `item_statistics(p_assignment)` → jsonb (2B.1, 2C) | assessor ของรุ่น (mentor/trainee/คนนอก → 42501) | SECURITY DEFINER (ต้องอ่าน `awarded_score` และเฉลยเพื่อตัดสินรายส่วน) · คืนเฉพาะค่ารวม: p, D (27%), r item-total, จำนวนที่เลือกแต่ละตัวเลือก, KR-20/α, **สัดส่วนถูกรายส่วน** ของข้อแบบใหม่ · ใช้ครั้งแรกของแต่ละคน · **น้อยกว่า 5 คนคืนแค่จำนวน** · **ไม่ระบุตัวเลือกที่ถูก** (ไม่คืนเฉลย และไม่คืนจำนวนที่เลือกแต่ละตัวเลือกรายส่วน) |
 | `private.finalize_expired_attempts()` (2B.1) | `pg_cron` ทุก 1 นาที (client เรียกไม่ได้) | ปิดครั้งที่เลยเส้นตาย+ผ่อนผันด้วยคำตอบที่บันทึกไว้ · lock เดียวกับ RPC · แต่ละแถวใน subtransaction |
 
 เส้นตาย = ค่าที่มาก่อนระหว่าง `started_at + time_limit_minutes` กับ `close_at` (ค่าปัจจุบันของการมอบหมาย) · ช่วงผ่อนผัน `grace_minutes` ค่าเริ่มต้น 5 นาที
@@ -161,6 +161,7 @@ Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (ส�
 | ลบหรือเขียนทับรูปข้อสอบที่ยังใช้อยู่ (แม้เป็นผู้สร้าง) | DENY | `180` (mutation test ยืนยัน) + integration ผ่าน Storage API จริง |
 | ใส่เฉลยไว้ในโครงข้อสอบแบบใหม่ / รูปนอกโฟลเดอร์ในรายการใดของข้อ / เฉลยหรือลำดับที่ถูกหลุดไปกับลำดับที่ผู้เรียนเห็น (2C) | DENY | `190` + `tests/integration/item-types.test.js` |
 | ผู้เรียนอ่าน `options_json` แล้วรู้เฉลยจากลำดับที่เก็บ (เรียงลำดับ/จับคู่) | DENY (เฉลยไม่ถูกต้อง → เผยแพร่ไม่ได้) | `210` (mutation test ยืนยัน) · หน้าสร้างข้อสอบเก็บแบบสลับ + รหัสสุ่ม |
+| ผลวิเคราะห์รายส่วนเปิดเผยเฉลย/คำตอบที่พิมพ์ · mentor/trainee ดูผลวิเคราะห์รายส่วน (2C) | DENY | `220` (mutation test ยืนยันกฎถูก/ผิดรายส่วน) |
 | Trainee อ่าน/อัปโหลดไฟล์ของบทเรียน draft หรือที่ตนไม่มีสิทธิ์ | DENY | `070` + `tests/integration/storage.test.js` |
 | ผู้เรียนเห็นหน่วย/บทเรียน draft; ผู้แก้เรียงลำดับข้ามหลักสูตร | DENY | `050`, `080` |
 | ฝัง `<script>`/`onerror`/`javascript:` ในบล็อกข้อความ | DENY (DB CHECK) | `080` |

@@ -23,6 +23,8 @@ import {
   discriminationLabel,
   reliabilityLabel,
   choicesText,
+  partName,
+  partStatText,
   itemStatsCsvRows,
 } from './logic.js'
 
@@ -409,7 +411,7 @@ function itemAnalysis(stats) {
             <th scope="col" class="px-3 py-2 font-medium">ความยาก (p)</th>
             <th scope="col" class="px-3 py-2 font-medium">อำนาจจำแนก (D)</th>
             <th scope="col" class="px-3 py-2 font-medium">r</th>
-            <th scope="col" class="px-3 py-2 font-medium">ตัวเลือกที่ถูกเลือก</th>
+            <th scope="col" class="px-3 py-2 font-medium">ตัวเลือกที่ถูกเลือก / ถูกรายส่วน</th>
             <th scope="col" class="px-3 py-2 font-medium">ไม่ตอบ</th>
           </tr>
         </thead>
@@ -421,7 +423,18 @@ function itemAnalysis(stats) {
               <td class="px-3 py-2">${fmt(it.p)} <span class="block text-xs text-ink-400">${difficultyLabel(it.p)}</span></td>
               <td class="px-3 py-2">${fmt(it.d)} <span class="block text-xs text-ink-400">${discriminationLabel(it.d)}</span></td>
               <td class="px-3 py-2 text-ink-600">${fmt(it.r_it)}</td>
-              <td class="px-3 py-2 text-ink-600">${choicesText(it.choices) || '—'}</td>
+              <td class="px-3 py-2 text-ink-600">
+                ${
+                  it.slots?.length
+                    ? html`<ul class="min-w-48 space-y-0.5 text-xs" data-parts>
+                      ${it.slots.map(
+                        (p) =>
+                          html`<li>${partName(it.item_type, p)} <span class="whitespace-nowrap">${partStatText(p)}</span></li>`
+                      )}
+                    </ul>`
+                    : choicesText(it.choices) || '—'
+                }
+              </td>
               <td class="px-3 py-2 text-ink-600">${it.blank}</td>
             </tr>`
           )}
@@ -430,6 +443,7 @@ function itemAnalysis(stats) {
     </div>
     <p class="mt-2 text-xs text-ink-400">
       p = สัดส่วนคะแนนที่ได้ (0–1) · D = กลุ่มสูง − กลุ่มต่ำ (27% ละ ${stats.group_size} คน) · r = สหสัมพันธ์ข้อกับคะแนนรวมที่เหลือ ·
+      ถูกรายส่วน = สัดส่วนคนที่ตอบส่วนนั้นถูก (ข้อเรียงลำดับ จับคู่ จัดกลุ่ม ตาราง ดรอปดาวน์ เติมคำ ติดป้าย) ·
       เกณฑ์แปลผลเป็นแนวทางทั่วไป · ระบบไม่ระบุว่าตัวเลือกใดเป็นคำตอบที่ถูก (เฉลยอ่านกลับไม่ได้)
     </p>
   </section>`

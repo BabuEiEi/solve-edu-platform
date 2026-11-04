@@ -11,6 +11,9 @@ import {
   discriminationLabel,
   reliabilityLabel,
   choicesText,
+  partName,
+  percentText,
+  partLines,
   itemStatsCsvRows,
   resultsCsvRows,
 } from '../../src/features/assignments/logic.js'
@@ -232,8 +235,36 @@ describe('assignment logic', () => {
         },
       ],
     })
-    expect(rows[1]).toEqual([1, 'mcq_single', '=cmd', 1, 0.667, 0.5, 0.403, 'b 4', 1])
+    expect(rows[1]).toEqual([1, 'mcq_single', '=cmd', 1, 0.667, 0.5, 0.403, 'b 4', 1, ''])
     expect(parseCsv(toCsv(rows))[1][2]).toBe("'=cmd") // formula-like prompt neutralised
+  })
+
+  it('item analysis per part: names as the trainee met them, rates only', () => {
+    expect(partName('cloze', { no: 2, label: null })).toBe('ช่องที่ 2')
+    expect(partName('ordering', { no: 1 })).toBe('ลำดับที่ 1')
+    expect(partName('image_labelling', { no: 3, label: '' })).toBe('จุดที่ 3')
+    expect(partName('matching', { no: 1, label: '  ตั้งเป้าหมาย ' })).toBe('รายการที่ 1 (ตั้งเป้าหมาย)')
+    expect(partName('choice_matrix', { no: 2, label: 'ก'.repeat(40) })).toBe(`แถวที่ 2 (${'ก'.repeat(29)}…)`)
+    expect([0.6, 0, 1, 0.333, null].map(percentText)).toEqual(['60%', '0%', '100%', '33%', '—'])
+    const item = {
+      item_type: 'dropdown',
+      prompt: '=x',
+      max_score: 2,
+      p: 0.5,
+      d: 0.2,
+      r_it: null,
+      choices: {},
+      blank: 1,
+      slots: [
+        { slot_id: 'b1', no: 1, label: null, correct_rate: 0.6, answered: 4 },
+        { slot_id: 'b2', no: 2, label: null, correct_rate: 0.4, answered: 4 },
+      ],
+    }
+    expect(partLines(item)).toEqual(['ช่องที่ 1 ถูก 60% (ตอบ 4)', 'ช่องที่ 2 ถูก 40% (ตอบ 4)'])
+    expect(partLines({ item_type: 'mcq_single' })).toEqual([])
+    expect(itemStatsCsvRows({ items: [item] })[1].at(-1)).toBe(
+      'ช่องที่ 1 ถูก 60% (ตอบ 4) · ช่องที่ 2 ถูก 40% (ตอบ 4)'
+    )
   })
 
   it('CSV: header + one row per person; formula-like names are neutralised', () => {
@@ -392,6 +423,22 @@ describe('assignment views', () => {
         blank: 0,
         choices: { true: 5, false: 1 },
       },
+      {
+        item_id: 'i3',
+        display_order: 3,
+        item_type: 'matching',
+        prompt: 'จับคู่',
+        max_score: 1,
+        p: 0.5,
+        d: 0.25,
+        r_it: 0.1,
+        blank: 0,
+        choices: {},
+        slots: [
+          { slot_id: 'l1', no: 1, label: XSS, correct_rate: 0.6, answered: 6 },
+          { slot_id: 'l2', no: 2, label: 'ขั้นสอง', correct_rate: 0.4, answered: 5 },
+        ],
+      },
     ],
   }
   const trainer = { cohortMemberships: [{ cohort_id: 'C1', cohort_role: 'trainer' }] }
@@ -481,6 +528,13 @@ describe('assignment views', () => {
     expect(row2).toContain('ง่ายมาก')
     expect(row2).toContain('ติดลบ — ตรวจโจทย์/เฉลย')
     expect(row2).toContain('ผิด 1 · ถูก 5')
+    const parts = [...section.querySelectorAll('[data-item-row="3"] [data-parts] li')].map(
+      (li) => li.textContent
+    )
+    expect(parts).toHaveLength(2)
+    expect(parts[0]).toMatch(/^รายการที่ 1 \(.*\) ถูก 60% \(ตอบ 6\)$/) // label escaped (no <img> above)
+    expect(parts[1]).toBe('รายการที่ 2 (ขั้นสอง) ถูก 40% (ตอบ 5)')
+    expect(section.querySelector('[data-item-row="1"] [data-parts]')).toBeNull()
     expect(section.textContent).toContain('ระบบไม่ระบุว่าตัวเลือกใดเป็นคำตอบที่ถูก')
   })
 
