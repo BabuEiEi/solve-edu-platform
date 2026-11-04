@@ -186,6 +186,9 @@ insert into public.assessment_assignments (id, instrument_version_id, cohort_id,
 -- ---------------------------------------------------------------------
 -- Phase 2C demo: one quiz with the new item types (formative, 3 attempts).
 -- Image labelling joins once the quiz builder can upload its image.
+-- Ordering options and the matching right column are stored shuffled with
+-- non-sequential ids: trainees can read options_json, so the stored order
+-- must not reveal the key (enforced by private.answer_key_error).
 -- ---------------------------------------------------------------------
 insert into public.instruments (id, owner_org_id, course_id, code, title, description, created_by) values
   ('a1000000-0000-4000-a000-000000000002', '10000000-0000-4000-a000-000000000001', '40000000-0000-4000-a000-000000000001',
@@ -197,12 +200,12 @@ insert into public.instrument_versions (id, instrument_id, created_by) values
 insert into public.instrument_items (id, instrument_version_id, item_type, prompt, options_json, max_score, display_order) values
   ('a3000000-0000-4000-a000-000000000011', 'a2000000-0000-4000-a000-000000000002', 'ordering',
    'เรียงขั้นตอนของวงจรการประเมินเพื่อการเรียนรู้',
-   '{"options":[{"id":"a","text":"กำหนดเป้าหมายการเรียนรู้"},{"id":"b","text":"รวบรวมหลักฐานการเรียนรู้"},{"id":"c","text":"ให้ข้อมูลย้อนกลับ"},{"id":"d","text":"ปรับการสอน"}]}',
+   '{"options":[{"id":"k7","text":"ให้ข้อมูลย้อนกลับ"},{"id":"q2","text":"กำหนดเป้าหมายการเรียนรู้"},{"id":"m9","text":"ปรับการสอน"},{"id":"t4","text":"รวบรวมหลักฐานการเรียนรู้"}]}',
    1, 1),
   ('a3000000-0000-4000-a000-000000000012', 'a2000000-0000-4000-a000-000000000002', 'matching',
    'จับคู่คำกับความหมาย',
    '{"left":[{"id":"l1","text":"เกณฑ์ความสำเร็จ"},{"id":"l2","text":"ข้อมูลย้อนกลับ"},{"id":"l3","text":"การประเมินตนเอง"}],
-     "right":[{"id":"r1","text":"บอกว่างานที่ดีเป็นอย่างไร"},{"id":"r2","text":"บอกว่าทำอะไรได้ดีแล้วและควรปรับอะไร"},{"id":"r3","text":"ผู้เรียนตรวจงานตนเองตามเกณฑ์"},{"id":"r4","text":"สรุปผลเป็นเกรด"}]}',
+     "right":[{"id":"x5","text":"ผู้เรียนตรวจงานตนเองตามเกณฑ์"},{"id":"p8","text":"สรุปผลเป็นเกรด"},{"id":"j3","text":"บอกว่างานที่ดีเป็นอย่างไร"},{"id":"w6","text":"บอกว่าทำอะไรได้ดีแล้วและควรปรับอะไร"}]}',
    1, 2),
   ('a3000000-0000-4000-a000-000000000013', 'a2000000-0000-4000-a000-000000000002', 'classification',
    'จัดกิจกรรมต่อไปนี้ลงกลุ่มที่เหมาะสม',
@@ -227,8 +230,8 @@ insert into public.instrument_items (id, instrument_version_id, item_type, promp
    1, 6);
 
 insert into private.instrument_answer_keys (item_id, answer_json, scoring_json, updated_by) values
-  ('a3000000-0000-4000-a000-000000000011', '{"order":["a","b","c","d"]}', '{}', '00000000-0000-4000-a000-000000000003'),
-  ('a3000000-0000-4000-a000-000000000012', '{"slots":{"l1":"r1","l2":"r2","l3":"r3"}}', '{}', '00000000-0000-4000-a000-000000000003'),
+  ('a3000000-0000-4000-a000-000000000011', '{"order":["q2","t4","k7","m9"]}', '{}', '00000000-0000-4000-a000-000000000003'),
+  ('a3000000-0000-4000-a000-000000000012', '{"slots":{"l1":"j3","l2":"w6","l3":"x5"}}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000013', '{"slots":{"i1":"c1","i2":"c1","i3":"c2","i4":"c2"}}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000014', '{"slots":{"w1":"f","w2":"t","w3":"t"}}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000015', '{"slots":{"b1":"x","b2":"p"}}', '{}', '00000000-0000-4000-a000-000000000003'),

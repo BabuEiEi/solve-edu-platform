@@ -24,12 +24,12 @@ const entries = (ids, prefix = '') => ids.map((id) => ({ id, text: `${prefix}${i
 const ITEMS = [
   {
     item_type: 'ordering',
-    options_json: { options: entries(['a', 'b', 'c', 'd'], 'ขั้น ') },
+    options_json: { options: entries(['c', 'a', 'd', 'b'], 'ขั้น ') }, // stored shuffled
     key: { order: ['a', 'b', 'c', 'd'] },
   },
   {
     item_type: 'matching',
-    options_json: { left: entries(['l1', 'l2']), right: entries(['r1', 'r2', 'r3']) },
+    options_json: { left: entries(['l1', 'l2']), right: entries(['r2', 'r3', 'r1']) }, // not next to partners
     key: { slots: { l1: 'r1', l2: 'r2' } },
   },
   {

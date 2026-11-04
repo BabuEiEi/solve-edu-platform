@@ -96,6 +96,8 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 
 ข้อความในเติมคำเทียบหลัง `private.normalize_answer`: NFKC (ำ = ํา), ลำดับวรรณยุกต์กับ ํ, เลขไทย → 0–9, ตัดอักขระที่มองไม่เห็น, ยุบช่องว่าง, ไม่สนตัวพิมพ์เล็กใหญ่ — ไม่ตรวจคำสะกดใกล้เคียง · presentation ของดรอปดาวน์ใช้ชื่อรายการ `blank:<id>`
 
+**ลำดับที่เก็บต้องไม่บอกเฉลย:** ผู้เรียนอ่าน `options_json` ได้หลังเริ่มทำ จึงห้ามเก็บข้อเรียงลำดับในลำดับที่ถูก และห้ามเก็บฝั่งขวาของข้อจับคู่ให้ทุกคู่อยู่ตำแหน่งเดียวกับฝั่งซ้าย (`set_item_key` ปฏิเสธ, `item_key_status.key_valid = false`) — หน้าสร้างข้อสอบใช้รหัสสุ่มและเก็บแบบสลับให้อัตโนมัติ
+
 entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `scoring_json` = `{mode: 'partial' | 'all_or_nothing'}` ค่าเริ่มต้น **partial** (ตำแหน่ง/ช่องที่ถูก ÷ ทั้งหมด)
 
 `start_attempt` คืน `presentation` = `{items:[item ids ตามลำดับที่เห็น], lists:{item id:{list:[ids]}}}` — ข้อเรียงลำดับสลับเสมอ (ไม่เริ่มในลำดับที่ถูก) · ฝั่งขวาของข้อจับคู่สลับเสมอ · อื่น ๆ ตาม `assessment_assignments.shuffle_items / shuffle_choices` (ค่าเริ่มต้นปิด) · เก็บไว้ที่ `assessment_attempts.presentation_json`

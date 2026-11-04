@@ -18,7 +18,11 @@ import {
   publishBlockers,
   defaultVersion,
   unusedMedia,
+  isListType,
+  defaultLists,
+  LIST_EDITORS,
 } from './logic.js'
+import { listEditorFields, readList, handleListAction, refreshKeySelects } from './listEditors.js'
 
 const input =
   'mt-1 block w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30'
@@ -171,7 +175,9 @@ function itemForm(type, item, media) {
     : ''
 
   let typeFields
-  if (isChoiceType(type)) {
+  if (isListType(type)) {
+    typeFields = listEditorFields(type, item ? item.options_json : defaultLists(type), media, { editing })
+  } else if (isChoiceType(type)) {
     typeFields = html`<fieldset class="space-y-2">
         <legend class="${label}">ตัวเลือก (ทำเครื่องหมาย “ถูก” ที่คำตอบที่ถูก)</legend>
         <div data-options class="space-y-2">${options.map((o) => optionRow(type, o, media))}</div>
@@ -302,15 +308,26 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         <p class="whitespace-pre-line text-ink-900">${item.prompt}</p>
         ${image ? html`<img src="${safeUrl(image)}" alt="" class="max-h-48 rounded" />` : ''}
         ${
-          options.length
-            ? html`<ul class="grid gap-1 text-ink-600">
+          isListType(item.item_type)
+            ? html`<div class="grid gap-3 sm:grid-cols-2" data-list-preview>
+                ${LIST_EDITORS[item.item_type].map(
+                  (def) => html`<div>
+                    <p class="text-xs font-medium text-ink-500">${def.label}</p>
+                    <ul class="mt-1 grid gap-1 text-ink-600">
+                      ${(item.options_json?.[def.name] ?? []).map((o) => html`<li class="flex items-center gap-2">• ${choicePreview(o, media)}</li>`)}
+                    </ul>
+                  </div>`
+                )}
+              </div>`
+            : options.length
+              ? html`<ul class="grid gap-1 text-ink-600">
                 ${options.map((o) => html`<li class="flex items-center gap-2">○ ${choicePreview(o, media)}</li>`)}
               </ul>`
-            : item.item_type === 'true_false'
-              ? html`<p class="text-ink-500">ถูก / ผิด</p>`
-              : item.options_json?.unit
-                ? html`<p class="text-ink-500">ตอบเป็นตัวเลข (${item.options_json.unit})</p>`
-                : html`<p class="text-ink-500">ตอบเป็นตัวเลข</p>`
+              : item.item_type === 'true_false'
+                ? html`<p class="text-ink-500">ถูก / ผิด</p>`
+                : item.options_json?.unit
+                  ? html`<p class="text-ink-500">ตอบเป็นตัวเลข (${item.options_json.unit})</p>`
+                  : html`<p class="text-ink-500">ตอบเป็นตัวเลข</p>`
         }
       </div>
     </li>`
@@ -477,6 +494,19 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     const mediaPath =
       (await upload(f.get('media_file'))) ?? (f.get('remove_media') ? null : (existing?.media_path ?? null))
 
+    const lists = {}
+    const keySlots = {}
+    if (isListType(type)) {
+      for (const def of LIST_EDITORS[type]) {
+        lists[def.name] = []
+        for (const row of readList(f, def.name)) {
+          const uploaded = await upload(row.file)
+          lists[def.name].push({ id: row.id, text: row.text, image_path: uploaded ?? row.image_path })
+        }
+      }
+      for (const [k, v] of f.entries()) if (k.startsWith('key:') && v) keySlots[k.slice(4)] = String(v)
+    }
+
     const { item, key } = buildItemDraft(
       type,
       {
@@ -490,6 +520,9 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         value: f.get('key_value'),
         tolerance: f.get('key_tolerance'),
         unit: f.get('unit'),
+        lists,
+        keySlots,
+        orderIsKey: f.get('order_is_key') === 'on',
       },
       { requireKey: !existing }
     )
@@ -565,6 +598,13 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         box.append(holder.firstElementChild)
         return undefined
       }
+      case 'add-entry':
+      case 'remove-entry':
+      case 'move-entry': {
+        const problem = handleListAction(b, media)
+        if (problem) render(b.closest('form').querySelector('[data-form-error]'), alertBox(problem))
+        return undefined
+      }
       case 'remove-option':
         b.closest('[data-option-row]')?.remove()
         return undefined
@@ -599,6 +639,12 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         return cleanMedia()
     }
     return undefined
+  }
+
+  // Typing a choice updates the key menus of the slots.
+  el.oninput = (e) => {
+    const form = e.target.closest?.('form[data-form=item]')
+    if (form && e.target.closest('[data-entries]')) refreshKeySelects(form)
   }
 
   el.onsubmit = (e) => {

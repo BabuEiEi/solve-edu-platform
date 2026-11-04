@@ -17,7 +17,7 @@ test('phone: all new item types answered by tapping, saved, restored after reloa
 
   // Ordering arrives shuffled: move each step up into place with the ↑ buttons
   const ordering = form.locator('fieldset[data-item-type=ordering]')
-  for (const [target, id] of ['a', 'b', 'c', 'd'].entries()) {
+  for (const [target, id] of ['q2', 't4', 'k7', 'm9'].entries()) {
     for (;;) {
       const ids = await ordering
         .locator('[data-order-id]')
@@ -26,13 +26,13 @@ test('phone: all new item types answered by tapping, saved, restored after reloa
       await ordering.locator(`[data-order-id="${id}"] [data-move="-1"]`).tap()
     }
   }
-  await expect(ordering.locator('[data-order-id]').first()).toHaveAttribute('data-order-id', 'a')
+  await expect(ordering.locator('[data-order-id]').first()).toHaveAttribute('data-order-id', 'q2')
 
   const matching = form.locator('fieldset[data-item-type=matching]')
   for (const [left, right] of [
-    ['l1', 'r1'],
-    ['l2', 'r2'],
-    ['l3', 'r3'],
+    ['l1', 'j3'],
+    ['l2', 'w6'],
+    ['l3', 'x5'],
   ])
     await matching.locator(`select[name$=":${left}"]`).selectOption(right)
 
@@ -71,8 +71,8 @@ test('phone: all new item types answered by tapping, saved, restored after reloa
   await expect(ordering.locator('[data-order-id]')).toHaveCount(4)
   expect(
     await ordering.locator('[data-order-id]').evaluateAll((rows) => rows.map((r) => r.dataset.orderId))
-  ).toEqual(['a', 'b', 'c', 'd'])
-  await expect(matching.locator('select[name$=":l2"]')).toHaveValue('r2')
+  ).toEqual(['q2', 't4', 'k7', 'm9'])
+  await expect(matching.locator('select[name$=":l2"]')).toHaveValue('w6')
   await expect(classification.locator('input[name$=":i3"][value="c2"]')).toBeChecked()
   await expect(cloze.getByLabel('ช่องที่ 1')).toHaveValue('afl')
   await expect(cloze.getByLabel('ช่องที่ 2')).toHaveValue('75')

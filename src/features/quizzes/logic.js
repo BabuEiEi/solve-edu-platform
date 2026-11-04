@@ -1,5 +1,5 @@
 import { AppError } from '../../core/errors.js'
-import { parseNumericAnswer } from '../assessments/logic.js'
+import { parseNumericAnswer, SLOT_LISTS } from '../assessments/logic.js'
 
 /**
  * Quiz builder helpers. Mirrors private.item_shape_error / answer_key_error
@@ -10,7 +10,112 @@ export const ITEM_TYPES = {
   mcq_multiple: { label: 'ปรนัย (หลายคำตอบ)', icon: '☑' },
   true_false: { label: 'ถูก / ผิด', icon: '⊤' },
   numeric: { label: 'ตอบเป็นตัวเลข', icon: '#' },
+  ordering: { label: 'เรียงลำดับ', icon: '⇅' },
+  matching: { label: 'จับคู่', icon: '⇄' },
+  classification: { label: 'จัดกลุ่ม', icon: '▦' },
+  choice_matrix: { label: 'ตารางตัวเลือก', icon: '▤' },
 }
+
+/** Scoring for the 2C types: partial by default (owner decision). */
+export const PART_SCORING_MODES = {
+  partial: 'ให้คะแนนตามสัดส่วนส่วนที่ถูก',
+  all_or_nothing: 'ต้องถูกทั้งหมดจึงได้คะแนน',
+}
+
+/**
+ * The lists an author fills in per type. `random`: ids are random and the
+ * list is stored shuffled when a key is set — trainees can read the stored
+ * list, so its order must not give the answer away (the database refuses
+ * keys that would).
+ */
+export const LIST_EDITORS = {
+  ordering: [
+    { name: 'options', label: 'รายการ (ใส่ตามลำดับที่ถูก)', min: 3, max: 10, random: true, movable: true },
+  ],
+  matching: [
+    { name: 'left', label: 'ฝั่งซ้าย (ข้อที่ต้องจับคู่)', min: 2, max: 10, prefix: 'l' },
+    { name: 'right', label: 'ฝั่งขวา (คำตอบ ใส่ตัวลวงเพิ่มได้)', min: 2, max: 15, random: true },
+  ],
+  classification: [
+    { name: 'categories', label: 'กลุ่ม', min: 2, max: 6, prefix: 'c' },
+    { name: 'items', label: 'รายการที่ต้องจัดกลุ่ม', min: 2, max: 15, prefix: 'i' },
+  ],
+  choice_matrix: [
+    { name: 'rows', label: 'แถว (ข้อความที่ต้องตอบ)', min: 1, max: 15, prefix: 'w' },
+    { name: 'columns', label: 'คอลัมน์ (ตัวเลือกของทุกแถว)', min: 2, max: 6, prefix: 'k' },
+  ],
+}
+export const isListType = (type) => Boolean(LIST_EDITORS[type])
+
+/** A random id ([a-z0-9]{4}) not in `used`. */
+export function randomEntryId(used = [], random = Math.random) {
+  const taken = new Set(used)
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  for (let tries = 0; tries < 100; tries++) {
+    let id = 'abcdefghijklmnopqrstuvwxyz'[Math.floor(random() * 26)]
+    for (let i = 0; i < 3; i++) id += chars[Math.floor(random() * chars.length)]
+    if (!taken.has(id)) return id
+  }
+  // A broken random source must not hang the page: fall back to a counter.
+  for (let n = 1; ; n++) if (!taken.has(`z${n}`)) return `z${n}`
+}
+
+/** The next id for a list: random, or prefix + number. */
+export function nextEntryId(def, used = [], random = Math.random) {
+  if (def.random) return randomEntryId(used, random)
+  const taken = new Set(used)
+  for (let n = 1; ; n++) if (!taken.has(`${def.prefix}${n}`)) return `${def.prefix}${n}`
+}
+
+/** Starting rows for a new item. */
+export function defaultLists(type, random = Math.random) {
+  const rows = (def, n, texts = []) => {
+    const out = []
+    for (let i = 0; i < n; i++)
+      out.push({
+        id: nextEntryId(
+          def,
+          out.map((r) => r.id),
+          random
+        ),
+        text: texts[i] ?? '',
+      })
+    return out
+  }
+  const defs = LIST_EDITORS[type] ?? []
+  const counts =
+    { ordering: [4], matching: [3, 4], classification: [2, 4], choice_matrix: [3, 2] }[type] ?? []
+  return Object.fromEntries(
+    defs.map((def, k) => [
+      def.name,
+      rows(def, counts[k], type === 'choice_matrix' && k === 1 ? ['ถูก', 'ผิด'] : []),
+    ])
+  )
+}
+
+function shuffled(list, random) {
+  const out = [...list]
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
+/** Shuffle until `ok(order)` (at most 50 tries; then rotate by one, which is never the original order). */
+function shuffleUntil(list, ok, random) {
+  for (let t = 0; t < 50; t++) {
+    const s = shuffled(list, random)
+    if (ok(s)) return s
+  }
+  return [...list.slice(1), list[0]]
+}
+
+const cleanEntry = (e) => ({
+  id: e.id,
+  ...(String(e.text ?? '').trim() ? { text: String(e.text).trim() } : {}),
+  ...(e.image_path ? { image_path: e.image_path } : {}),
+})
 
 export const SCORING_MODES = {
   all_or_nothing: 'ต้องเลือกถูกครบทุกข้อจึงได้คะแนน',
@@ -39,9 +144,11 @@ const clean = (v) => String(v ?? '').trim()
  * Editor fields → { item, key }. `key` is null when the author did not pick
  * an answer; on an existing item that keeps the stored key unchanged.
  *   fields: { prompt, max_score, media_path, unit, options: [{ id, text, image_path }],
- *             correct: [ids], mode, tf: 'true'|'false', value, tolerance }
+ *             correct: [ids], mode, tf: 'true'|'false', value, tolerance,
+ *             lists: { name: [{ id, text, image_path }] }, keySlots: { slot: choice },
+ *             orderIsKey }
  */
-export function buildItemDraft(type, fields = {}, { requireKey = false } = {}) {
+export function buildItemDraft(type, fields = {}, { requireKey = false, random = Math.random } = {}) {
   if (!ITEM_TYPES[type]) throw new AppError('ไม่รองรับข้อสอบประเภทนี้')
   const prompt = clean(fields.prompt)
   if (!prompt) throw new AppError('กรุณาพิมพ์โจทย์')
@@ -52,7 +159,9 @@ export function buildItemDraft(type, fields = {}, { requireKey = false } = {}) {
   const item = { item_type: type, prompt, media_path: fields.media_path || null, max_score: maxScore }
   let key = null
 
-  if (isChoiceType(type)) {
+  if (isListType(type)) {
+    key = buildListItem(type, item, fields, random)
+  } else if (isChoiceType(type)) {
     const options = (fields.options ?? [])
       .map((o) => ({ id: o.id, text: clean(o.text), image_path: o.image_path || null }))
       .filter((o) => o.text || o.image_path)
@@ -98,6 +207,58 @@ export function buildItemDraft(type, fields = {}, { requireKey = false } = {}) {
 
   if (!key && requireKey) throw new AppError('กรุณากำหนดคำตอบที่ถูก (เฉลย)')
   return { item, key }
+}
+
+function buildListItem(type, item, fields, random) {
+  const lists = {}
+  for (const def of LIST_EDITORS[type]) {
+    const rows = (fields.lists?.[def.name] ?? []).map(cleanEntry).filter((e) => e.text || e.image_path)
+    if (rows.length < def.min || rows.length > def.max)
+      throw new AppError(`${def.label}: ต้องมี ${def.min}–${def.max} รายการ (แต่ละรายการมีข้อความหรือรูปภาพ)`)
+    if (rows.some((e) => (e.text ?? '').length > 1000))
+      throw new AppError(`${def.label}: ข้อความยาวเกิน 1,000 ตัวอักษร`)
+    lists[def.name] = rows
+  }
+  const mode = fields.mode === 'all_or_nothing' ? 'all_or_nothing' : 'partial'
+
+  if (type === 'ordering') {
+    const options = lists.options
+    if (!fields.orderIsKey) {
+      item.options_json = { options }
+      return null
+    }
+    const order = options.map((o) => o.id)
+    // Stored shuffled: never in the correct order.
+    item.options_json = { options: shuffleUntil(options, (s) => s.some((o, i) => o.id !== order[i]), random) }
+    return { answer: { order }, scoring: { mode } }
+  }
+
+  const { slots: slotList, choices: choiceList } = SLOT_LISTS[type]
+  if (type === 'matching' && lists.right.length < lists.left.length)
+    throw new AppError('ฝั่งขวาต้องมีจำนวนไม่น้อยกว่าฝั่งซ้าย')
+  const choiceIds = new Set(lists[choiceList].map((c) => c.id))
+  const picked = Object.fromEntries(
+    lists[slotList].map((s) => [s.id, fields.keySlots?.[s.id]]).filter(([, c]) => c && choiceIds.has(c))
+  )
+  const n = Object.keys(picked).length
+  if (n === 0) {
+    item.options_json = lists
+    return null
+  }
+  if (n < lists[slotList].length)
+    throw new AppError('เลือกเฉลยให้ครบทุกช่อง (หรือเว้นว่างทั้งหมดเพื่อคงเฉลยเดิม)')
+  if (type === 'matching' && new Set(Object.values(picked)).size !== n)
+    throw new AppError('คำตอบฝั่งขวาแต่ละตัวใช้ได้ครั้งเดียว')
+  if (type === 'matching') {
+    // Stored shuffled: no right entry may sit next to every partner.
+    lists.right = shuffleUntil(
+      lists.right,
+      (s) => lists.left.some((l, i) => picked[l.id] !== s[i]?.id),
+      random
+    )
+  }
+  item.options_json = lists
+  return { answer: { slots: picked }, scoring: { mode } }
 }
 
 /** item_key_status row → 'ok' | 'missing' | 'invalid' */

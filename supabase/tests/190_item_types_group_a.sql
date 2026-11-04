@@ -5,9 +5,9 @@ select plan(42);
 
 create temporary table fx (k text primary key, j jsonb);
 insert into fx values
-  ('ord',  '{"options":[{"id":"a","text":"ขั้น 1"},{"id":"b","text":"ขั้น 2"},{"id":"c","text":"ขั้น 3"},{"id":"d","text":"ขั้น 4"}]}'),
+  ('ord',  '{"options":[{"id":"c","text":"ขั้น 3"},{"id":"a","text":"ขั้น 1"},{"id":"d","text":"ขั้น 4"},{"id":"b","text":"ขั้น 2"}]}'),
   ('mat',  '{"left":[{"id":"l1","text":"ก"},{"id":"l2","text":"ข"},{"id":"l3","text":"ค"}],
-            "right":[{"id":"r1","text":"1"},{"id":"r2","text":"2"},{"id":"r3","text":"3"},{"id":"r4","text":"ตัวลวง"}]}'),
+            "right":[{"id":"r3","text":"3"},{"id":"r1","text":"1"},{"id":"r4","text":"ตัวลวง"},{"id":"r2","text":"2"}]}'),
   ('cls',  '{"categories":[{"id":"c1","text":"ประเมินเพื่อการเรียนรู้"},{"id":"c2","text":"ประเมินผลสรุป"}],
             "items":[{"id":"i1","text":"ให้ข้อมูลย้อนกลับ"},{"id":"i2","text":"ถามระหว่างสอน"},{"id":"i3","text":"สอบปลายภาค"},{"id":"i4","text":"ตัดเกรด"}]}'),
   ('mtx',  '{"rows":[{"id":"w1","text":"ข้อความ 1"},{"id":"w2","text":"ข้อความ 2"},{"id":"w3","text":"ข้อความ 3"}],
