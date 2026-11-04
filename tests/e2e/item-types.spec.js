@@ -17,6 +17,7 @@ test('phone: all seven new item types answered by tapping, saved, restored after
 
   // Ordering arrives shuffled: move each step up into place with the ↑ buttons
   const ordering = form.locator('fieldset[data-item-type=ordering]')
+  await expect(ordering.locator('[data-order-state]')).toContainText('ยังไม่ได้จัดลำดับ') // the shown order is not an answer
   for (const [target, id] of ['q2', 't4', 'k7', 'm9'].entries()) {
     for (;;) {
       const ids = await ordering
@@ -27,6 +28,7 @@ test('phone: all seven new item types answered by tapping, saved, restored after
     }
   }
   await expect(ordering.locator('[data-order-id]').first()).toHaveAttribute('data-order-id', 'q2')
+  await expect(ordering.locator('[data-order-state]')).toHaveText('จัดลำดับแล้ว')
 
   const matching = form.locator('fieldset[data-item-type=matching]')
   for (const [left, right] of [
@@ -78,6 +80,7 @@ test('phone: all seven new item types answered by tapping, saved, restored after
   expect(
     await ordering.locator('[data-order-id]').evaluateAll((rows) => rows.map((r) => r.dataset.orderId))
   ).toEqual(['q2', 't4', 'k7', 'm9'])
+  await expect(ordering.locator('[data-action=confirm-order]')).toBeHidden()
   await expect(matching.locator('select[name$=":l2"]')).toHaveValue('w6')
   await expect(classification.locator('input[name$=":i3"][value="c2"]')).toBeChecked()
   await expect(cloze.getByLabel('ช่องที่ 1')).toHaveValue('afl')
@@ -87,4 +90,26 @@ test('phone: all seven new item types answered by tapping, saved, restored after
   await expect(page.getByRole('heading', { name: 'ผลการทดสอบ' })).toBeVisible()
   await expect(page.locator('[data-score]')).toHaveText(/7\s*\/\s*7/)
   expect(csp).toEqual([])
+})
+
+test('phone: an ordering item left as shown counts as unanswered until "ใช้ลำดับนี้" is tapped', async ({
+  page,
+}) => {
+  await signIn(page, 'teacher.b1@example.test')
+  await page.goto(`/#/assessments/${TYPES}`)
+  await page.getByRole('button', { name: 'เริ่มทำแบบทดสอบ' }).click()
+  const form = page.locator('form[data-form=attempt]')
+  const ordering = form.locator('fieldset[data-item-type=ordering]')
+  await expect(ordering.locator('[data-order-id]')).toHaveCount(4)
+
+  await page.getByRole('button', { name: 'ส่งคำตอบ' }).tap()
+  await expect(page.getByText(/ยังไม่ได้ตอบ 7 ข้อ \(ข้อ 1,/)).toBeVisible() // ordering is item 1 and counted
+
+  await ordering.getByRole('button', { name: 'ใช้ลำดับนี้' }).tap()
+  await expect(ordering.locator('[data-order-state]')).toHaveText('จัดลำดับแล้ว')
+  await expect(page.locator('[data-save-status]')).toHaveAttribute('data-state', 'saved')
+  await page.reload()
+  await expect(ordering.locator('[data-order-state]')).toHaveText('จัดลำดับแล้ว') // saved on the server
+  await page.getByRole('button', { name: 'ส่งคำตอบ' }).tap()
+  await expect(page.getByText(/ยังไม่ได้ตอบ 6 ข้อ \(ข้อ 2,/)).toBeVisible()
 })

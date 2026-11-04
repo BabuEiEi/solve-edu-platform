@@ -159,6 +159,16 @@ describe('rendering the seven types', () => {
     form.querySelector('[name="q:cz:b1"]').value = '  น้ำ '
     form.querySelector('[name="q:cz:b2"]').value = '๘๐'
     pick(form, 'q:lb:m1', 'p3')
+    // ordering left as shown: not an answer until moved or confirmed
+    expect(buildResponses(ITEMS, readAnswers(form, ITEMS)).unanswered).toEqual([1])
+    const confirm = form.querySelector('[data-action=confirm-order]')
+    const onInput = vi.fn()
+    form.addEventListener('input', onInput)
+    handleOrderingClick({ target: confirm })
+    expect(confirm.hidden).toBe(true)
+    expect(form.querySelector('[data-order-state]').textContent).toBe('จัดลำดับแล้ว')
+    expect(document.activeElement).toBe(form.querySelector('[data-order-state]'))
+    expect(onInput).toHaveBeenCalledTimes(1) // autosave
     const answers = readAnswers(form, ITEMS)
     const { responses, unanswered, incomplete } = buildResponses(ITEMS, answers)
     expect(responses).toEqual({
@@ -175,6 +185,7 @@ describe('rendering the seven types', () => {
 
     const restored = formWith(ITEMS, answersFromResponses(ITEMS, responses))
     expect(buildResponses(ITEMS, readAnswers(restored, ITEMS)).responses).toEqual(responses)
+    expect(restored.querySelector('[data-action=confirm-order]').hidden).toBe(true) // a saved order stays answered
   })
 
   it('nothing chosen → unanswered; a non-number in a number blank is an error unless lenient', () => {
@@ -198,6 +209,7 @@ describe('ordering with buttons', () => {
     const rows = () => [...form.querySelectorAll('[data-order-id]')].map((li) => li.dataset.orderId)
     const down = form.querySelector('[data-order-id=a] [data-move="1"]')
     expect(form.querySelector('[data-order-id=a] [data-move="-1"]').disabled).toBe(true)
+    expect(readAnswers(form, [ITEMS[0]])).toEqual({ ord: [] }) // not moved yet
     down.click()
     handleOrderingClick({ target: down })
     expect(rows()).toEqual(['b', 'a', 'c'])
@@ -205,6 +217,7 @@ describe('ordering with buttons', () => {
     expect(form.querySelector('[data-order-status]').textContent).toBe('ย้ายไปตำแหน่งที่ 2')
     expect(document.activeElement).toBe(down)
     expect(onInput).toHaveBeenCalledTimes(1)
+    expect(form.querySelector('[data-action=confirm-order]').hidden).toBe(true) // moving answers the item
     handleOrderingClick({ target: down })
     expect(rows()).toEqual(['b', 'c', 'a'])
     expect(down.disabled).toBe(true)
