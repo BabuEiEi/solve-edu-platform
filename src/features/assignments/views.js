@@ -140,6 +140,16 @@ function settingsFields(a, { locked = false } = {}) {
       เวลาทำนับจากที่ผู้เรียนกดเริ่ม และไม่เกินเวลาปิดรับ · เมื่อหมดเวลา ระบบส่งคำตอบที่บันทึกไว้ให้อัตโนมัติ ·
       ช่วงผ่อนผันกันเน็ตช้าตอนกดส่ง (ผู้เรียนไม่เห็นเวลาส่วนนี้)
     </p>
+    <fieldset class="space-y-2 sm:col-span-2">
+      <legend class="${label}">สลับลำดับ (แต่ละคนเห็นลำดับต่างกัน)</legend>
+      <label class="flex items-center gap-2 text-sm text-ink-700"
+        ><input type="checkbox" name="shuffle_items" ${a.shuffle_items ? html`checked` : ''} /> สลับลำดับข้อ</label
+      >
+      <label class="flex items-center gap-2 text-sm text-ink-700"
+        ><input type="checkbox" name="shuffle_choices" ${a.shuffle_choices ? html`checked` : ''} /> สลับลำดับตัวเลือก</label
+      >
+      <p class="text-xs text-ink-500">ข้อเรียงลำดับและฝั่งขวาของข้อจับคู่สลับเสมอ · ลำดับของแต่ละคนกำหนดตอนเริ่มทำและบันทึกไว้</p>
+    </fieldset>
     ${
       locked
         ? html`<p class="rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-600 sm:col-span-2">

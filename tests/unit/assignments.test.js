@@ -90,6 +90,8 @@ describe('assignment logic', () => {
       close_at: '2027-03-31T16:00:00+07:00',
       attempt_limit: 2,
       grace_minutes: 5,
+      shuffle_items: false,
+      shuffle_choices: false,
       purpose: 'posttest',
       passing_percent: null,
       time_limit_minutes: null,
@@ -102,6 +104,10 @@ describe('assignment logic', () => {
     expect(() => buildAssignmentPayload({ ...base, time_limit_minutes: '15.5' })).toThrow(/1–600/)
     expect(() => buildAssignmentPayload({ ...base, grace_minutes: '61' })).toThrow(/0–60/)
     expect(buildAssignmentPayload({ ...base, passing_percent: '60.5' }).passing_percent).toBe(60.5)
+    expect(buildAssignmentPayload({ ...base, shuffle_choices: 'on' })).toMatchObject({
+      shuffle_items: false,
+      shuffle_choices: true,
+    }) // checkboxes
     expect(() => buildAssignmentPayload({ ...base, title: ' ' })).toThrow(AppError)
     expect(() => buildAssignmentPayload({ ...base, close_at: '' })).toThrow(/วันเวลาปิดรับ/) // every assignment closes
     expect(() => buildAssignmentPayload({ ...base, attempt_limit: '0' })).toThrow(/1–20/)
@@ -125,6 +131,8 @@ describe('assignment logic', () => {
       close_at: '2026-12-01T16:00:00+07:00',
       attempt_limit: 3,
       grace_minutes: 5,
+      shuffle_items: false,
+      shuffle_choices: false,
     })
     expect(p).not.toHaveProperty('passing_percent')
     expect(p).not.toHaveProperty('time_limit_minutes')

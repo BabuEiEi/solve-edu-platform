@@ -30,6 +30,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Shared | `src/shared/utils/date.js` | แสดงเวลา Asia/Bangkok + พ.ศ. |
 | Shared | `src/shared/utils/csv.js`, `src/shared/ui/download.js` | อ่าน/เขียน CSV (BOM สำหรับ Excel, กัน CSV injection) · ดาวน์โหลดผ่าน blob URL |
 | Features (2B) | `quizzes/` (สร้างข้อสอบ), `assessments/` (ผู้เรียนทำแบบทดสอบ), `assignments/` (มอบหมายให้รุ่น + ผลของรุ่น) | `logic.js` เป็นฟังก์ชันล้วน (unit test); คะแนนไม่เคยคำนวณใน browser |
+| Features (2C) | `assessments/items.js` แสดงข้อทุกแบบ | แตะ/ปุ่ม/เมนูเลือกเท่านั้น (ไม่มีลากวาง) · ชื่อช่อง `q:<item>` และ `q:<item>:<slot\|blank>` · ลำดับตาม `presentation` ของ server |
 
 แนวทาง: query เลือกคอลัมน์ชัดเจนเสมอ (ห้าม `select('*')` กับ `profiles` — จะได้ 42501) · event delegation ด้วย `data-action` (ไม่มี inline handler) · CSP ใน `index.html`
 

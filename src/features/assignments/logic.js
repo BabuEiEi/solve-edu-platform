@@ -80,6 +80,9 @@ export function buildAssignmentPayload(fields, { locked = false } = {}) {
     close_at: closeAt,
     attempt_limit: limit,
     grace_minutes: grace,
+    // checkboxes: present ("on") = true; absent from FormData = false
+    shuffle_items: fields.shuffle_items === 'on' || fields.shuffle_items === true,
+    shuffle_choices: fields.shuffle_choices === 'on' || fields.shuffle_choices === true,
   }
   if (locked) return payload
 
