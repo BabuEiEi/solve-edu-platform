@@ -3,7 +3,7 @@
 แพลตฟอร์มเดียวสำหรับอบรมพัฒนาครู ประเมินสมรรถนะ นิเทศ 6Es ติดตาม Coaching/PLC และวิเคราะห์ข้อมูลวิจัย
 สร้างใหม่จากการศึกษา `solve-edu-lms` และ `LMS` ตาม [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md)
 
-**สถานะ:** Phase 0–1 + Phase 2A (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อ CSV) เสร็จ · ระบบทดลอง · **ยังไม่ Deploy**
+**สถานะ:** Phase 0–1 + Phase 2A (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อ CSV) + Phase 2B (แบบทดสอบ, ให้คะแนนฝั่ง server, มอบหมายและผลของรุ่น) เสร็จ · ระบบทดลอง · **ยังไม่ Deploy**
 
 ## Stack
 
@@ -57,13 +57,14 @@ npm run dev                        # http://127.0.0.1:5173
 
 ```
 src/core/          supabaseClient, auth, router, permissions (UI only), errors
-src/features/      profiles, admin, organizations, programs, courses (+ dashboard)
+src/features/      profiles, admin, organizations, programs, courses, builder, lessons,
+                   preregistration, quizzes, assessments, assignments (+ dashboard)
 src/shared/        ui/html.js (escape อัตโนมัติ), components, layout, utils/date.js (พ.ศ.)
-supabase/          config.toml, migrations/ (7 ไฟล์), seed.sql, tests/ (pgTAP)
-tests/unit/        Vitest · tests/integration/ PostgREST + RLS
+supabase/          config.toml, migrations/, seed.sql, tests/ (pgTAP)
+tests/unit/        Vitest · tests/integration/ Supabase Local จริง · tests/e2e/ Playwright
 scripts/db-local/  shim + reset/test scripts เมื่อไม่มี Docker
 docs/              BLUEPRINT, ARCHITECTURE, ERD, DATA_DICTIONARY, PERMISSIONS, API_CONTRACTS,
-                   MIGRATION_FROM_LEGACY, TEST_REPORT_PHASE1
+                   MIGRATION_FROM_LEGACY, TEST_REPORT_PHASE1/2A/2B
 ```
 
 ## หลักความปลอดภัยที่บังคับในโค้ด

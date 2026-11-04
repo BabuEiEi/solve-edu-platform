@@ -5,6 +5,7 @@ import { navigate } from '../../core/router.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import {
   PURPOSE_LABELS,
+  attemptPercent,
   assignmentState,
   buildResponses,
   readAnswers,
@@ -26,15 +27,12 @@ const primaryBtn =
   'rounded-lg bg-brand-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 disabled:opacity-60'
 const secondaryLink = 'text-sm text-brand-700 hover:underline'
 
-const purposeChip = (purpose) =>
+export const purposeChip = (purpose) =>
   html`<span class="inline-flex rounded-md bg-brand-50 px-2 py-0.5 text-xs font-medium text-brand-700"
     >${PURPOSE_LABELS[purpose] ?? purpose}</span
   >`
 
-const percentOf = (t) =>
-  Number(t.max_score) > 0 ? Math.round((Number(t.score) * 10000) / Number(t.max_score)) / 100 : 0
-
-const resultBadge = (passed) =>
+export const resultBadge = (passed) =>
   passed === true
     ? html`<span class="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-600/20"
         >ผ่านเกณฑ์</span
@@ -45,7 +43,7 @@ const resultBadge = (passed) =>
         >`
       : ''
 
-function windowText(a) {
+export function windowText(a) {
   if (a.open_at && a.close_at)
     return `เปิด ${formatThaiDateTime(a.open_at)} – ปิด ${formatThaiDateTime(a.close_at)}`
   if (a.close_at) return `ปิดรับ ${formatThaiDateTime(a.close_at)}`
@@ -101,7 +99,7 @@ export async function renderMyAssessmentsView(el, { services, session, context }
                     <span class="text-ink-700">${stateText(a, s)}</span>
                     ${
                       s.latest
-                        ? html`<span class="text-ink-500">ล่าสุด ${percentOf(s.latest)}%</span>
+                        ? html`<span class="text-ink-500">ล่าสุด ${attemptPercent(s.latest)}%</span>
                             ${resultBadge(s.latest.passed)}`
                         : ''
                     }
@@ -261,7 +259,7 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
                       html`<li class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                         <span>ครั้งที่ ${t.attempt_no} · ${formatThaiDateTime(t.submitted_at)}</span>
                         <span class="flex items-center gap-2">
-                          <span class="font-semibold">${percentOf(t)}%</span>${resultBadge(t.passed)}
+                          <span class="font-semibold">${attemptPercent(t)}%</span>${resultBadge(t.passed)}
                           <a href="#/assessments/attempts/${t.id}" class="${secondaryLink}">ดูผล</a>
                         </span>
                       </li>`
@@ -395,7 +393,7 @@ export async function renderAttemptResultView(el, { services }, { attemptId }) {
     )
   }
 
-  const percent = percentOf(attempt)
+  const percent = attemptPercent(attempt)
   render(
     el,
     html`${back}

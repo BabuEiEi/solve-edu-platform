@@ -3,6 +3,7 @@ import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../sh
 import { ROLE_LABELS } from '../../core/permissions.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
+import { downloadText } from '../../shared/ui/download.js'
 import { analyzeRoster, rosterTemplateCsv, TEMPLATE_FILENAME, MAX_ROWS } from './service.js'
 
 const input =
@@ -30,17 +31,7 @@ export function importableOrgs(orgs, context, caps) {
   return orgs.filter((o) => mine.has(o.id) || mine.has(o.parent_id))
 }
 
-/** Save the template through a short-lived blob: URL (no server round trip). */
-function downloadTemplate() {
-  const url = URL.createObjectURL(new Blob([rosterTemplateCsv()], { type: 'text/csv;charset=utf-8' }))
-  const a = document.createElement('a')
-  a.href = url
-  a.download = TEMPLATE_FILENAME
-  document.body.append(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
+const downloadTemplate = () => downloadText(TEMPLATE_FILENAME, rosterTemplateCsv())
 
 export async function renderImportView(el, { services, context, caps }) {
   render(el, html`${pageHeader('นำเข้ารายชื่อล่วงหน้า')}${loading}`)

@@ -7,6 +7,12 @@ export const NAV_ITEMS = [
   { path: '/programs', label: 'โครงการและรุ่น', icon: '▤', show: (c) => c.isActive },
   { path: '/courses', label: 'หลักสูตร', icon: '❏', show: (c) => c.isActive },
   { path: '/assessments', label: 'แบบทดสอบ', icon: '✎', show: (c) => c.isTrainee },
+  {
+    path: '/staff/assessments',
+    label: 'ผลแบบทดสอบ',
+    icon: '▦',
+    show: (c) => c.isTrainer || c.isMentor || c.isCoordinator || c.canManagePrograms,
+  },
   { path: '/admin/approvals', label: 'อนุมัติผู้ใช้', icon: '✓', show: (c) => c.canApproveUsers },
   { path: '/admin/import', label: 'นำเข้ารายชื่อ', icon: '⇪', show: (c) => c.canApproveUsers },
   { path: '/profile', label: 'โปรไฟล์ของฉัน', icon: '◉', show: () => true },

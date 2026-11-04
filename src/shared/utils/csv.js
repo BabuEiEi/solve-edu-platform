@@ -35,3 +35,17 @@ export function parseCsv(text) {
   if (field !== '' || row.length) endRow()
   return rows
 }
+
+// A cell starting with one of these is run as a formula by spreadsheet apps
+// (CSV injection); prefix it with ' so it stays text.
+const FORMULA_START = /^[=+\-@\t\r]/
+
+/** Rows → RFC 4180 CSV with a UTF-8 BOM (Excel reads Thai correctly) and CRLF line ends. */
+export function toCsv(rows) {
+  const cell = (v) => {
+    let s = v === null || v === undefined ? '' : String(v)
+    if (typeof v === 'string' && FORMULA_START.test(s)) s = `'${s}`
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  return '﻿' + rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n'
+}

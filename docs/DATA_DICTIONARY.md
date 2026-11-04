@@ -1,4 +1,4 @@
-# Data Dictionary — SolveEdu Platform (Phase 2A)
+# Data Dictionary — SolveEdu Platform (Phase 2B)
 
 > สร้างอัตโนมัติจากฐานข้อมูล Local ด้วย `scripts/db-local/gen-data-dictionary.py` — อย่าแก้ไขด้วยมือ  
 > ทุกตารางใน `public` เปิด RLS; สิทธิ์รายคอลัมน์ดู `PERMISSIONS.md`
@@ -21,6 +21,12 @@
 - [`course_enrollments`](#course-enrollments) — การลงทะเบียนหลักสูตรภายใต้บริบทรุ่น (cohort) เสมอ
 - [`lesson_progress`](#lesson-progress) — ความก้าวหน้ารายบทเรียน; started_at/completed_at ประทับเวลาโดยเซิร์ฟเวอร์
 - [`preregistrations`](#preregistrations) — รายชื่อลงทะเบียนล่วงหน้าจาก CSV — ผูกบัญชีเมื่อผู้ใช้ล็อกอินด้วยอีเมลที่ยืนยันแล้วตรงกัน (claim_my_preregistrations)
+- [`instruments`](#instruments) — เครื่องมือวัด (Phase 2B: แบบทดสอบ quiz) — ผูกหน่วยงานเจ้าของ และอาจผูกหลักสูตร
+- [`instrument_versions`](#instrument-versions) — ฉบับของเครื่องมือวัด — draft แก้ได้; published แก้ไม่ได้ (สร้างฉบับใหม่แทน); version_no กำหนดโดย server
+- [`instrument_items`](#instrument-items) — ข้อคำถาม — options_json ตรวจรูปแบบตาม item_type และห้ามมีเฉลย; รูปอยู่ใต้โฟลเดอร์ <instrument_id>/
+- [`assessment_assignments`](#assessment-assignments) — การมอบหมายฉบับที่เผยแพร่แล้วให้รุ่น (และหลักสูตร) พร้อมช่วงเวลา จำนวนครั้ง และเกณฑ์ผ่าน
+- [`assessment_attempts`](#assessment-attempts) — ครั้งที่ทำแบบทดสอบ — เขียนโดย RPC ฝั่ง server เท่านั้น (คะแนน เวลาเริ่ม/ส่ง ไม่มาจาก browser)
+- [`assessment_responses`](#assessment-responses) — คำตอบรายข้อ — client อ่านได้เฉพาะคำตอบ ไม่ได้รับ awarded_score รายข้อ
 
 ## profiles
 
@@ -475,3 +481,205 @@
 - `CREATE INDEX prereg_email_pending_idx ON public.preregistrations USING btree (email) WHERE (status = 'pending'::text)`
 - `CREATE INDEX prereg_org_idx ON public.preregistrations USING btree (organization_id, status)`
 - `CREATE UNIQUE INDEX prereg_pending_unique ON public.preregistrations USING btree (email, organization_id, org_role, COALESCE(cohort_id, '00000000-0000-0000-0000-000000000000'::uuid)) WHERE (status = 'pending'::text)`
+
+## instruments
+
+เครื่องมือวัด (Phase 2B: แบบทดสอบ quiz) — ผูกหน่วยงานเจ้าของ และอาจผูกหลักสูตร
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `owner_org_id` | uuid | ✓ |  |  |
+| `course_id` | uuid |  |  |  |
+| `code` | text | ✓ |  |  |
+| `title` | text | ✓ |  |  |
+| `description` | text |  |  |  |
+| `instrument_type` | text | ✓ | `'quiz'::text` |  |
+| `status` | text | ✓ | `'active'::text` |  |
+| `created_by` | uuid |  | `auth.uid()` |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `instruments_code_check`: `CHECK (((char_length(code) >= 1) AND (char_length(code) <= 50)))`
+- `instruments_description_check`: `CHECK (((description IS NULL) OR (char_length(description) <= 5000)))`
+- `instruments_instrument_type_check`: `CHECK ((instrument_type = 'quiz'::text))`
+- `instruments_status_check`: `CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))`
+- `instruments_title_check`: `CHECK (((char_length(title) >= 1) AND (char_length(title) <= 300)))`
+- `instruments_course_id_fkey`: `FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE RESTRICT`
+- `instruments_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `instruments_owner_org_id_fkey`: `FOREIGN KEY (owner_org_id) REFERENCES organizations(id) ON DELETE RESTRICT`
+- `instruments_pkey`: `PRIMARY KEY (id)`
+- `instruments_code_unique`: `UNIQUE (owner_org_id, code)`
+
+**Indexes**
+
+- `CREATE INDEX instruments_course_idx ON public.instruments USING btree (course_id)`
+
+## instrument_versions
+
+ฉบับของเครื่องมือวัด — draft แก้ได้; published แก้ไม่ได้ (สร้างฉบับใหม่แทน); version_no กำหนดโดย server
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `instrument_id` | uuid | ✓ |  |  |
+| `version_no` | integer | ✓ |  |  |
+| `status` | text | ✓ | `'draft'::text` |  |
+| `published_at` | timestamp with time zone |  |  |  |
+| `published_by` | uuid |  |  |  |
+| `content_hash` | text |  |  |  |
+| `created_by` | uuid |  | `auth.uid()` |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `instrument_versions_published_state`: `CHECK ((((status = 'draft'::text) = (published_at IS NULL)) AND ((status = 'draft'::text) = (content_hash IS NULL))))`
+- `instrument_versions_status_check`: `CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text])))`
+- `instrument_versions_version_no_check`: `CHECK ((version_no >= 1))`
+- `instrument_versions_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `instrument_versions_instrument_id_fkey`: `FOREIGN KEY (instrument_id) REFERENCES instruments(id) ON DELETE RESTRICT`
+- `instrument_versions_published_by_fkey`: `FOREIGN KEY (published_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `instrument_versions_pkey`: `PRIMARY KEY (id)`
+- `instrument_versions_no_unique`: `UNIQUE (instrument_id, version_no)`
+
+**Indexes**
+
+- `CREATE UNIQUE INDEX instrument_versions_one_draft ON public.instrument_versions USING btree (instrument_id) WHERE (status = 'draft'::text)`
+
+## instrument_items
+
+ข้อคำถาม — options_json ตรวจรูปแบบตาม item_type และห้ามมีเฉลย; รูปอยู่ใต้โฟลเดอร์ <instrument_id>/
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `instrument_version_id` | uuid | ✓ |  |  |
+| `item_type` | text | ✓ |  | mcq_single\|mcq_multiple\|true_false\|numeric (Phase 2B) |
+| `prompt` | text | ✓ |  |  |
+| `media_path` | text |  |  |  |
+| `options_json` | jsonb | ✓ | `'{}'::jsonb` |  |
+| `max_score` | numeric(10,2) | ✓ | `1` |  |
+| `display_order` | integer | ✓ |  |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `instrument_items_item_type_check`: `CHECK ((item_type = ANY (ARRAY['mcq_single'::text, 'mcq_multiple'::text, 'true_false'::text, 'numeric'::text])))`
+- `instrument_items_max_score_check`: `CHECK (((max_score > (0)::numeric) AND (max_score <= (1000)::numeric)))`
+- `instrument_items_prompt_check`: `CHECK (((char_length(prompt) >= 1) AND (char_length(prompt) <= 5000)))`
+- `instrument_items_instrument_version_id_fkey`: `FOREIGN KEY (instrument_version_id) REFERENCES instrument_versions(id) ON DELETE CASCADE`
+- `instrument_items_pkey`: `PRIMARY KEY (id)`
+- `instrument_items_order_unique`: `UNIQUE (instrument_version_id, display_order) DEFERRABLE INITIALLY DEFERRED`
+
+## assessment_assignments
+
+การมอบหมายฉบับที่เผยแพร่แล้วให้รุ่น (และหลักสูตร) พร้อมช่วงเวลา จำนวนครั้ง และเกณฑ์ผ่าน
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `instrument_version_id` | uuid | ✓ |  |  |
+| `cohort_id` | uuid | ✓ |  |  |
+| `course_id` | uuid |  |  |  |
+| `purpose` | text | ✓ |  |  |
+| `title` | text | ✓ |  |  |
+| `instructions` | text |  |  |  |
+| `open_at` | timestamp with time zone |  |  |  |
+| `close_at` | timestamp with time zone |  |  |  |
+| `attempt_limit` | integer | ✓ | `1` |  |
+| `passing_percent` | numeric(5,2) |  |  | เกณฑ์ผ่าน (%) ต่อการมอบหมาย; null = ไม่ตัดสินผ่าน/ไม่ผ่าน |
+| `status` | text | ✓ | `'draft'::text` |  |
+| `created_by` | uuid |  | `auth.uid()` |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `assessment_assignments_attempt_limit_check`: `CHECK (((attempt_limit >= 1) AND (attempt_limit <= 20)))`
+- `assessment_assignments_instructions_check`: `CHECK (((instructions IS NULL) OR (char_length(instructions) <= 5000)))`
+- `assessment_assignments_passing_percent_check`: `CHECK (((passing_percent IS NULL) OR ((passing_percent >= (0)::numeric) AND (passing_percent <= (100)::numeric))))`
+- `assessment_assignments_purpose_check`: `CHECK ((purpose = ANY (ARRAY['pretest'::text, 'posttest'::text, 'formative'::text])))`
+- `assessment_assignments_status_check`: `CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text])))`
+- `assessment_assignments_title_check`: `CHECK (((char_length(title) >= 1) AND (char_length(title) <= 300)))`
+- `assessment_assignments_window`: `CHECK (((open_at IS NULL) OR (close_at IS NULL) OR (close_at > open_at)))`
+- `assessment_assignments_cohort_id_fkey`: `FOREIGN KEY (cohort_id) REFERENCES cohorts(id) ON DELETE RESTRICT`
+- `assessment_assignments_course_id_fkey`: `FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE RESTRICT`
+- `assessment_assignments_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `assessment_assignments_instrument_version_id_fkey`: `FOREIGN KEY (instrument_version_id) REFERENCES instrument_versions(id) ON DELETE RESTRICT`
+- `assessment_assignments_pkey`: `PRIMARY KEY (id)`
+
+**Indexes**
+
+- `CREATE INDEX assessment_assignments_cohort_idx ON public.assessment_assignments USING btree (cohort_id, status)`
+- `CREATE INDEX assessment_assignments_version_idx ON public.assessment_assignments USING btree (instrument_version_id)`
+
+## assessment_attempts
+
+ครั้งที่ทำแบบทดสอบ — เขียนโดย RPC ฝั่ง server เท่านั้น (คะแนน เวลาเริ่ม/ส่ง ไม่มาจาก browser)
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `assignment_id` | uuid | ✓ |  |  |
+| `user_id` | uuid | ✓ |  |  |
+| `attempt_no` | integer | ✓ |  |  |
+| `status` | text | ✓ | `'in_progress'::text` |  |
+| `started_at` | timestamp with time zone | ✓ | `now()` |  |
+| `submitted_at` | timestamp with time zone |  |  |  |
+| `score` | numeric(10,2) |  |  |  |
+| `max_score` | numeric(10,2) |  |  |  |
+| `passed` | boolean |  |  |  |
+| `correct_count` | integer |  |  | จำนวนข้อที่ได้คะแนนเต็ม — แสดงผู้เรียนได้ (ไม่บอกว่าข้อไหน) |
+| `item_count` | integer |  |  |  |
+
+**Constraints**
+
+- `assessment_attempts_attempt_no_check`: `CHECK ((attempt_no >= 1))`
+- `assessment_attempts_correct_count_check`: `CHECK (((correct_count IS NULL) OR (correct_count >= 0)))`
+- `assessment_attempts_item_count_check`: `CHECK (((item_count IS NULL) OR (item_count >= 0)))`
+- `assessment_attempts_score_range`: `CHECK (((score IS NULL) OR ((score >= (0)::numeric) AND (max_score >= (0)::numeric) AND (score <= max_score))))`
+- `assessment_attempts_scored`: `CHECK (((status = 'in_progress'::text) OR ((score IS NOT NULL) AND (max_score IS NOT NULL))))`
+- `assessment_attempts_status_check`: `CHECK ((status = ANY (ARRAY['in_progress'::text, 'submitted'::text])))`
+- `assessment_attempts_submitted_state`: `CHECK (((status = 'submitted'::text) = (submitted_at IS NOT NULL)))`
+- `assessment_attempts_time_order`: `CHECK (((submitted_at IS NULL) OR (submitted_at >= started_at)))`
+- `assessment_attempts_assignment_id_fkey`: `FOREIGN KEY (assignment_id) REFERENCES assessment_assignments(id) ON DELETE RESTRICT`
+- `assessment_attempts_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE RESTRICT`
+- `assessment_attempts_pkey`: `PRIMARY KEY (id)`
+- `assessment_attempts_no_unique`: `UNIQUE (assignment_id, user_id, attempt_no)`
+
+**Indexes**
+
+- `CREATE UNIQUE INDEX assessment_attempts_one_open ON public.assessment_attempts USING btree (assignment_id, user_id) WHERE (status = 'in_progress'::text)`
+- `CREATE INDEX assessment_attempts_user_idx ON public.assessment_attempts USING btree (user_id)`
+
+## assessment_responses
+
+คำตอบรายข้อ — client อ่านได้เฉพาะคำตอบ ไม่ได้รับ awarded_score รายข้อ
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `attempt_id` | uuid | ✓ |  |  |
+| `item_id` | uuid | ✓ |  |  |
+| `response_json` | jsonb | ✓ |  |  |
+| `awarded_score` | numeric(10,2) |  |  |  |
+| `graded_at` | timestamp with time zone |  |  |  |
+| `graded_by` | uuid |  |  |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `assessment_responses_awarded_score_check`: `CHECK (((awarded_score IS NULL) OR (awarded_score >= (0)::numeric)))`
+- `assessment_responses_attempt_id_fkey`: `FOREIGN KEY (attempt_id) REFERENCES assessment_attempts(id) ON DELETE RESTRICT`
+- `assessment_responses_graded_by_fkey`: `FOREIGN KEY (graded_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `assessment_responses_item_id_fkey`: `FOREIGN KEY (item_id) REFERENCES instrument_items(id) ON DELETE RESTRICT`
+- `assessment_responses_pkey`: `PRIMARY KEY (id)`
+- `assessment_responses_unique`: `UNIQUE (attempt_id, item_id)`
+
+**Indexes**
+
+- `CREATE INDEX assessment_responses_item_idx ON public.assessment_responses USING btree (item_id)`

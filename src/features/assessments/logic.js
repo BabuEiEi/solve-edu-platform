@@ -12,6 +12,10 @@ export const PURPOSE_LABELS = {
 
 const byAttemptDesc = (a, b) => b.attempt_no - a.attempt_no
 
+/** Percent of a submitted attempt, 2 decimals (display only; the server stored score/max_score). */
+export const attemptPercent = (t) =>
+  Number(t.max_score) > 0 ? Math.round((Number(t.score) * 10000) / Number(t.max_score)) / 100 : 0
+
 /**
  * Where an assignment stands for the caller (UI hint only).
  *   window: 'upcoming' | 'open' | 'closed'

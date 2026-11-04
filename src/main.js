@@ -19,6 +19,12 @@ import { createPreregistrationService } from './features/preregistration/service
 import { createAssessmentService } from './features/assessments/service.js'
 import { createQuizBuilderService } from './features/quizzes/service.js'
 import { renderCourseQuizzesView, renderQuizEditorView } from './features/quizzes/views.js'
+import { createAssignmentService } from './features/assignments/service.js'
+import {
+  renderStaffAssessmentsView,
+  renderNewAssignmentView,
+  renderAssignmentDetailView,
+} from './features/assignments/views.js'
 import { mountRichTextEditor } from './shared/ui/richTextEditor.js'
 import {
   renderAuthScreen,
@@ -62,6 +68,10 @@ const routes = compileRoutes([
   { path: '/assessments', view: renderMyAssessmentsView, allow: (c) => c.isActive },
   { path: '/assessments/attempts/:attemptId', view: renderAttemptResultView, allow: (c) => c.isActive },
   { path: '/assessments/:id', view: renderAssessmentView, allow: (c) => c.isActive },
+  // Staff side: RLS shows each person only the cohorts they assess (or their mentees).
+  { path: '/staff/assessments', view: renderStaffAssessmentsView, allow: (c) => c.isActive },
+  { path: '/staff/assessments/new/:versionId', view: renderNewAssignmentView, allow: (c) => c.isActive },
+  { path: '/staff/assessments/:id', view: renderAssignmentDetailView, allow: (c) => c.isActive },
   { path: '/admin/approvals', view: renderApprovalsView, allow: (c) => c.canApproveUsers },
   { path: '/admin/import', view: renderImportView, allow: (c) => c.canApproveUsers },
 ])
@@ -96,6 +106,7 @@ async function boot() {
     preregistration: createPreregistrationService(supabase),
     assessments: createAssessmentService(supabase),
     quizzes: createQuizBuilderService(supabase),
+    assignments: createAssignmentService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),
     editor: { mount: mountRichTextEditor },
   }

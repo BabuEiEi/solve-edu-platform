@@ -3,6 +3,7 @@ import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../sh
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
+import { PURPOSE_LABELS } from '../assessments/logic.js'
 import { moveId, nextOrder } from '../builder/service.js'
 import { acceptAttr } from '../lessons/media.js'
 import { itemMediaPaths } from '../assessments/logic.js'
@@ -241,6 +242,7 @@ function itemForm(type, item, media) {
 export async function renderQuizEditorView(el, { services }, { id: courseId, quizId }) {
   render(el, loading)
   let course, instrument, version, items, statuses, media
+  let assignments = []
   let selectedVersionId = null
   let editing = null // { type, itemId|null }
   let message = null
@@ -255,6 +257,11 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     items = version ? await services.quizzes.getItems(version.id) : []
     statuses = version ? await services.quizzes.keyStatus(version.id) : {}
     media = await services.assessmentMedia.signedUrls(itemMediaPaths(items))
+    assignments = services.assignments
+      ? await services.assignments.listForVersions(
+          versions.filter((v) => v.status !== 'draft').map((v) => v.id)
+        )
+      : []
   }
 
   try {
@@ -360,6 +367,39 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     </section>`
   }
 
+  const assignmentPanel = () => {
+    const canAssign = version?.status === 'published' && services.assignments
+    if (!canAssign && assignments.length === 0) return ''
+    return html`<section class="rounded-xl border border-ink-200 bg-white p-4 text-sm" data-assignments>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-semibold text-ink-800">การมอบหมายให้รุ่น</h2>
+        ${
+          canAssign
+            ? html`<a href="#/staff/assessments/new/${version.id}" class="${primary}" data-action-link="assign"
+                >มอบหมาย${versionLabel(version)}ให้รุ่น</a
+              >`
+            : ''
+        }
+      </div>
+      ${
+        assignments.length
+          ? html`<ul class="mt-3 divide-y divide-ink-100">
+              ${assignments.map(
+                (a) => html`<li class="flex flex-wrap items-center gap-2 py-2">
+                  <a href="#/staff/assessments/${a.id}" class="font-medium text-brand-700 hover:underline">${a.title}</a>
+                  <span class="text-ink-500"
+                    >${PURPOSE_LABELS[a.purpose] ?? a.purpose} · ${a.cohorts?.name ?? ''} ·
+                    ${a.instrument_versions ? versionLabel(a.instrument_versions) : ''}</span
+                  >
+                  ${statusBadge(a.status)}
+                </li>`
+              )}
+            </ul>`
+          : html`<p class="mt-2 text-ink-500">ยังไม่ได้มอบหมายให้รุ่นใด</p>`
+      }
+    </section>`
+  }
+
   const draw = () =>
     render(
       el,
@@ -367,7 +407,7 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         <div class="mt-3">${pageHeader(instrument.title, `${instrument.code} · ${course.title}`)}</div>
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''}
         <div class="space-y-4">
-          ${versionBar()} ${statusPanel()}
+          ${versionBar()} ${statusPanel()} ${assignmentPanel()}
           <ol class="space-y-3">${items.map(itemCard)}</ol>
           ${
             isDraft()
