@@ -1,5 +1,5 @@
 import { AppError } from '../../core/errors.js'
-import { parseNumericAnswer, SLOT_LISTS } from '../assessments/logic.js'
+import { parseNumericAnswer, SLOT_LISTS, templateParts } from '../assessments/logic.js'
 
 /**
  * Quiz builder helpers. Mirrors private.item_shape_error / answer_key_error
@@ -14,6 +14,21 @@ export const ITEM_TYPES = {
   matching: { label: 'จับคู่', icon: '⇄' },
   classification: { label: 'จัดกลุ่ม', icon: '▦' },
   choice_matrix: { label: 'ตารางตัวเลือก', icon: '▤' },
+  dropdown: { label: 'เลือกคำในประโยค', icon: '▾' },
+  cloze: { label: 'เติมคำ', icon: '✎' },
+  image_labelling: { label: 'ติดป้ายบนรูป', icon: '⌖' },
+}
+
+export const isBlankType = (type) => type === 'dropdown' || type === 'cloze'
+export const BLANK_ID = { prefix: 'b' }
+export const MARKER_ID = { prefix: 'm' }
+export const LABELS_LIST = {
+  name: 'labels',
+  label: 'ป้าย (ใส่ตัวลวงเพิ่มได้)',
+  min: 2,
+  max: 20,
+  prefix: 'p',
+  textOnly: true,
 }
 
 /** Scoring for the 2C types: partial by default (owner decision). */
@@ -161,6 +176,10 @@ export function buildItemDraft(type, fields = {}, { requireKey = false, random =
 
   if (isListType(type)) {
     key = buildListItem(type, item, fields, random)
+  } else if (isBlankType(type)) {
+    key = buildBlankItem(type, item, fields)
+  } else if (type === 'image_labelling') {
+    key = buildLabelItem(item, fields)
   } else if (isChoiceType(type)) {
     const options = (fields.options ?? [])
       .map((o) => ({ id: o.id, text: clean(o.text), image_path: o.image_path || null }))
@@ -258,6 +277,104 @@ function buildListItem(type, item, fields, random) {
     )
   }
   item.options_json = lists
+  return { answer: { slots: picked }, scoring: { mode } }
+}
+
+/** Accepted answers typed one per line → distinct, trimmed. */
+export function acceptedLines(raw) {
+  return [
+    ...new Set(
+      String(raw ?? '')
+        .split(/\r?\n/)
+        .map((l) => l.trim())
+        .filter(Boolean)
+    ),
+  ]
+}
+
+function buildBlankItem(type, item, fields) {
+  const text = clean(fields.text)
+  if (!text) throw new AppError('กรุณาพิมพ์ข้อความที่มีช่อง')
+  if (text.length > 5000) throw new AppError('ข้อความยาวเกิน 5,000 ตัวอักษร')
+  const placed = templateParts(text)
+    .filter((p) => typeof p !== 'string')
+    .map((p) => p.blank)
+  if ((text.match(/\{\{/g) ?? []).length !== placed.length)
+    throw new AppError('รูปแบบช่องในข้อความไม่ถูกต้อง — ใช้ปุ่ม “แทรกช่อง”')
+  if (new Set(placed).size !== placed.length) throw new AppError('แต่ละช่องใส่ในข้อความได้ครั้งเดียว')
+  const rows = new Map((fields.blanks ?? []).map((b) => [b.id, b]))
+  const missing = [...rows.keys()].filter((id) => !placed.includes(id))
+  if (missing.length) throw new AppError(`ช่อง ${missing.join(', ')} ยังไม่ได้ใส่ในข้อความ`)
+  const unknown = placed.filter((id) => !rows.has(id))
+  if (unknown.length) throw new AppError(`ข้อความมีช่องที่ไม่รู้จัก: ${unknown.join(', ')}`)
+  if (placed.length < 1 || placed.length > 20) throw new AppError('ต้องมี 1–20 ช่อง')
+
+  // Blanks are stored in reading order, so "ช่องที่ k" matches the text.
+  const blanks = placed.map((id) => rows.get(id))
+  const keyParts = {}
+  const out = blanks.map((b, k) => {
+    const name = `ช่องที่ ${k + 1}`
+    if (type === 'dropdown') {
+      const options = (b.options ?? []).map((o) => ({ id: o.id, text: clean(o.text) })).filter((o) => o.text)
+      if (options.length < 2 || options.length > 10) throw new AppError(`${name}: ต้องมีตัวเลือก 2–10 ตัว`)
+      if (options.some((o) => o.text.length > 1000))
+        throw new AppError(`${name}: ข้อความตัวเลือกยาวเกิน 1,000 ตัวอักษร`)
+      if (b.correct && options.some((o) => o.id === b.correct)) keyParts[b.id] = b.correct
+      return { id: b.id, options }
+    }
+    if (b.kind === 'number') {
+      const value = parseNumericAnswer(b.value)
+      if (Number.isNaN(value)) throw new AppError(`${name}: คำตอบที่ถูกต้องเป็นตัวเลข`)
+      if (value !== null) {
+        const tolerance = parseNumericAnswer(b.tolerance) ?? 0
+        if (Number.isNaN(tolerance) || tolerance < 0)
+          throw new AppError(`${name}: ค่าคลาดเคลื่อนต้องเป็นตัวเลขไม่ติดลบ`)
+        keyParts[b.id] = { value, tolerance }
+      }
+      return { id: b.id, kind: 'number' }
+    }
+    const accept = acceptedLines(b.accept)
+    if (accept.length > 10) throw new AppError(`${name}: คำตอบที่ยอมรับได้ไม่เกิน 10 แบบ`)
+    if (accept.some((a) => a.length > 200)) throw new AppError(`${name}: คำตอบยาวเกิน 200 ตัวอักษร`)
+    if (accept.length) keyParts[b.id] = { accept }
+    return { id: b.id }
+  })
+  item.options_json = { text, blanks: out }
+
+  const n = Object.keys(keyParts).length
+  if (n === 0) return null
+  if (n < blanks.length) throw new AppError('กำหนดเฉลยให้ครบทุกช่อง (หรือเว้นว่างทั้งหมดเพื่อคงเฉลยเดิม)')
+  const mode = fields.mode === 'all_or_nothing' ? 'all_or_nothing' : 'partial'
+  return { answer: type === 'dropdown' ? { slots: keyParts } : { blanks: keyParts }, scoring: { mode } }
+}
+
+function buildLabelItem(item, fields) {
+  if (!item.media_path) throw new AppError('ข้อติดป้ายบนรูปต้องมีรูป (เลือกในช่อง “รูปสำหรับติดป้าย”)')
+  const markers = (fields.markers ?? []).map((m) => {
+    const x = Number(m.x)
+    const y = Number(m.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y) || x < 0 || x > 100 || y < 0 || y > 100)
+      throw new AppError('ตำแหน่งจุดต้องอยู่บนรูป (0–100%)')
+    return { id: m.id, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 }
+  })
+  if (markers.length < 1 || markers.length > 15)
+    throw new AppError('ต้องมีจุดบนรูป 1–15 จุด (แตะบนรูปเพื่อวางจุด)')
+  const labels = (fields.lists?.labels ?? [])
+    .map((l) => ({ id: l.id, text: clean(l.text) }))
+    .filter((l) => l.text)
+  if (labels.length < 2 || labels.length > 20) throw new AppError('ต้องมีป้าย 2–20 ป้าย')
+  if (labels.some((l) => l.text.length > 1000)) throw new AppError('ข้อความป้ายยาวเกิน 1,000 ตัวอักษร')
+  item.options_json = { markers, labels }
+
+  const labelIds = new Set(labels.map((l) => l.id))
+  const picked = Object.fromEntries(
+    markers.map((m) => [m.id, fields.keySlots?.[m.id]]).filter(([, l]) => l && labelIds.has(l))
+  )
+  const n = Object.keys(picked).length
+  if (n === 0) return null
+  if (n < markers.length)
+    throw new AppError('เลือกป้ายที่ถูกให้ครบทุกจุด (หรือเว้นว่างทั้งหมดเพื่อคงเฉลยเดิม)')
+  const mode = fields.mode === 'all_or_nothing' ? 'all_or_nothing' : 'partial'
   return { answer: { slots: picked }, scoring: { mode } }
 }
 

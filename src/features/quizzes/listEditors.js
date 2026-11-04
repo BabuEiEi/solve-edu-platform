@@ -1,7 +1,7 @@
 import { html, render, safeUrl } from '../../shared/ui/html.js'
 import { acceptAttr } from '../lessons/media.js'
 import { SLOT_LISTS } from '../assessments/logic.js'
-import { LIST_EDITORS, PART_SCORING_MODES, nextEntryId } from './logic.js'
+import { LIST_EDITORS, LABELS_LIST, PART_SCORING_MODES, nextEntryId } from './logic.js'
 
 /**
  * Editors for the item types made of lists (ordering, matching,
@@ -26,7 +26,7 @@ function keySelect(slotId, choices, selected) {
   </select>`
 }
 
-const keyOptions = (choices, selected) =>
+export const keyOptions = (choices, selected) =>
   html`<option value="">— เฉลย —</option>
     ${choices.map((c) => html`<option value="${c.id}" ${selected === c.id ? html`selected` : ''}>${choiceText(c)}</option>`)}`
 
@@ -55,20 +55,24 @@ export function entryRow(type, def, entry, media, { choices = null, index = 0, c
       }
       <button type="button" class="${dangerBtn}" data-action="remove-entry">ลบ</button>
     </div>
-    <div class="flex flex-wrap items-center gap-2">
-      ${
-        url
-          ? html`<img src="${safeUrl(url)}" alt="" class="max-h-16 rounded" />
-              <label class="flex items-center gap-1 text-xs text-ink-500"
-                ><input type="checkbox" name="${n}_clear" value="${entry.id}" /> เอารูปออก</label
-              >`
-          : ''
-      }
-      <label class="text-xs text-ink-500"
-        >${url ? 'เปลี่ยนรูป' : 'รูปภาพ (ไม่บังคับ)'}
-        <input type="file" name="${n}_file" accept="${acceptAttr('image')}" class="text-xs" />
-      </label>
-    </div>
+    ${
+      def.textOnly
+        ? ''
+        : html`<div class="flex flex-wrap items-center gap-2">
+            ${
+              url
+                ? html`<img src="${safeUrl(url)}" alt="" class="max-h-16 rounded" />
+                    <label class="flex items-center gap-1 text-xs text-ink-500"
+                      ><input type="checkbox" name="${n}_clear" value="${entry.id}" /> เอารูปออก</label
+                    >`
+                : ''
+            }
+            <label class="text-xs text-ink-500"
+              >${url ? 'เปลี่ยนรูป' : 'รูปภาพ (ไม่บังคับ)'}
+              <input type="file" name="${n}_file" accept="${acceptAttr('image')}" class="text-xs" />
+            </label>
+          </div>`
+    }
   </div>`
 }
 
@@ -168,7 +172,7 @@ export function handleListAction(button, media) {
   const type = form.dataset.type
   const action = button.dataset.action
   if (action === 'add-entry') {
-    const def = LIST_EDITORS[type].find((d) => d.name === button.dataset.list)
+    const def = (LIST_EDITORS[type] ?? [LABELS_LIST]).find((d) => d.name === button.dataset.list)
     const box = form.querySelector(`[data-entries="${def.name}"]`)
     const used = [...box.querySelectorAll(`input[name="${def.name}_id"]`)].map((i) => i.value)
     if (used.length >= def.max) return `${def.label}: มีได้ไม่เกิน ${def.max} รายการ`

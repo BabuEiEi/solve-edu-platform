@@ -5,7 +5,7 @@ const TYPES = 'a4000000-0000-4000-a000-000000000003' // demo assignment with the
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })
 
-test('phone: all new item types answered by tapping, saved, restored after reload, scored 6/6', async ({
+test('phone: all seven new item types answered by tapping, saved, restored after reload, scored 7/7', async ({
   page,
 }) => {
   const csp = watchCsp(page)
@@ -13,7 +13,7 @@ test('phone: all new item types answered by tapping, saved, restored after reloa
   await page.goto(`/#/assessments/${TYPES}`)
   await page.getByRole('button', { name: 'เริ่มทำแบบทดสอบ' }).click()
   const form = page.locator('form[data-form=attempt]')
-  await expect(form.locator('fieldset[data-item-type]')).toHaveCount(6)
+  await expect(form.locator('fieldset[data-item-type]')).toHaveCount(7)
 
   // Ordering arrives shuffled: move each step up into place with the ↑ buttons
   const ordering = form.locator('fieldset[data-item-type=ordering]')
@@ -61,6 +61,12 @@ test('phone: all new item types answered by tapping, saved, restored after reloa
   await cloze.getByLabel('ช่องที่ 1').fill(' afl ')
   await cloze.getByLabel('ช่องที่ 2').fill('๗๕') // Thai digits
   await cloze.getByLabel('ช่องที่ 2').blur()
+
+  const labelling = form.locator('fieldset[data-item-type=image_labelling]')
+  await expect(labelling.locator('img')).toBeVisible() // the seeded image, from the private bucket
+  await expect(labelling.locator('[data-marker]')).toHaveCount(3)
+  for (const [k, label] of ['กำหนดเป้าหมาย', 'รวบรวมหลักฐาน', 'ให้ข้อมูลย้อนกลับ'].entries())
+    await labelling.getByLabel(`คำตอบของ จุดที่ ${k + 1}`).selectOption({ label })
   await expect(page.locator('[data-save-status]')).toHaveAttribute('data-state', 'saved')
 
   // Fits the phone: no sideways scrolling
@@ -79,6 +85,6 @@ test('phone: all new item types answered by tapping, saved, restored after reloa
 
   await page.getByRole('button', { name: 'ส่งคำตอบ' }).tap()
   await expect(page.getByRole('heading', { name: 'ผลการทดสอบ' })).toBeVisible()
-  await expect(page.locator('[data-score]')).toHaveText(/6\s*\/\s*6/)
+  await expect(page.locator('[data-score]')).toHaveText(/7\s*\/\s*7/)
   expect(csp).toEqual([])
 })

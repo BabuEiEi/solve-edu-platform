@@ -184,8 +184,9 @@ insert into public.assessment_assignments (id, instrument_version_id, cohort_id,
    null, '2027-03-31 23:59+07', 3, 70, 'published', '00000000-0000-4000-a000-000000000006');
 
 -- ---------------------------------------------------------------------
--- Phase 2C demo: one quiz with the new item types (formative, 3 attempts).
--- Image labelling joins once the quiz builder can upload its image.
+-- Phase 2C demo: one quiz with the seven new item types (formative, 3 attempts).
+-- The labelling image is uploaded from supabase/seed-media by `db reset --local`
+-- ([storage.buckets.assessment-media] in config.toml).
 -- Ordering options and the matching right column are stored shuffled with
 -- non-sequential ids: trainees can read options_json, so the stored order
 -- must not reveal the key (enforced by private.answer_key_error).
@@ -229,13 +230,22 @@ insert into public.instrument_items (id, instrument_version_id, item_type, promp
      "blanks":[{"id":"b1"},{"id":"b2","kind":"number"}]}',
    1, 6);
 
+insert into public.instrument_items (id, instrument_version_id, item_type, prompt, media_path, options_json, max_score, display_order) values
+  ('a3000000-0000-4000-a000-000000000017', 'a2000000-0000-4000-a000-000000000002', 'image_labelling',
+   'แผนภาพวงจรการประเมินเพื่อการเรียนรู้: เลือกป้ายให้แต่ละจุด (เริ่มที่กล่องสีน้ำเงิน วนตามลูกศร)',
+   'a1000000-0000-4000-a000-000000000002/afl-cycle.png',
+   '{"markers":[{"id":"m1","x":21.2,"y":25},{"id":"m2","x":80,"y":35},{"id":"m3","x":38.8,"y":77}],
+     "labels":[{"id":"p1","text":"กำหนดเป้าหมาย"},{"id":"p2","text":"รวบรวมหลักฐาน"},{"id":"p3","text":"ให้ข้อมูลย้อนกลับ"},{"id":"p4","text":"ตัดเกรด"}]}',
+   1, 7);
+
 insert into private.instrument_answer_keys (item_id, answer_json, scoring_json, updated_by) values
   ('a3000000-0000-4000-a000-000000000011', '{"order":["q2","t4","k7","m9"]}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000012', '{"slots":{"l1":"j3","l2":"w6","l3":"x5"}}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000013', '{"slots":{"i1":"c1","i2":"c1","i3":"c2","i4":"c2"}}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000014', '{"slots":{"w1":"f","w2":"t","w3":"t"}}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000015', '{"slots":{"b1":"x","b2":"p"}}', '{}', '00000000-0000-4000-a000-000000000003'),
-  ('a3000000-0000-4000-a000-000000000016', '{"blanks":{"b1":{"accept":["AfL"]},"b2":{"value":75,"tolerance":0}}}', '{}', '00000000-0000-4000-a000-000000000003');
+  ('a3000000-0000-4000-a000-000000000016', '{"blanks":{"b1":{"accept":["AfL"]},"b2":{"value":75,"tolerance":0}}}', '{}', '00000000-0000-4000-a000-000000000003'),
+  ('a3000000-0000-4000-a000-000000000017', '{"slots":{"m1":"p1","m2":"p2","m3":"p3"}}', '{}', '00000000-0000-4000-a000-000000000003');
 
 update public.instrument_versions
    set status = 'published', published_at = now(), published_by = '00000000-0000-4000-a000-000000000003',

@@ -30,7 +30,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Shared | `src/shared/utils/date.js` | แสดงเวลา Asia/Bangkok + พ.ศ. |
 | Shared | `src/shared/utils/csv.js`, `src/shared/ui/download.js` | อ่าน/เขียน CSV (BOM สำหรับ Excel, กัน CSV injection) · ดาวน์โหลดผ่าน blob URL |
 | Features (2B) | `quizzes/` (สร้างข้อสอบ), `assessments/` (ผู้เรียนทำแบบทดสอบ), `assignments/` (มอบหมายให้รุ่น + ผลของรุ่น) | `logic.js` เป็นฟังก์ชันล้วน (unit test); คะแนนไม่เคยคำนวณใน browser |
-| Features (2C) | `assessments/items.js` แสดงข้อทุกแบบ | แตะ/ปุ่ม/เมนูเลือกเท่านั้น (ไม่มีลากวาง) · ชื่อช่อง `q:<item>` และ `q:<item>:<slot\|blank>` · ลำดับตาม `presentation` ของ server |
+| Features (2C) | `quizzes/listEditors.js`, `quizzes/blankEditors.js` ฟอร์มสร้างข้อแบบใหม่ · `assessments/items.js` แสดงข้อทุกแบบ | แตะ/ปุ่ม/เมนูเลือกเท่านั้น (ไม่มีลากวาง) · ชื่อช่อง `q:<item>` และ `q:<item>:<slot\|blank>` · ลำดับตาม `presentation` ของ server |
 
 แนวทาง: query เลือกคอลัมน์ชัดเจนเสมอ (ห้าม `select('*')` กับ `profiles` — จะได้ 42501) · event delegation ด้วย `data-action` (ไม่มี inline handler) · CSP ใน `index.html`
 
@@ -87,6 +87,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Storage ของ submissions/portfolio | ยังไม่มี bucket | Phase 3 |
 | UI อัปโหลด avatar | bucket + policy พร้อมแล้ว แต่ยังไม่มีหน้าจอ | Phase 3 |
 | ครั้งที่เริ่มแล้วไม่ส่ง | 2B.1: ปิดอัตโนมัติจากคำตอบที่บันทึกไว้ เมื่อเลยเส้นตาย+ผ่อนผัน · การมอบหมายที่เผยแพร่ต้องมีเวลาปิดรับ (CHECK) จึงมีเส้นตายเสมอ | — |
+| ข้อมูลตัวอย่างที่มีรูป (2C) | รูปของข้อติดป้ายอยู่ที่ `supabase/seed-media/` อัปโหลดโดย `db reset --local` ผ่าน `[storage.buckets.assessment-media]` ใน `config.toml` (ค่าเดียวกับ migration: private, 5 MiB, รูปเท่านั้น) | ใช้กับเครื่อง local เท่านั้น — ไม่มีการ push config ไป remote |
 | `pg_cron` (2B.1) | ต้องมีบน Supabase จริง (มีให้ใช้แล้ว) · ถ้าไม่มี ระบบยังปิดเมื่อผู้เรียนกลับมาเปิด/บันทึก/ส่ง | ตรวจ `cron.job` หลัง deploy |
 | รูปข้อสอบที่ไม่ได้ใช้ | 2B.1: ผู้สร้างกด "ล้างรูปที่ไม่ได้ใช้" ได้ (ไฟล์ที่ไม่มีข้อใดใช้และเก่ากว่า 24 ชม.; DB กันไฟล์ที่ใช้อยู่) · ยังไม่มีงานล้างอัตโนมัติทั้งระบบ | Edge Function ตามเวลา (Phase 5) ถ้าจำเป็น |
 | ผลของรุ่น (2B.1) | สรุปบน server แล้ว (`assignment_results` หนึ่งแถวต่อคน) — ยังไม่แบ่งหน้า; รุ่นหลักพันคนอาจต้องแบ่งหน้า | วัดเมื่อมีข้อมูลจริง |

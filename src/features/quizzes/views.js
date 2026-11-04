@@ -19,10 +19,21 @@ import {
   defaultVersion,
   unusedMedia,
   isListType,
+  isBlankType,
   defaultLists,
   LIST_EDITORS,
 } from './logic.js'
 import { listEditorFields, readList, handleListAction, refreshKeySelects } from './listEditors.js'
+import {
+  blankEditorFields,
+  labellingEditorFields,
+  readBlanks,
+  readMarkers,
+  handleBlankAction,
+  placeMarker,
+  redrawDots,
+  toggleBlankKind,
+} from './blankEditors.js'
 
 const input =
   'mt-1 block w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30'
@@ -175,7 +186,11 @@ function itemForm(type, item, media) {
     : ''
 
   let typeFields
-  if (isListType(type)) {
+  if (isBlankType(type)) {
+    typeFields = blankEditorFields(type, item?.options_json, { editing })
+  } else if (type === 'image_labelling') {
+    typeFields = labellingEditorFields(item?.options_json, questionImage)
+  } else if (isListType(type)) {
     typeFields = listEditorFields(type, item ? item.options_json : defaultLists(type), media, { editing })
   } else if (isChoiceType(type)) {
     typeFields = html`<fieldset class="space-y-2">
@@ -225,10 +240,10 @@ function itemForm(type, item, media) {
         >คะแนน<input name="max_score" type="number" min="0.01" max="1000" step="0.01" value="${Number(item?.max_score ?? 1)}" class="${input}"
       /></label>
       <div class="text-sm">
-        <span class="${label}">รูปประกอบโจทย์ (ไม่บังคับ)</span>
+        <span class="${label}">${type === 'image_labelling' ? 'รูปสำหรับติดป้าย (บังคับ)' : 'รูปประกอบโจทย์ (ไม่บังคับ)'}</span>
         ${
           questionImage
-            ? html`<img src="${safeUrl(questionImage)}" alt="" class="mt-1 max-h-32 rounded" />
+            ? html`${type === 'image_labelling' ? '' : html`<img src="${safeUrl(questionImage)}" alt="" class="mt-1 max-h-32 rounded" />`}
                 <label class="mt-1 flex items-center gap-1 text-xs text-ink-500"
                   ><input type="checkbox" name="remove_media" /> เอารูปออก</label
                 >`
@@ -308,8 +323,22 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         <p class="whitespace-pre-line text-ink-900">${item.prompt}</p>
         ${image ? html`<img src="${safeUrl(image)}" alt="" class="max-h-48 rounded" />` : ''}
         ${
-          isListType(item.item_type)
-            ? html`<div class="grid gap-3 sm:grid-cols-2" data-list-preview>
+          isBlankType(item.item_type)
+            ? html`<p class="leading-8 text-ink-700" data-blank-preview>
+                ${(item.options_json?.text ?? '')
+                  .split(/\{\{[a-z0-9]{1,8}\}\}/)
+                  .map((part, k, all) =>
+                    k < all.length - 1
+                      ? html`${part}<span class="mx-1 rounded border border-dashed border-ink-300 px-2 text-xs text-ink-500">ช่อง ${k + 1}</span>`
+                      : part
+                  )}
+              </p>`
+            : item.item_type === 'image_labelling'
+              ? html`<p class="text-ink-500" data-label-preview>
+                  ${(item.options_json?.markers ?? []).length} จุด · ป้าย: ${(item.options_json?.labels ?? []).map((l) => l.text).join(' · ')}
+                </p>`
+              : isListType(item.item_type)
+                ? html`<div class="grid gap-3 sm:grid-cols-2" data-list-preview>
                 ${LIST_EDITORS[item.item_type].map(
                   (def) => html`<div>
                     <p class="text-xs font-medium text-ink-500">${def.label}</p>
@@ -319,15 +348,15 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
                   </div>`
                 )}
               </div>`
-            : options.length
-              ? html`<ul class="grid gap-1 text-ink-600">
+                : options.length
+                  ? html`<ul class="grid gap-1 text-ink-600">
                 ${options.map((o) => html`<li class="flex items-center gap-2">○ ${choicePreview(o, media)}</li>`)}
               </ul>`
-              : item.item_type === 'true_false'
-                ? html`<p class="text-ink-500">ถูก / ผิด</p>`
-                : item.options_json?.unit
-                  ? html`<p class="text-ink-500">ตอบเป็นตัวเลข (${item.options_json.unit})</p>`
-                  : html`<p class="text-ink-500">ตอบเป็นตัวเลข</p>`
+                  : item.item_type === 'true_false'
+                    ? html`<p class="text-ink-500">ถูก / ผิด</p>`
+                    : item.options_json?.unit
+                      ? html`<p class="text-ink-500">ตอบเป็นตัวเลข (${item.options_json.unit})</p>`
+                      : html`<p class="text-ink-500">ตอบเป็นตัวเลข</p>`
         }
       </div>
     </li>`
@@ -496,6 +525,8 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
 
     const lists = {}
     const keySlots = {}
+    for (const [k, v] of f.entries()) if (k.startsWith('key:') && v) keySlots[k.slice(4)] = String(v)
+    if (type === 'image_labelling') lists.labels = readList(f, 'labels')
     if (isListType(type)) {
       for (const def of LIST_EDITORS[type]) {
         lists[def.name] = []
@@ -504,7 +535,6 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
           lists[def.name].push({ id: row.id, text: row.text, image_path: uploaded ?? row.image_path })
         }
       }
-      for (const [k, v] of f.entries()) if (k.startsWith('key:') && v) keySlots[k.slice(4)] = String(v)
     }
 
     const { item, key } = buildItemDraft(
@@ -523,6 +553,9 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         lists,
         keySlots,
         orderIsKey: f.get('order_is_key') === 'on',
+        text: f.get('tpl_text'),
+        blanks: isBlankType(type) ? readBlanks(f, type) : [],
+        markers: type === 'image_labelling' ? readMarkers(f) : [],
       },
       { requireKey: !existing }
     )
@@ -562,6 +595,13 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
   }
 
   el.onclick = (e) => {
+    const picture = e.target.closest('[data-label-image]')
+    if (picture) {
+      const form = picture.closest('form')
+      const problem = placeMarker(form, e)
+      if (problem) render(form.querySelector('[data-form-error]'), alertBox(problem))
+      return
+    }
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return
     const { action, id: targetId, delta, type } = b.dataset
@@ -605,6 +645,15 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         if (problem) render(b.closest('form').querySelector('[data-form-error]'), alertBox(problem))
         return undefined
       }
+      case 'insert-blank':
+      case 'remove-blank':
+      case 'add-bopt':
+      case 'remove-bopt':
+      case 'remove-marker': {
+        const problem = handleBlankAction(b)
+        if (problem) render(b.closest('form').querySelector('[data-form-error]'), alertBox(problem))
+        return undefined
+      }
       case 'remove-option':
         b.closest('[data-option-row]')?.remove()
         return undefined
@@ -644,7 +693,24 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
   // Typing a choice updates the key menus of the slots.
   el.oninput = (e) => {
     const form = e.target.closest?.('form[data-form=item]')
-    if (form && e.target.closest('[data-entries]')) refreshKeySelects(form)
+    if (!form) return
+    if (e.target.closest('[data-entries]')) refreshKeySelects(form)
+    if (e.target.name === 'marker_x' || e.target.name === 'marker_y') redrawDots(form)
+    if (e.target.matches?.('[data-blank-kind]')) toggleBlankKind(e.target)
+  }
+
+  // Labelling: preview a newly chosen picture so markers can be placed before saving.
+  let previewUrl = null
+  el.onchange = (e) => {
+    const form = e.target.closest?.('form[data-form=item]')
+    if (!form || form.dataset.type !== 'image_labelling' || e.target.name !== 'media_file') return
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    previewUrl = URL.createObjectURL(file)
+    form.querySelector('[data-label-image]').src = previewUrl
+    form.querySelector('[data-label-canvas]').hidden = false
+    form.querySelector('[data-no-image]').hidden = true
   }
 
   el.onsubmit = (e) => {
