@@ -22,3 +22,11 @@ npx supabase db reset --local && npx supabase test db
 # without Docker:  scripts/db-local/test.sh   (PostgreSQL 15+ superuser required)
 ```
 Report in Thai: changes, files, commands run with PASS/FAIL/SKIP + reasons, remaining risks, next steps.
+
+## Model per step
+- Opus: migrations, RLS/grants, SECURITY DEFINER, answer keys and scoring,
+  security-sensitive changes, the review before a merge.
+- Sonnet: UI-only steps that follow existing patterns, their tests, docs.
+- Whenever you propose or wait to continue (step reports, plans, "ตอบ ต่อ"),
+  name the model that fits the next step and why (one line, in Thai). The owner
+  switches with `/model` before replying "ต่อ"; an agent cannot switch its own model.
