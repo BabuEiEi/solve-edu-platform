@@ -1,5 +1,12 @@
 import { html, render, safeUrl } from '../../shared/ui/html.js'
-import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../shared/ui/components.js'
+import {
+  pageHeader,
+  emptyState,
+  alertBox,
+  statusBadge,
+  loading,
+  filePicker,
+} from '../../shared/ui/components.js'
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
@@ -167,10 +174,12 @@ function optionRow(type, option, media) {
               >`
           : ''
       }
-      <label class="text-xs text-ink-500"
-        >${url ? 'เปลี่ยนรูป' : 'รูปภาพ (ไม่บังคับ)'}
-        <input type="file" name="opt_file" accept="${acceptAttr('image')}" class="text-xs" />
-      </label>
+      ${filePicker({
+        name: 'opt_file',
+        accept: acceptAttr('image'),
+        button: url ? 'เปลี่ยนรูป…' : 'เลือกรูป…',
+        label: `รูปของตัวเลือก ${option.id}`,
+      })}
     </div>
   </div>`
 }
@@ -255,7 +264,14 @@ function itemForm(type, item, media) {
                 >`
             : ''
         }
-        <input type="file" name="media_file" accept="${acceptAttr('image')}" class="mt-1 text-xs" />
+        <div class="mt-1">
+          ${filePicker({
+            name: 'media_file',
+            accept: acceptAttr('image'),
+            button: questionImage ? 'เปลี่ยนรูป…' : 'เลือกรูป…',
+            label: type === 'image_labelling' ? 'รูปสำหรับติดป้าย' : 'รูปประกอบโจทย์',
+          })}
+        </div>
       </div>
     </div>
     ${typeFields} ${modeField(type, item)} ${keyHint}

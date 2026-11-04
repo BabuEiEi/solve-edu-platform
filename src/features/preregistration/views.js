@@ -1,5 +1,12 @@
 import { html, render } from '../../shared/ui/html.js'
-import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../shared/ui/components.js'
+import {
+  pageHeader,
+  emptyState,
+  alertBox,
+  statusBadge,
+  loading,
+  filePicker,
+} from '../../shared/ui/components.js'
 import { ROLE_LABELS } from '../../core/permissions.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
@@ -94,10 +101,12 @@ export async function renderImportView(el, { services, context, caps }) {
           )}
         </select></label
       >
-      <label class="${label} sm:col-span-2"
-        >ไฟล์ CSV (UTF-8)
-        <input name="file" type="file" accept=".csv,text/csv" required class="${input}" />
-      </label>
+      <div class="sm:col-span-2">
+        <span class="${label}">ไฟล์ CSV (UTF-8)</span>
+        <div class="mt-1">
+          ${filePicker({ name: 'file', accept: '.csv,text/csv', button: 'เลือกไฟล์ CSV…', label: 'ไฟล์ CSV (UTF-8)', required: true })}
+        </div>
+      </div>
       <p class="text-xs text-ink-500 sm:col-span-2">
         แถวแรกเป็นหัวตาราง ต้องมีคอลัมน์ <code>email</code> และอาจมี <code>full_name</code> · สูงสุด ${MAX_ROWS} แถว ·
         ใช้ข้อมูลสมมติ (<code>*.example.test</code>) เมื่อทดสอบ
@@ -155,7 +164,7 @@ export async function renderImportView(el, { services, context, caps }) {
       ${
         pending.length === 0
           ? html`<div class="mt-3">${emptyState('ไม่มีรายการรอผูกบัญชี')}</div>`
-          : html`<div class="mt-3 overflow-x-auto rounded-xl border border-ink-200 bg-white">
+          : html`<div class="relative mt-3 overflow-x-auto rounded-xl border border-ink-200 bg-white">
             <table class="min-w-full divide-y divide-ink-100 text-sm">
               <tbody class="divide-y divide-ink-100">
                 ${pending.map(

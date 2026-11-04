@@ -64,7 +64,7 @@ export function appShell({ profile, caps, currentPath, context }) {
         <button data-action="sign-out" class="text-sm text-ink-600">ออกจากระบบ</button>
       </header>
       <nav
-        class="flex gap-1 overflow-x-auto border-b border-ink-200 bg-white px-2 py-2 lg:hidden"
+        class="relative flex gap-1 overflow-x-auto border-b border-ink-200 bg-white px-2 py-2 lg:hidden"
         aria-label="เมนูหลัก (มือถือ)"
       >
         ${items.map(link)}

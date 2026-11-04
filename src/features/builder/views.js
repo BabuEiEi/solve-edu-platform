@@ -1,5 +1,12 @@
 import { html, render, safeUrl } from '../../shared/ui/html.js'
-import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../shared/ui/components.js'
+import {
+  pageHeader,
+  emptyState,
+  alertBox,
+  statusBadge,
+  loading,
+  filePicker,
+} from '../../shared/ui/components.js'
 import { richTextEditorMarkup } from '../../shared/ui/richTextEditor.js'
 import { toUserMessage } from '../../core/errors.js'
 import { moveId, nextOrder, learnerVisibility } from './service.js'
@@ -336,15 +343,22 @@ const PURPOSE_SHORT = { pretest: 'ก่อนเรียน', posttest: 'ห�
 function blockForm(type, block, media, assignments = []) {
   const c = block?.content_json ?? {}
   const current = c.object_path && media[c.object_path]
-  const fileInput = (kind, required) =>
-    html`<label class="${label}"
-      >${block?.content_json?.object_path ? 'เปลี่ยนไฟล์ (ไม่บังคับ)' : 'เลือกไฟล์'}<input
-        name="file"
-        type="file"
-        accept="${acceptAttr(kind)}"
-        ${required ? 'required' : ''}
-        class="${input}"
-    /></label>`
+  const fileInput = (kind, required) => {
+    const replacing = Boolean(block?.content_json?.object_path)
+    const text = replacing ? 'เปลี่ยนไฟล์ (ไม่บังคับ)' : 'เลือกไฟล์'
+    return html`<div>
+      <span class="${label}">${text}</span>
+      <div class="mt-1">
+        ${filePicker({
+          name: 'file',
+          accept: acceptAttr(kind),
+          button: kind === 'image' ? 'เลือกรูป…' : 'เลือกไฟล์…',
+          label: text,
+          required,
+        })}
+      </div>
+    </div>`
+  }
   const fields = {
     rich_text: () => richTextEditorMarkup(),
     video: () =>

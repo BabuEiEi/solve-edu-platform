@@ -65,3 +65,48 @@ export const loading = html`<div
   <span class="h-4 w-4 animate-spin rounded-full border-2 border-brand-600 border-t-transparent"></span>
   กำลังโหลด…
 </div>`
+
+const NO_FILE = 'ยังไม่ได้เลือกไฟล์'
+
+/**
+ * File picker with Thai text. The native control's button and "no file"
+ * text follow the browser's language ("Choose File"), so the real input is
+ * visually hidden inside a styled label and the chosen name is shown next
+ * to it (bindFilePickers). Keyboard focus stays on the real input; the
+ * label shows the focus ring.
+ *   { name, accept, button = 'เลือกไฟล์…', label = '', required = false }
+ * `label` becomes the input's accessible name (what the file is for).
+ */
+export function filePicker({ name, accept = '', button = 'เลือกไฟล์…', label = '', required = false }) {
+  return html`<span class="inline-flex max-w-full flex-wrap items-center gap-2" data-file-picker>
+    <label
+      class="inline-flex cursor-pointer items-center rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-700 shadow-sm hover:bg-ink-50 focus-within:ring-2 focus-within:ring-brand-500/40"
+    >
+      <input
+        type="file"
+        name="${name}"
+        accept="${accept}"
+        class="sr-only"
+        ${label ? html`aria-label="${label}"` : ''}
+        ${required ? html`required` : ''}
+      />
+      <span>${button}</span>
+    </label>
+    <span class="max-w-56 truncate text-xs text-ink-500" data-file-name>${NO_FILE}</span>
+  </span>`
+}
+
+/** Show the chosen file's name next to every filePicker under `root` (one listener). */
+export function bindFilePickers(root = document) {
+  if (root.__filePickersBound) return
+  root.__filePickersBound = true
+  root.addEventListener('change', (e) => {
+    const input = e.target
+    if (input?.type !== 'file') return
+    const out = input.closest('[data-file-picker]')?.querySelector('[data-file-name]')
+    if (!out) return
+    const names = [...(input.files ?? [])].map((f) => f.name)
+    out.textContent = names.length ? names.join(', ') : NO_FILE
+    out.title = out.textContent
+  })
+}

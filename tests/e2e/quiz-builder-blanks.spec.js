@@ -51,7 +51,11 @@ test('trainer builds dropdown, cloze and image-labelling items (real upload, tap
   await trainer.locator('[data-action=new-item][data-type=image_labelling]').click()
   form = trainer.locator('form[data-form=item]')
   await form.locator('[name=prompt]').fill('ติดป้าย')
+  const picker = form.locator('[data-file-picker]', { has: trainer.locator('[name=media_file]') })
+  await expect(picker).toContainText('เลือกรูป…') // Thai, not the browser's "Choose File"
+  await expect(picker.locator('[data-file-name]')).toHaveText('ยังไม่ได้เลือกไฟล์')
   await form.locator('[name=media_file]').setInputFiles(PICTURE)
+  await expect(picker.locator('[data-file-name]')).toHaveText('afl-cycle.png')
   const picture = form.locator('[data-label-image]')
   await expect(picture).toBeVisible()
   const box = await picture.boundingBox()

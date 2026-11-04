@@ -323,7 +323,7 @@ const pct = (t) => (t ? `${attemptPercent(t)}%` : '—')
 
 function resultsTable(rows, canEdit) {
   if (rows.length === 0) return emptyState('ยังไม่มีผู้เรียนในรายชื่อที่ท่านดูได้')
-  return html`<div class="overflow-x-auto rounded-xl border border-ink-200 bg-white">
+  return html`<div class="relative overflow-x-auto rounded-xl border border-ink-200 bg-white">
     <table class="min-w-full text-sm" data-results>
       <thead class="bg-ink-50 text-left text-xs text-ink-500">
         <tr>
@@ -382,6 +382,17 @@ function resultsTable(rows, canEdit) {
 
 const fmt = (x, digits = 2) => (x === null || x === undefined ? '—' : Number(x).toFixed(digits))
 
+/** Choice counts, or the share right per part for the new item types. */
+function choicesOrParts(it) {
+  if (!it.slots?.length) return choicesText(it.choices) || '—'
+  return html`<ul class="min-w-48 space-y-0.5 text-xs" data-parts>
+    ${it.slots.map(
+      (p) =>
+        html`<li>${partName(it.item_type, p)} <span class="whitespace-nowrap">${partStatText(p)}</span></li>`
+    )}
+  </ul>`
+}
+
 /** Item analysis for cohort assessors (aggregates of first attempts; never the key). */
 function itemAnalysis(stats) {
   if (!stats) return ''
@@ -402,7 +413,39 @@ function itemAnalysis(stats) {
       ผู้สอบ ${stats.n} คน (ใช้ครั้งแรกของแต่ละคน) · คะแนนเฉลี่ย ${fmt(stats.mean_score)} / ${Number(stats.max_score)} · SD ${fmt(stats.sd_score)}
       · ความเชื่อมั่น (${kind}) <strong data-reliability>${fmt(stats.reliability, 3)}</strong> ${reliabilityLabel(stats.reliability)}
     </p>
-    <div class="overflow-x-auto rounded-xl border border-ink-200 bg-white">
+    <ol class="space-y-3 md:hidden" data-item-cards>
+      ${stats.items.map(
+        (
+          it,
+          i
+        ) => html`<li class="rounded-xl border border-ink-200 bg-white p-4 text-sm" data-item-card="${i + 1}">
+          <p class="font-semibold text-ink-700">ข้อ ${i + 1} <span class="font-normal text-ink-700">${it.prompt}</span></p>
+          <dl class="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
+            <div>
+              <dt class="text-xs text-ink-500">ความยาก (p)</dt>
+              <dd>${fmt(it.p)} <span class="text-xs text-ink-400">${difficultyLabel(it.p)}</span></dd>
+            </div>
+            <div>
+              <dt class="text-xs text-ink-500">อำนาจจำแนก (D)</dt>
+              <dd>${fmt(it.d)} <span class="text-xs text-ink-400">${discriminationLabel(it.d)}</span></dd>
+            </div>
+            <div>
+              <dt class="text-xs text-ink-500">r</dt>
+              <dd>${fmt(it.r_it)}</dd>
+            </div>
+            <div>
+              <dt class="text-xs text-ink-500">ไม่ตอบ</dt>
+              <dd>${it.blank}</dd>
+            </div>
+            <div class="col-span-2">
+              <dt class="text-xs text-ink-500">${it.slots?.length ? 'ถูกรายส่วน' : 'ตัวเลือกที่ถูกเลือก'}</dt>
+              <dd class="text-ink-600">${choicesOrParts(it)}</dd>
+            </div>
+          </dl>
+        </li>`
+      )}
+    </ol>
+    <div class="relative hidden overflow-x-auto rounded-xl border border-ink-200 bg-white md:block">
       <table class="min-w-full text-sm" data-items>
         <thead class="bg-ink-50 text-left text-xs text-ink-500">
           <tr>
@@ -423,18 +466,7 @@ function itemAnalysis(stats) {
               <td class="px-3 py-2">${fmt(it.p)} <span class="block text-xs text-ink-400">${difficultyLabel(it.p)}</span></td>
               <td class="px-3 py-2">${fmt(it.d)} <span class="block text-xs text-ink-400">${discriminationLabel(it.d)}</span></td>
               <td class="px-3 py-2 text-ink-600">${fmt(it.r_it)}</td>
-              <td class="px-3 py-2 text-ink-600">
-                ${
-                  it.slots?.length
-                    ? html`<ul class="min-w-48 space-y-0.5 text-xs" data-parts>
-                      ${it.slots.map(
-                        (p) =>
-                          html`<li>${partName(it.item_type, p)} <span class="whitespace-nowrap">${partStatText(p)}</span></li>`
-                      )}
-                    </ul>`
-                    : choicesText(it.choices) || '—'
-                }
-              </td>
+              <td class="px-3 py-2 text-ink-600">${choicesOrParts(it)}</td>
               <td class="px-3 py-2 text-ink-600">${it.blank}</td>
             </tr>`
           )}

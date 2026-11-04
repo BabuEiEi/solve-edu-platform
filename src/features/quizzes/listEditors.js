@@ -1,4 +1,5 @@
 import { html, render, safeUrl } from '../../shared/ui/html.js'
+import { filePicker } from '../../shared/ui/components.js'
 import { acceptAttr } from '../lessons/media.js'
 import { SLOT_LISTS } from '../assessments/logic.js'
 import { LIST_EDITORS, LABELS_LIST, nextEntryId } from './logic.js'
@@ -67,10 +68,12 @@ export function entryRow(type, def, entry, media, { choices = null, index = 0, c
                     >`
                 : ''
             }
-            <label class="text-xs text-ink-500"
-              >${url ? 'เปลี่ยนรูป' : 'รูปภาพ (ไม่บังคับ)'}
-              <input type="file" name="${n}_file" accept="${acceptAttr('image')}" class="text-xs" />
-            </label>
+            ${filePicker({
+              name: `${n}_file`,
+              accept: acceptAttr('image'),
+              button: url ? 'เปลี่ยนรูป…' : 'เลือกรูป…',
+              label: `รูปของรายการ ${entry.id}`,
+            })}
           </div>`
     }
   </div>`

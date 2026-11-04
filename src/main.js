@@ -6,7 +6,7 @@ import { compileRoutes, resolveRoute } from './core/router.js'
 import { toUserMessage } from './core/errors.js'
 import { html, render } from './shared/ui/html.js'
 import { appShell, centeredCard } from './shared/ui/layout.js'
-import { alertBox, loading } from './shared/ui/components.js'
+import { alertBox, loading, bindFilePickers } from './shared/ui/components.js'
 import { createProfileService } from './features/profiles/service.js'
 import { createAdminService } from './features/admin/service.js'
 import { createOrganizationService } from './features/organizations/service.js'
@@ -163,6 +163,7 @@ async function boot() {
     }
   })
   window.addEventListener('hashchange', route)
+  bindFilePickers(root)
   auth.onChange((session) => {
     if (session?.user?.id !== state.session?.user?.id) refresh(session)
   })

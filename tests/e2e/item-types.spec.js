@@ -72,7 +72,7 @@ test('phone: all seven new item types answered by tapping, saved, restored after
   await expect(page.locator('[data-save-status]')).toHaveAttribute('data-state', 'saved')
 
   // Fits the phone: no sideways scrolling
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390) // not innerWidth: a phone viewport widens to fit overflow
 
   // Reload: same order (stored on the attempt) and every answer restored from the server
   await page.reload()

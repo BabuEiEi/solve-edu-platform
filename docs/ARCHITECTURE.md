@@ -31,6 +31,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Shared | `src/shared/utils/csv.js`, `src/shared/ui/download.js` | อ่าน/เขียน CSV (BOM สำหรับ Excel, กัน CSV injection) · ดาวน์โหลดผ่าน blob URL |
 | Features (2B) | `quizzes/` (สร้างข้อสอบ), `assessments/` (ผู้เรียนทำแบบทดสอบ), `assignments/` (มอบหมายให้รุ่น + ผลของรุ่น) | `logic.js` เป็นฟังก์ชันล้วน (unit test); คะแนนไม่เคยคำนวณใน browser |
 | Features (2C) | `quizzes/listEditors.js`, `quizzes/blankEditors.js` ฟอร์มสร้างข้อแบบใหม่ · `assessments/items.js` แสดงข้อทุกแบบ | แตะ/ปุ่ม/เมนูเลือกเท่านั้น (ไม่มีลากวาง) · ชื่อช่อง `q:<item>` และ `q:<item>:<slot\|blank>` · ลำดับตาม `presentation` ของ server |
+| UI ร่วม (2C.1) | `shared/ui/components.js` `filePicker` + `bindFilePickers` (ผูกใน `main.js`) | ปุ่มเลือกไฟล์ภาษาไทยแทนข้อความของเบราว์เซอร์ · input จริงซ่อนแบบ sr-only ในป้าย (โฟกัส/แป้นพิมพ์ใช้ได้) · ชื่อไฟล์แสดงด้วย textContent · กล่อง `overflow-x-auto` ต้องมี `relative` เพื่อไม่ให้ sr-only ข้างในดันหน้าให้กว้างเกินจอ |
 
 แนวทาง: query เลือกคอลัมน์ชัดเจนเสมอ (ห้าม `select('*')` กับ `profiles` — จะได้ 42501) · event delegation ด้วย `data-action` (ไม่มี inline handler) · CSP ใน `index.html`
 
