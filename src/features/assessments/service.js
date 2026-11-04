@@ -1,7 +1,7 @@
 import { unwrap } from '../../core/errors.js'
 
 export const ASSIGNMENT_COLUMNS =
-  'id, title, purpose, instructions, open_at, close_at, attempt_limit, passing_percent, time_limit_minutes, grace_minutes, status, course_id, cohort_id, instrument_version_id'
+  'id, title, purpose, instructions, open_at, close_at, attempt_limit, passing_percent, time_limit_minutes, grace_minutes, shuffle_items, shuffle_choices, status, course_id, cohort_id, instrument_version_id'
 export const ATTEMPT_COLUMNS =
   'id, assignment_id, attempt_no, status, started_at, submitted_at, score, max_score, passed, correct_count, item_count, auto_submitted'
 // No answer key exists in these columns (keys live in schema private).

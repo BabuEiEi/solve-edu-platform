@@ -80,6 +80,9 @@ export function buildAssignmentPayload(fields, { locked = false } = {}) {
     close_at: closeAt,
     attempt_limit: limit,
     grace_minutes: grace,
+    // checkboxes: present ("on") = true; absent from FormData = false
+    shuffle_items: fields.shuffle_items === 'on' || fields.shuffle_items === true,
+    shuffle_choices: fields.shuffle_choices === 'on' || fields.shuffle_choices === true,
   }
   if (locked) return payload
 
@@ -196,6 +199,42 @@ export function choicesText(choices = {}) {
     .join(' · ')
 }
 
+// Parts of the new item types (item_statistics → items[].slots): only the
+// share right and how many answered — never which choice is right.
+const PART_NAMES = {
+  ordering: 'ลำดับที่',
+  matching: 'รายการที่',
+  classification: 'รายการที่',
+  choice_matrix: 'แถวที่',
+  dropdown: 'ช่องที่',
+  cloze: 'ช่องที่',
+  image_labelling: 'จุดที่',
+}
+const LABEL_MAX = 30
+
+/** "ช่องที่ 2" / "รายการที่ 1 (ตั้งเป้าหมาย)" — the part as the trainee met it. */
+export function partName(itemType, part) {
+  const base = `${PART_NAMES[itemType] ?? 'ส่วนที่'} ${part.no}`
+  const label = (part.label ?? '').trim()
+  if (!label) return base
+  return `${base} (${label.length > LABEL_MAX ? `${label.slice(0, LABEL_MAX - 1)}…` : label})`
+}
+
+/** 0.6 → "60%"; null → "—". */
+export function percentText(rate) {
+  return rate === null || rate === undefined ? '—' : `${Math.round(Number(rate) * 100)}%`
+}
+
+/** "ถูก 60% (ตอบ 4)" */
+export function partStatText(part) {
+  return `ถูก ${percentText(part.correct_rate)} (ตอบ ${part.answered})`
+}
+
+/** One line per part: name, share right, answered count. */
+export function partLines(item) {
+  return (item.slots ?? []).map((p) => `${partName(item.item_type, p)} ${partStatText(p)}`)
+}
+
 /** item_statistics → CSV rows (header first). */
 export function itemStatsCsvRows(stats) {
   return [
@@ -209,6 +248,7 @@ export function itemStatsCsvRows(stats) {
       'r (item-total)',
       'ตัวเลือกที่ถูกเลือก',
       'ไม่ตอบ',
+      'สัดส่วนถูกรายส่วน',
     ],
     ...(stats.items ?? []).map((it, i) => [
       i + 1,
@@ -220,6 +260,7 @@ export function itemStatsCsvRows(stats) {
       it.r_it ?? '',
       choicesText(it.choices),
       it.blank,
+      partLines(it).join(' · '),
     ]),
   ]
 }

@@ -1,6 +1,6 @@
 # Architecture — SolveEdu Platform
 
-> สถานะ: **Phase 0–1 + 2A + 2B เสร็จ** (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อล่วงหน้า, แบบทดสอบ + ให้คะแนนฝั่ง server + ผลของรุ่น) · ยังไม่ Deploy · ยังไม่เชื่อม Supabase Remote
+> สถานะ: **Phase 0–1 + 2A + 2B + 2B.1 + 2C เสร็จ** (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อล่วงหน้า, แบบทดสอบ + ให้คะแนนฝั่ง server + ผลของรุ่น, จำกัดเวลา/บันทึกอัตโนมัติ/วิเคราะห์ข้อสอบ, ข้อสอบแบบใหม่ 7 แบบ) · ยังไม่ Deploy · ยังไม่เชื่อม Supabase Remote
 
 ## 1. ภาพรวม
 
@@ -30,6 +30,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Shared | `src/shared/utils/date.js` | แสดงเวลา Asia/Bangkok + พ.ศ. |
 | Shared | `src/shared/utils/csv.js`, `src/shared/ui/download.js` | อ่าน/เขียน CSV (BOM สำหรับ Excel, กัน CSV injection) · ดาวน์โหลดผ่าน blob URL |
 | Features (2B) | `quizzes/` (สร้างข้อสอบ), `assessments/` (ผู้เรียนทำแบบทดสอบ), `assignments/` (มอบหมายให้รุ่น + ผลของรุ่น) | `logic.js` เป็นฟังก์ชันล้วน (unit test); คะแนนไม่เคยคำนวณใน browser |
+| Features (2C) | `quizzes/listEditors.js`, `quizzes/blankEditors.js` ฟอร์มสร้างข้อแบบใหม่ · `assessments/items.js` แสดงข้อทุกแบบ | แตะ/ปุ่ม/เมนูเลือกเท่านั้น (ไม่มีลากวาง) · ชื่อช่อง `q:<item>` และ `q:<item>:<slot\|blank>` · ลำดับตาม `presentation` ของ server |
 
 แนวทาง: query เลือกคอลัมน์ชัดเจนเสมอ (ห้าม `select('*')` กับ `profiles` — จะได้ 42501) · event delegation ด้วย `data-action` (ไม่มี inline handler) · CSP ใน `index.html`
 
@@ -60,6 +61,10 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261104090200_draft_sequence.sql` | (2B.1) ลำดับการบันทึก (`draft_seq`, `stale`, SE005) · audit attempts เฉพาะคอลัมน์หลักฐาน |
 | `20261104090300_results_and_item_statistics.sql` | (2B.1) `assignment_results` (invoker) · `item_statistics` (p, D, r, ตัวเลือก, KR-20/α) |
 | `20261104090400_assessment_media_cleanup.sql` | (2B.1) ลบ/เขียนทับรูปข้อสอบได้เฉพาะที่ไม่มีข้อใดใช้ |
+| `20261104090500_item_types_group_a.sql` | (2C) เรียงลำดับ จับคู่ จัดกลุ่ม ตารางตัวเลือก · สลับลำดับฝั่ง server (`presentation_json`) |
+| `20261104090600_item_types_group_b.sql` | (2C) ดรอปดาวน์ เติมคำ (เทียบข้อความไทย) ติดป้ายบนรูป |
+| `20261104090700_key_position_guard.sql` | (2C) เฉลยไม่ถูกต้องถ้าลำดับที่เก็บบอกเฉลย (เรียงลำดับ: เก็บในลำดับที่ถูก · จับคู่: ทุกคู่อยู่ตำแหน่งเดียวกัน) |
+| `20261104090800_item_statistics_slots.sql` | (2C) `private.slot_hits` ถูก/ผิดรายส่วน (ใช้ทั้งให้คะแนนและวิเคราะห์) · `private.slot_labels` · `item_statistics` เพิ่ม `slots` (สัดส่วนถูกรายส่วน ไม่บอกเฉลย) |
 
 ### เหตุผลการออกแบบสำคัญ
 
@@ -83,6 +88,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Storage ของ submissions/portfolio | ยังไม่มี bucket | Phase 3 |
 | UI อัปโหลด avatar | bucket + policy พร้อมแล้ว แต่ยังไม่มีหน้าจอ | Phase 3 |
 | ครั้งที่เริ่มแล้วไม่ส่ง | 2B.1: ปิดอัตโนมัติจากคำตอบที่บันทึกไว้ เมื่อเลยเส้นตาย+ผ่อนผัน · การมอบหมายที่เผยแพร่ต้องมีเวลาปิดรับ (CHECK) จึงมีเส้นตายเสมอ | — |
+| ข้อมูลตัวอย่างที่มีรูป (2C) | รูปของข้อติดป้ายอยู่ที่ `supabase/seed-media/` อัปโหลดโดย `db reset --local` ผ่าน `[storage.buckets.assessment-media]` ใน `config.toml` (ค่าเดียวกับ migration: private, 5 MiB, รูปเท่านั้น) | ใช้กับเครื่อง local เท่านั้น — ไม่มีการ push config ไป remote |
 | `pg_cron` (2B.1) | ต้องมีบน Supabase จริง (มีให้ใช้แล้ว) · ถ้าไม่มี ระบบยังปิดเมื่อผู้เรียนกลับมาเปิด/บันทึก/ส่ง | ตรวจ `cron.job` หลัง deploy |
 | รูปข้อสอบที่ไม่ได้ใช้ | 2B.1: ผู้สร้างกด "ล้างรูปที่ไม่ได้ใช้" ได้ (ไฟล์ที่ไม่มีข้อใดใช้และเก่ากว่า 24 ชม.; DB กันไฟล์ที่ใช้อยู่) · ยังไม่มีงานล้างอัตโนมัติทั้งระบบ | Edge Function ตามเวลา (Phase 5) ถ้าจำเป็น |
 | ผลของรุ่น (2B.1) | สรุปบน server แล้ว (`assignment_results` หนึ่งแถวต่อคน) — ยังไม่แบ่งหน้า; รุ่นหลักพันคนอาจต้องแบ่งหน้า | วัดเมื่อมีข้อมูลจริง |

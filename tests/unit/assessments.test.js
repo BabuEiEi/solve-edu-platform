@@ -165,6 +165,8 @@ describe('server draft and countdown helpers', () => {
     expect(remainingMs('2026-11-20T01:30:00Z', offset, deviceTwoMinutesFast)).toBe(30 * 60_000)
     expect(formatRemaining(754_000)).toBe('12:34')
     expect(formatRemaining(3_723_000)).toBe('1:02:03')
+    expect(formatRemaining(86_399_000)).toBe('23:59:59')
+    expect(formatRemaining((3 * 86_400 + 5 * 3600 + 59) * 1000)).toBe('3 วัน 5 ชม.') // a far close_at, not "77:00:59"
     expect(formatRemaining(400)).toBe('0:01') // rounds up: never shows 0:00 while time remains
     expect(formatRemaining(-5000)).toBe('0:00')
   })

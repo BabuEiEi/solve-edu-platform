@@ -1,10 +1,12 @@
-import { html, render, safeUrl } from '../../shared/ui/html.js'
+import { html, render } from '../../shared/ui/html.js'
 import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../shared/ui/components.js'
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
+import { renderItem, handleOrderingClick } from './items.js'
 import {
   PURPOSE_LABELS,
+  applyPresentation,
   attemptPercent,
   assignmentState,
   buildResponses,
@@ -115,86 +117,6 @@ export async function renderMyAssessmentsView(el, { services, session, context }
 // ---------------------------------------------------------------------
 // Exam form
 // ---------------------------------------------------------------------
-function choiceLabel(option, media) {
-  const url = option.image_path ? media[option.image_path] : null
-  return html`${
-    url
-      ? html`<img
-          src="${safeUrl(url)}"
-          alt="${option.text || 'ตัวเลือกรูปภาพ'}"
-          class="max-h-40 rounded-lg border border-ink-100"
-          loading="lazy"
-        />`
-      : option.image_path
-        ? html`<span class="text-xs text-ink-400">(ไม่สามารถแสดงรูปภาพได้)</span>`
-        : ''
-  }${option.text ? html`<span>${option.text}</span>` : ''}`
-}
-
-function renderItem(item, index, draft, media) {
-  const name = `q:${item.id}`
-  const saved = draft[item.id]
-  const choice = (type, value, content, checked) =>
-    html`<label
-      class="flex cursor-pointer items-start gap-3 rounded-lg border border-ink-200 px-4 py-3 text-sm hover:border-brand-300 has-checked:border-brand-500 has-checked:bg-brand-50"
-    >
-      <input type="${type}" name="${name}" value="${value}" class="mt-0.5" ${checked ? html`checked` : ''} />
-      <span class="flex flex-col gap-2">${content}</span>
-    </label>`
-
-  let body
-  switch (item.item_type) {
-    case 'mcq_single':
-    case 'mcq_multiple': {
-      const multi = item.item_type === 'mcq_multiple'
-      const picked = multi ? (Array.isArray(saved) ? saved : []) : [saved]
-      body = html`${multi ? html`<p class="text-xs text-ink-500">เลือกได้มากกว่า 1 ข้อ</p>` : ''}
-        <div class="mt-2 grid gap-2">
-          ${(item.options_json?.options ?? []).map((o) =>
-            choice(multi ? 'checkbox' : 'radio', o.id, choiceLabel(o, media), picked.includes(o.id))
-          )}
-        </div>`
-      break
-    }
-    case 'true_false':
-      body = html`<div class="mt-2 grid gap-2 sm:grid-cols-2">
-        ${choice('radio', 'true', 'ถูก', saved === 'true')} ${choice('radio', 'false', 'ผิด', saved === 'false')}
-      </div>`
-      break
-    case 'numeric':
-      body = html`<div class="mt-2 flex items-center gap-2">
-        <input
-          type="text"
-          inputmode="decimal"
-          name="${name}"
-          value="${typeof saved === 'string' ? saved : ''}"
-          aria-label="คำตอบข้อ ${index + 1}"
-          class="w-40 rounded-lg border border-ink-200 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-        />
-        ${item.options_json?.unit ? html`<span class="text-sm text-ink-600">${item.options_json.unit}</span>` : ''}
-      </div>`
-      break
-    default:
-      body = html`<p class="text-sm text-ink-500">ข้อนี้ยังไม่รองรับในเวอร์ชันนี้</p>`
-  }
-
-  const image = item.media_path ? media[item.media_path] : null
-  return html`<fieldset class="rounded-xl border border-ink-200 bg-white p-5" data-item-id="${item.id}">
-    <legend class="sr-only">ข้อ ${index + 1}</legend>
-    <p class="text-sm font-semibold text-brand-700">
-      ข้อ ${index + 1}
-      <span class="font-normal text-ink-400">(${Number(item.max_score)} คะแนน)</span>
-    </p>
-    <p class="mt-1 whitespace-pre-line text-ink-900">${item.prompt}</p>
-    ${
-      image
-        ? html`<img src="${safeUrl(image)}" alt="ภาพประกอบข้อ ${index + 1}" class="mt-3 max-h-80 rounded-lg" loading="lazy" />`
-        : ''
-    }
-    <div class="mt-3">${body}</div>
-  </fieldset>`
-}
-
 // ---------------------------------------------------------------------
 // /assessments/:id — overview, start, exam
 // ---------------------------------------------------------------------
@@ -289,7 +211,11 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
     render(el, loading)
     let items, media
     try {
-      items = await services.assessments.getItems(assignment.instrument_version_id)
+      // In the order this person was shown (server-built, stored on the attempt)
+      items = applyPresentation(
+        await services.assessments.getItems(assignment.instrument_version_id),
+        attempt.presentation
+      )
       media = await services.assessmentMedia.signedUrls(itemMediaPaths(items))
     } catch (err) {
       return render(el, alertBox(toUserMessage(err)))
@@ -420,10 +346,18 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
       } catch (err) {
         return say(toUserMessage(err))
       }
-      if (!timeUp && built.unanswered.length && !confirmUnanswered) {
+      if (!timeUp && (built.unanswered.length || built.incomplete.length) && !confirmUnanswered) {
         confirmUnanswered = true
+        const parts = [
+          built.unanswered.length
+            ? `ยังไม่ได้ตอบ ${built.unanswered.length} ข้อ (ข้อ ${built.unanswered.join(', ')})`
+            : '',
+          built.incomplete.length
+            ? `ตอบยังไม่ครบทุกช่อง ${built.incomplete.length} ข้อ (ข้อ ${built.incomplete.join(', ')})`
+            : '',
+        ].filter(Boolean)
         return say(
-          `ยังไม่ได้ตอบ ${built.unanswered.length} ข้อ (ข้อ ${built.unanswered.join(', ')}) — ข้อที่ไม่ตอบจะได้ 0 คะแนน กด "ส่งคำตอบ" อีกครั้งเพื่อยืนยัน`,
+          `${parts.join(' · ')} — ส่วนที่ไม่ได้ตอบจะได้ 0 คะแนน กด "ส่งคำตอบ" อีกครั้งเพื่อยืนยัน`,
           'info'
         )
       }
@@ -461,6 +395,9 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
       saveStatus.textContent = 'กำลังบันทึก…'
       clearTimeout(saveTimer)
       saveTimer = setTimeout(saveNow, e.target?.type === 'text' ? AUTOSAVE_DELAY_MS : 0)
+    }
+    form.onclick = (e) => {
+      if (handleOrderingClick(e)) confirmUnanswered = false
     }
     form.onsubmit = (e) => {
       e.preventDefault()

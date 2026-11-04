@@ -76,8 +76,33 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 | ตัวจับเวลา (2B.1) | นับถึง `deadline_at` โดยชดเชยนาฬิกาเครื่องด้วย `server_now` | หมดเวลา → ส่งสิ่งที่อยู่บนจอ (ข้อมูลตัวเลขที่พิมพ์ไม่ครบถูกข้าม); server รับถึงเส้นตาย+ผ่อนผัน |
 | ให้สิทธิ์ทำเพิ่ม (2B.1) | `assessment_extra_attempts.insert({assignment_id, user_id, reason})` · อ่าน `select('id, user_id, reason, created_at')` | ห้ามส่ง `granted_by` |
 | ผลของรุ่น (staff) | `rpc('assignment_results', { p_assignment })` → `[{user_id, name, on_roster, used, extra, in_progress, submitted, auto_submitted, first_score, first_max, best_score, best_max, best_passed, last_submitted_at}]` (2B.1) | หนึ่งแถวต่อคน คำนวณบน server; RLS ของผู้เรียกกำหนดแถว |
-| วิเคราะห์ข้อสอบ (2B.1) | `rpc('item_statistics', { p_assignment })` → `{n, min_n, suppressed, basis:'first_attempt', group_size, k, max_score, mean_score, sd_score, reliability, reliability_kind:'kr20'\|'alpha', items:[{item_id, display_order, item_type, prompt, max_score, p, d, r_it, blank, choices}]}` | assessor เท่านั้น · `suppressed` เมื่อน้อยกว่า 5 คน (คืนแค่ `n`) |
+| วิเคราะห์ข้อสอบ (2B.1) | `rpc('item_statistics', { p_assignment })` → `{n, min_n, suppressed, basis:'first_attempt', group_size, k, max_score, mean_score, sd_score, reliability, reliability_kind:'kr20'\|'alpha', items:[{item_id, display_order, item_type, prompt, max_score, p, d, r_it, blank, choices, slots}]}` · `slots` (2C) = `[{slot_id, no, label, correct_rate, answered}]` | assessor เท่านั้น · `suppressed` เมื่อน้อยกว่า 5 คน (คืนแค่ `n`) |
 | รายชื่อที่ควรทำ | `cohort_memberships.select('user_id, profiles!cohort_memberships_user_id_fkey(…)')` ∪ `mentor_assignments.select('trainee_id, profiles!mentor_assignments_trainee_id_fkey(…)').eq('mentor_id', uid)` | ต้องระบุชื่อ FK (มี 2 เส้นทางไป profiles) |
+
+## 2.3 Phase 2C — ข้อสอบแบบใหม่
+
+| item_type | `options_json` (ไม่มีเฉลย) | เฉลย (`set_item_key`) | คำตอบ (`p_responses[item_id]`) |
+|---|---|---|---|
+| `ordering` | `{options:[3–10 entries]}` | `{order:[ทุก id ครั้งเดียว]}` | `{order:[ทุก id ครั้งเดียว]}` |
+| `matching` | `{left:[2–10], right:[≥ left, ≤ 15]}` | `{slots:{left id: right id}}` ครบทุกข้อ ไม่ซ้ำ | `{slots:{…}}` เว้นบางช่องได้ |
+| `classification` | `{categories:[2–6], items:[2–15]}` | `{slots:{item id: category id}}` ครบ | `{slots:{…}}` |
+| `choice_matrix` | `{rows:[1–15], columns:[2–6]}` | `{slots:{row id: column id}}` ครบ | `{slots:{…}}` |
+
+| `dropdown` | `{text:"…{{b1}}…", blanks:[{id, options:[2–10 entries ข้อความเท่านั้น]}] 1–20}` | `{slots:{blank id: option id}}` ครบ | `{slots:{…}}` |
+| `cloze` | `{text:"…{{b1}}…", blanks:[{id, kind?: 'text'\|'number'}] 1–20}` | `{blanks:{b1:{accept:[1–10 คำ]}, b2:{value, tolerance?}}}` ครบ | `{blanks:{b1:"ข้อความ ≤ 200", b2: number}}` เว้นบางช่องได้ |
+| `image_labelling` | `media_path` = รูป (บังคับ) · `{markers:[{id, x, y} % ของรูป] 1–15, labels:[2–20 entries ข้อความเท่านั้น]}` | `{slots:{marker id: label id}}` ครบ (ป้ายซ้ำได้) | `{slots:{…}}` |
+
+หน้าทำข้อสอบ: เรียงลำดับ = ปุ่ม ↑ ↓ · ช่องที่ตัวเลือกเป็นข้อความล้วน = เมนูเลือก, มีรูป = การ์ดตัวเลือก · จัดกลุ่ม/ตารางตัวเลือก = ปุ่มตัวเลือกแบบชิป · ดรอปดาวน์/เติมคำ = ในประโยค · ติดป้าย = หมายเลขบนรูป + เมนูเลือกใต้รูป · ส่งแล้วเตือนทั้งข้อที่ยังไม่ตอบและข้อที่ตอบไม่ครบทุกช่อง · การมอบหมายมี `shuffle_items` / `shuffle_choices` ในฟอร์มตั้งค่า
+
+ข้อความในเติมคำเทียบหลัง `private.normalize_answer`: NFKC (ำ = ํา), ลำดับวรรณยุกต์กับ ํ, เลขไทย → 0–9, ตัดอักขระที่มองไม่เห็น, ยุบช่องว่าง, ไม่สนตัวพิมพ์เล็กใหญ่ — ไม่ตรวจคำสะกดใกล้เคียง · presentation ของดรอปดาวน์ใช้ชื่อรายการ `blank:<id>`
+
+**ลำดับที่เก็บต้องไม่บอกเฉลย:** ผู้เรียนอ่าน `options_json` ได้หลังเริ่มทำ จึงห้ามเก็บข้อเรียงลำดับในลำดับที่ถูก และห้ามเก็บฝั่งขวาของข้อจับคู่ให้ทุกคู่อยู่ตำแหน่งเดียวกับฝั่งซ้าย (`set_item_key` ปฏิเสธ, `item_key_status.key_valid = false`) — หน้าสร้างข้อสอบใช้รหัสสุ่มและเก็บแบบสลับให้อัตโนมัติ
+
+entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `scoring_json` = `{mode: 'partial' | 'all_or_nothing'}` ค่าเริ่มต้น **partial** (ตำแหน่ง/ช่องที่ถูก ÷ ทั้งหมด)
+
+**วิเคราะห์ข้อสอบรายส่วน (ขั้น 6):** `item_statistics` คืน `slots` ของข้อแบบใหม่ — หนึ่งแถวต่อส่วน (ตำแหน่งของข้อเรียงลำดับ · รายการฝั่งซ้าย/รายการที่จัดกลุ่ม/แถว · ช่องของดรอปดาวน์และเติมคำ เรียงตามที่ปรากฏในข้อความ · จุดบนรูป) มี `no` (ลำดับที่ผู้เรียนเห็น), `label` (ข้อความของส่วนนั้นถ้ามี), `correct_rate` (สัดส่วนคนที่ตอบส่วนนั้นถูก จากครั้งแรก), `answered` (จำนวนคนที่ตอบส่วนนั้น) · **ไม่มีจำนวนที่เลือกแต่ละตัวเลือกรายส่วน** เพื่อไม่ให้อนุมานเฉลยได้ · ข้อแบบเดิมได้ `slots: []` · ถูก/ผิดรายส่วนตัดสินด้วย `private.slot_hits` ตัวเดียวกับที่ให้คะแนน
+
+`start_attempt` คืน `presentation` = `{items:[item ids ตามลำดับที่เห็น], lists:{item id:{list:[ids]}}}` — ข้อเรียงลำดับสลับเสมอ (ไม่เริ่มในลำดับที่ถูก) · ฝั่งขวาของข้อจับคู่สลับเสมอ · อื่น ๆ ตาม `assessment_assignments.shuffle_items / shuffle_choices` (ค่าเริ่มต้นปิด) · เก็บไว้ที่ `assessment_attempts.presentation_json`
 
 ## 3. Error mapping (`src/core/errors.js`)
 

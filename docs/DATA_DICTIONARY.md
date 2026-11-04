@@ -1,4 +1,4 @@
-# Data Dictionary — SolveEdu Platform (Phase 2B)
+# Data Dictionary — SolveEdu Platform (Phase 2C)
 
 > สร้างอัตโนมัติจากฐานข้อมูล Local ด้วย `scripts/db-local/gen-data-dictionary.py` — อย่าแก้ไขด้วยมือ  
 > ทุกตารางใน `public` เปิด RLS; สิทธิ์รายคอลัมน์ดู `PERMISSIONS.md`
@@ -558,7 +558,7 @@
 |---|---|:-:|---|---|
 | `id` | uuid | ✓ | `gen_random_uuid()` |  |
 | `instrument_version_id` | uuid | ✓ |  |  |
-| `item_type` | text | ✓ |  | mcq_single\|mcq_multiple\|true_false\|numeric (Phase 2B) |
+| `item_type` | text | ✓ |  | mcq_single\|mcq_multiple\|true_false\|numeric (2B) · ordering\|matching\|classification\|choice_matrix\|dropdown\|cloze\|image_labelling (2C) |
 | `prompt` | text | ✓ |  |  |
 | `media_path` | text |  |  |  |
 | `options_json` | jsonb | ✓ | `'{}'::jsonb` |  |
@@ -569,7 +569,7 @@
 
 **Constraints**
 
-- `instrument_items_item_type_check`: `CHECK ((item_type = ANY (ARRAY['mcq_single'::text, 'mcq_multiple'::text, 'true_false'::text, 'numeric'::text])))`
+- `instrument_items_item_type_check`: `CHECK ((item_type = ANY (ARRAY['mcq_single'::text, 'mcq_multiple'::text, 'true_false'::text, 'numeric'::text, 'ordering'::text, 'matching'::text, 'classification'::text, 'choice_matrix'::text, 'dropdown'::text, 'cloze'::text, 'image_labelling'::text])))`
 - `instrument_items_max_score_check`: `CHECK (((max_score > (0)::numeric) AND (max_score <= (1000)::numeric)))`
 - `instrument_items_prompt_check`: `CHECK (((char_length(prompt) >= 1) AND (char_length(prompt) <= 5000)))`
 - `instrument_items_instrument_version_id_fkey`: `FOREIGN KEY (instrument_version_id) REFERENCES instrument_versions(id) ON DELETE CASCADE`
@@ -599,6 +599,8 @@
 | `updated_at` | timestamp with time zone | ✓ | `now()` |  |
 | `time_limit_minutes` | integer |  |  | เวลาทำต่อครั้ง (นาที); null = ใช้เฉพาะช่วงเปิด–ปิด — ตรึงเมื่อมีผู้เริ่มทำ |
 | `grace_minutes` | integer | ✓ | `5` | ช่วงผ่อนผันหลังเส้นตาย (นาที) ที่ยังรับคำตอบ — กันเน็ตช้าตอนส่ง |
+| `shuffle_items` | boolean | ✓ | `false` | สลับลำดับข้อต่อคน (บันทึกใน attempts.presentation_json) |
+| `shuffle_choices` | boolean | ✓ | `false` | สลับลำดับตัวเลือกต่อคน (ข้อเรียงลำดับและฝั่งขวาของข้อจับคู่สลับเสมอ) |
 
 **Constraints**
 
@@ -645,6 +647,7 @@
 | `draft_saved_at` | timestamp with time zone |  |  |  |
 | `auto_submitted` | boolean | ✓ | `false` | true = ระบบส่งให้เมื่อหมดเวลา (คะแนนจากคำตอบที่บันทึกไว้) |
 | `draft_seq` | bigint | ✓ | `0` | ลำดับการบันทึกคำตอบล่าสุดที่รับไว้ — ไม่ GRANT ให้ client; กันคำขอที่มาช้าทับคำตอบใหม่ |
+| `presentation_json` | jsonb |  |  | ลำดับข้อและตัวเลือกที่ผู้ทำเห็น {items:[ids], lists:{item:{list:[ids]}}} — สร้างโดย server ตอนเริ่ม |
 
 **Constraints**
 
