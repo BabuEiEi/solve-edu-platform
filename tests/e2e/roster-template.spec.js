@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures.js'
 import { signIn } from './helpers.js'
 
 test('the downloaded roster template is accepted by the importer as-is', async ({ page }, testInfo) => {

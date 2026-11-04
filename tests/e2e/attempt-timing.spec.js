@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures.js'
 import { signIn, watchCsp, IDS } from './helpers.js'
 
 const QUIZ = 'a1000000-0000-4000-a000-000000000001'

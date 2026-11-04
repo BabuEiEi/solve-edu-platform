@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures.js'
 import { signIn, watchCsp } from './helpers.js'
 
 const TYPES = 'a4000000-0000-4000-a000-000000000003' // demo assignment with the new item types

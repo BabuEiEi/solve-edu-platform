@@ -26,13 +26,20 @@ alter table public.instrument_items
 comment on column public.instrument_items.scoring_mode is
   'partial | all_or_nothing · null = ค่าเริ่มต้นของประเภท (mcq_multiple: all_or_nothing, ข้อแบบใหม่: partial) · ไม่ใช่ความลับ (2C.1)';
 
-set local session_replication_role = replica;  -- one-off copy: skip the draft-only guards
-update public.instrument_items i
-   set scoring_mode = k.scoring_json ->> 'mode'
-  from private.instrument_answer_keys k
- where k.item_id = i.id and k.scoring_json ? 'mode';
-update private.instrument_answer_keys set scoring_json = '{}'::jsonb where scoring_json <> '{}'::jsonb;
-set local session_replication_role = origin;
+-- One-off copy that skips the draft-only guards. SET LOCAL inside DO (always
+-- one transaction), so the setting ends with it whatever tool runs the file.
+-- (SET, not set_config(): Supabase lets the postgres role SET this parameter
+-- but not set it through the function.)
+do $$
+begin
+  set local session_replication_role = replica;
+  update public.instrument_items i
+     set scoring_mode = k.scoring_json ->> 'mode'
+    from private.instrument_answer_keys k
+   where k.item_id = i.id and k.scoring_json ? 'mode';
+  update private.instrument_answer_keys set scoring_json = '{}'::jsonb where scoring_json <> '{}'::jsonb;
+  set local session_replication_role = origin;
+end $$;
 
 alter table private.instrument_answer_keys
   add constraint instrument_answer_keys_scoring_moved check (scoring_json = '{}'::jsonb);

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures.js'
 import { signIn } from './helpers.js'
 
 // Anything that would reveal the answer key if it reached the browser

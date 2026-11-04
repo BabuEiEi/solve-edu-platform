@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures.js'
 import { signIn, watchCsp, IDS } from './helpers.js'
 
 const PICTURE = 'supabase/seed-media/assessment-media/a1000000-0000-4000-a000-000000000002/afl-cycle.png'

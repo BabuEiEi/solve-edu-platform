@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures.js'
 import { signIn } from './helpers.js'
 
 test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures.js'
 import { signIn, watchCsp, IDS } from './helpers.js'
 
 test('trainer builds ordering + matching items, publishes, assigns; a trainee scores 2/2', async ({
