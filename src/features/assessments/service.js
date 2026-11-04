@@ -9,7 +9,17 @@ export const ITEM_COLUMNS = 'id, item_type, prompt, media_path, options_json, ma
 
 const withMyAttempts = `${ASSIGNMENT_COLUMNS}, courses ( id, title ), assessment_attempts ( ${ATTEMPT_COLUMNS} ), assessment_extra_attempts ( id )`
 
-export function createAssessmentService(client) {
+export function createAssessmentService(client, { restUrl = null, apiKey = null } = {}) {
+  // Latest access token, kept for keepalive saves: a closing page cannot wait for supabase-js.
+  let accessToken = null
+  try {
+    client.auth?.onAuthStateChange?.((_event, session) => {
+      accessToken = session?.access_token ?? null
+    })
+  } catch {
+    /* clients created with an accessToken option have no auth API (integration tests) */
+  }
+
   return {
     /** Published assignments of the given cohorts, with only the caller's attempts embedded. */
     async listMyAssignments(userId, cohortIds) {
@@ -87,6 +97,30 @@ export function createAssessmentService(client) {
         'assessments.save_draft'
       )
       return rows?.[0] ?? null
+    },
+
+    /**
+     * Last-chance save while the page is hidden or closing (switching apps on a phone,
+     * closing the tab). A keepalive request the browser completes even after the page
+     * is gone; fire-and-forget. Returns false when it could not be sent.
+     */
+    saveDraftKeepalive(attemptId, responses) {
+      if (!restUrl || !apiKey || !accessToken) return false
+      try {
+        fetch(`${restUrl}/rpc/save_attempt_draft`, {
+          method: 'POST',
+          keepalive: true,
+          headers: {
+            apikey: apiKey,
+            Authorization: `Bearer ${accessToken}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ p_attempt: attemptId, p_responses: responses }),
+        }).catch(() => {})
+        return true
+      } catch {
+        return false
+      }
     },
 
     /** Only the answers go up; score, passed and timestamps come back from the server. */

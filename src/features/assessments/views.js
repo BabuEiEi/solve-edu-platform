@@ -17,6 +17,7 @@ import {
 } from './logic.js'
 
 const AUTOSAVE_DELAY_MS = 1500
+const LEAVE_PROMPT = 'ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่'
 const AUTOSAVE_RETRY_MS = 10_000
 
 const primaryBtn =
@@ -342,6 +343,7 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
     const done = () => {
       finished = true
       stop()
+      detach()
       navigate(resultPath(attempt.attempt_id))
     }
 
@@ -423,6 +425,7 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
     form.oninput = (e) => {
       confirmUnanswered = false
       saveStatus.dataset.state = 'dirty'
+      saveStatus.textContent = 'กำลังบันทึก…'
       clearTimeout(saveTimer)
       saveTimer = setTimeout(saveNow, e.target?.type === 'text' ? AUTOSAVE_DELAY_MS : 0)
     }
@@ -455,6 +458,64 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
       update()
       tick = setInterval(update, 1000)
     }
+
+    // ---------- leaving with unsaved answers ----------
+    const unsaved = () => !finished && saveStatus.dataset.state !== 'saved'
+    // Prompts only while this exam is on screen; a stale page removes its own listeners.
+    const promptNeeded = () => {
+      if (!form.isConnected) {
+        detach()
+        return false
+      }
+      return unsaved()
+    }
+    // Keepalive: the browser completes it even if the page is frozen or closed right after.
+    const flushKeepalive = () => {
+      if (!unsaved()) return
+      const body = onScreen()
+      if (body !== lastSaved) services.assessments.saveDraftKeepalive?.(attempt.attempt_id, JSON.parse(body))
+    }
+    // Closing the tab / reloading: browsers show their own wording, not ours.
+    const onBeforeUnload = (e) => {
+      if (!promptNeeded()) return
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    const onPageHide = () => flushKeepalive()
+    // Switching apps or locking the phone hides the page; it may never come back.
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushKeepalive()
+      else saveNow() // back again: reconcile with the server and refresh the status
+    }
+    // Links and sign-out inside the app: our own Thai prompt.
+    const onLeaveClick = (e) => {
+      const target = e.target.closest?.('a[href^="#"], [data-action="sign-out"]')
+      if (!target || form.contains(target) || !promptNeeded()) return
+      if (!window.confirm(LEAVE_PROMPT)) {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        return
+      }
+      flushKeepalive()
+    }
+    const onHashChange = () => {
+      if (form.isConnected) return
+      flushKeepalive()
+      stop()
+      detach()
+    }
+    function detach() {
+      window.removeEventListener('beforeunload', onBeforeUnload)
+      window.removeEventListener('pagehide', onPageHide)
+      window.removeEventListener('hashchange', onHashChange)
+      document.removeEventListener('visibilitychange', onVisibility)
+      document.removeEventListener('click', onLeaveClick, true)
+    }
+    window.addEventListener('beforeunload', onBeforeUnload)
+    window.addEventListener('pagehide', onPageHide)
+    window.addEventListener('hashchange', onHashChange)
+    document.addEventListener('visibilitychange', onVisibility)
+    document.addEventListener('click', onLeaveClick, true)
     return undefined
   }
 

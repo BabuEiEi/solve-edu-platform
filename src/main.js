@@ -1,5 +1,5 @@
 import './styles/main.css'
-import { supabase, isConfigured } from './core/supabaseClient.js'
+import { supabase, isConfigured, restConfig } from './core/supabaseClient.js'
 import { createAuthService } from './core/auth.js'
 import { deriveCapabilities } from './core/permissions.js'
 import { compileRoutes, resolveRoute } from './core/router.js'
@@ -104,7 +104,7 @@ async function boot() {
     media: createMediaService(supabase),
     builder: createBuilderService(supabase),
     preregistration: createPreregistrationService(supabase),
-    assessments: createAssessmentService(supabase),
+    assessments: createAssessmentService(supabase, restConfig),
     quizzes: createQuizBuilderService(supabase),
     assignments: createAssignmentService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),

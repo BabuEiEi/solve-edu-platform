@@ -229,6 +229,22 @@ describe('assessment service', () => {
     expect(toUserMessage({ code: 'SE003' })).toMatch(/ส่งคำตอบ/)
   })
 
+  it('keepalive save: raw POST with the latest token, browser finishes it after the page closes', async () => {
+    let listener
+    const client = { auth: { onAuthStateChange: (cb) => (listener = cb) } }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('[]'))
+    const svc = createAssessmentService(client, { restUrl: 'https://x.example.test/rest/v1', apiKey: 'pk' })
+    expect(svc.saveDraftKeepalive('t1', {})).toBe(false) // no session yet: nothing sent
+    listener('TOKEN_REFRESHED', { access_token: 'tok2' })
+    expect(svc.saveDraftKeepalive('t1', { i1: { choice: 'a' } })).toBe(true)
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://x.example.test/rest/v1/rpc/save_attempt_draft')
+    expect(init).toMatchObject({ method: 'POST', keepalive: true })
+    expect(init.headers).toMatchObject({ apikey: 'pk', Authorization: 'Bearer tok2' })
+    expect(JSON.parse(init.body)).toEqual({ p_attempt: 't1', p_responses: { i1: { choice: 'a' } } })
+    fetchMock.mockRestore()
+  })
+
   it('saveDraft sends only the attempt id and answers', async () => {
     const c = fakeClient({ data: [{ saved_at: 'x', finalized: false }], error: null })
     expect(await createAssessmentService(c).saveDraft('t1', { i1: { choice: 'a' } })).toEqual({
@@ -561,6 +577,103 @@ describe('exam: server autosave and countdown', () => {
     expect(svc.getItems).not.toHaveBeenCalled()
     expect(el.querySelector('form[data-form=attempt]')).toBeNull()
     expect(window.location.hash).toBe('#/assessments/attempts/t1')
+  })
+
+  describe('leaving with unsaved answers', () => {
+    const svcWith = () => ({
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(async () => ({ saved_at: T0.toISOString(), finalized: false })),
+      saveDraftKeepalive: vi.fn(() => true),
+    })
+    const typeNumber = (el, v) => {
+      const num = el.querySelector('input[name="q:i4"]')
+      num.value = v
+      num.dispatchEvent(new Event('input', { bubbles: true })) // debounced: still unsaved
+    }
+    const beforeUnload = () => {
+      const e = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(e)
+      return e.defaultPrevented
+    }
+    const setVisibility = (state) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+      document.dispatchEvent(new Event('visibilitychange'))
+    }
+    afterEach(() => {
+      delete document.visibilityState
+      vi.restoreAllMocks()
+    })
+
+    it('closing or reloading asks first while answers are unsaved, not once they are saved', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      expect(beforeUnload()).toBe(false) // restored answers are already on the server
+      typeNumber(el, '75')
+      expect(el.querySelector('[data-save-status]').textContent).toBe('กำลังบันทึก…')
+      expect(beforeUnload()).toBe(true)
+      await vi.advanceTimersByTimeAsync(1600)
+      expect(svc.saveDraft).toHaveBeenCalledTimes(1)
+      expect(beforeUnload()).toBe(false)
+    })
+
+    it('switching apps sends a keepalive save of what is on screen; coming back reconciles', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      typeNumber(el, '75')
+      setVisibility('hidden')
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledWith('t1', { i1: { choice: 'a' }, i4: { value: 75 } })
+      setVisibility('visible')
+      await vi.advanceTimersByTimeAsync(0)
+      expect(svc.saveDraft).toHaveBeenCalledWith('t1', { i1: { choice: 'a' }, i4: { value: 75 } })
+    })
+
+    it('the page being closed (pagehide) sends a keepalive save', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      typeNumber(el, '12')
+      window.dispatchEvent(new Event('pagehide'))
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledWith('t1', { i1: { choice: 'a' }, i4: { value: 12 } })
+    })
+
+    it('links inside the app ask "ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่"; cancel stays, OK saves then leaves', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      const nav = document.createElement('a')
+      nav.href = '#/assessments'
+      document.body.append(nav)
+      typeNumber(el, '75')
+      const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+
+      const stay = new MouseEvent('click', { bubbles: true, cancelable: true })
+      nav.dispatchEvent(stay)
+      expect(confirm).toHaveBeenLastCalledWith('ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่')
+      expect(stay.defaultPrevented).toBe(true)
+      expect(svc.saveDraftKeepalive).not.toHaveBeenCalled()
+
+      const go = new MouseEvent('click', { bubbles: true, cancelable: true })
+      nav.dispatchEvent(go)
+      expect(go.defaultPrevented).toBe(false)
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledTimes(1)
+    })
+
+    it('no prompt when everything is saved; listeners are removed after leaving the page', async () => {
+      const svc = svcWith()
+      const el = await mount(svc)
+      const confirm = vi.spyOn(window, 'confirm')
+      const nav = document.createElement('a')
+      nav.href = '#/assessments'
+      document.body.append(nav)
+      nav.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }))
+      expect(confirm).not.toHaveBeenCalled()
+
+      typeNumber(el, '75')
+      el.remove() // the router replaced the view
+      window.dispatchEvent(new Event('hashchange'))
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledTimes(1) // final save on the way out
+      expect(beforeUnload()).toBe(false)
+    })
   })
 
   it('overview tells the trainee the time limit before they start', async () => {
