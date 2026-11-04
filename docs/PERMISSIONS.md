@@ -101,11 +101,13 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `publish_instrument_version(p_version)` → `content_hash` | ผู้สร้างข้อสอบ | draft + มีอย่างน้อย 1 ข้อ + ทุกข้อมีเฉลยที่ถูกต้อง · ล็อก `FOR UPDATE` · hash ครอบเฉพาะเนื้อหาข้อ (ไม่รวมเฉลย — กันการเดาเฉลยจาก hash) |
 | `clone_instrument_version(p_version)` → uuid ฉบับร่างใหม่ | ผู้สร้างข้อสอบ | ร่างได้ทีละ 1 ฉบับ (`23505`) · คัดลอกข้อ+เฉลยฝั่ง server · audit `CLONE_VERSION` |
 | `start_attempt(p_assignment)` → `(attempt_id, attempt_no, started_at, resumed, deadline_at, server_now, draft, timed_out)` | trainee active ของรุ่น | assignment `published` · ครั้งที่ค้างอยู่ → ทำต่อ (ถ้ายังไม่เลยเส้นตาย+ผ่อนผัน) หรือ **ส่งอัตโนมัติจากคำตอบที่บันทึกไว้** (`timed_out`, ไม่เริ่มครั้งใหม่ในคำขอเดียวกัน) · ครั้งใหม่: อยู่ในช่วงเวลา (SE001) · จำนวนครั้ง = `attempt_limit` + สิทธิ์ทำเพิ่มของคนนั้น (SE002) · advisory lock ต่อ (assignment, คน) + partial unique index |
-| `save_attempt_draft(p_attempt, p_responses)` → `(saved_at, finalized)` (2B.1) | เจ้าของ attempt | ยังไม่ส่ง (SE003) · ตรวจรูปแบบเหมือนตอนส่ง (22023) · เลยเส้นตาย+ผ่อนผันแล้ว → ไม่บันทึก แต่ส่งอัตโนมัติจากคำตอบที่บันทึกไว้ก่อนหน้า (`finalized = true`) |
-| `submit_attempt(p_attempt, p_responses)` → คะแนนรวม + `auto_submitted` | เจ้าของ attempt | ยังไม่ส่ง (SE003) · ภายในเส้นตาย+ผ่อนผัน: ให้คะแนนคำตอบที่ส่ง · เลยแล้ว: **ไม่ใช้คำตอบที่ส่งมาช้า** ให้คะแนนจากคำตอบที่บันทึกไว้ · ให้คะแนนจาก `private.instrument_answer_keys` · ประทับ `submitted_at`/`score`/`passed` · คืนเฉพาะคะแนนรวม |
+| `save_attempt_draft(p_attempt, p_responses, p_seq = null)` → `(saved_at, finalized, stale)` (2B.1) | เจ้าของ attempt | ยังไม่ส่ง (SE003) · ตรวจรูปแบบเหมือนตอนส่ง (22023) · เลยเส้นตาย+ผ่อนผันแล้ว → ไม่บันทึก แต่ส่งอัตโนมัติจากคำตอบที่บันทึกไว้ก่อนหน้า (`finalized = true`) · `p_seq` ไม่ใหม่กว่า `draft_seq` → ไม่บันทึก (`stale = true`) |
+| `submit_attempt(p_attempt, p_responses, p_seq = null)` → คะแนนรวม + `auto_submitted` | เจ้าของ attempt | ยังไม่ส่ง (SE003) · หน้าที่ถูกหน้าใหม่กว่าแทนที่ส่งไม่ได้ (SE005) · ภายในเส้นตาย+ผ่อนผัน: ให้คะแนนคำตอบที่ส่ง · เลยแล้ว: **ไม่ใช้คำตอบที่ส่งมาช้า** ให้คะแนนจากคำตอบที่บันทึกไว้ · ให้คะแนนจาก `private.instrument_answer_keys` · ประทับ `submitted_at`/`score`/`passed` · คืนเฉพาะคะแนนรวม |
 | `private.finalize_expired_attempts()` (2B.1) | `pg_cron` ทุก 1 นาที (client เรียกไม่ได้) | ปิดครั้งที่เลยเส้นตาย+ผ่อนผันด้วยคำตอบที่บันทึกไว้ · lock เดียวกับ RPC · แต่ละแถวใน subtransaction |
 
 เส้นตาย = ค่าที่มาก่อนระหว่าง `started_at + time_limit_minutes` กับ `close_at` (ค่าปัจจุบันของการมอบหมาย) · ช่วงผ่อนผัน `grace_minutes` ค่าเริ่มต้น 5 นาที
+
+ลำดับการบันทึก (2B.1): `start_attempt` คืน `draft_seq` เป็นเลขฐานของหน้านั้น (สูงกว่าค่าที่เก็บไว้ 1,000,000) · หน้าบวกเลขทีละ 1 ทุกครั้งที่บันทึก/ส่ง · server รับเฉพาะเลขที่ใหม่กว่า → คำขอที่มาช้าไม่ทับคำตอบใหม่ และหน้าที่เปิดล่าสุดชนะ (`draft_seq` ไม่ GRANT ให้ client)
 
 ไม่รับคะแนนหรือเวลาจาก client (ทดสอบว่าไม่มีพารามิเตอร์ `p_score`, `p_started_at`, `p_submitted_at`, `p_passed`)
 
@@ -125,7 +127,7 @@ path = `<resource_id>/<random>.<ext>` — โฟลเดอร์แรกก�
 
 `private.audit_logs` (append-only, client อ่านไม่ได้) บันทึกอัตโนมัติเมื่อ INSERT/UPDATE/DELETE ใน `organization_memberships`, `platform_role_assignments`, `cohort_memberships`, `mentor_assignments` และทุกครั้งที่เรียก `admin_set_profile_status` (actor, ค่าเดิม, ค่าใหม่, เหตุผล)
 
-Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (สร้าง/แก้/ลบ) · ทุกการแก้/ลบ `assessment_attempts` หลังสร้าง · การเปลี่ยนสถานะ `instrument_versions` · `SET_ANSWER_KEY` (ไม่เก็บเนื้อหาเฉลย) · `CLONE_VERSION`
+Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (สร้าง/แก้/ลบ) · การแก้คอลัมน์หลักฐานของ `assessment_attempts` (สถานะ เวลา คะแนน — **ไม่รวมการบันทึกคำตอบระหว่างทำ** ตั้งแต่ 2B.1) และการลบ · การเปลี่ยนสถานะ `instrument_versions` · `SET_ANSWER_KEY` (ไม่เก็บเนื้อหาเฉลย) · `CLONE_VERSION`
 
 ## 6. Policy Test Matrix → ไฟล์ทดสอบ
 
@@ -152,6 +154,7 @@ Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (ส�
 | ให้สิทธิ์ทำเพิ่มแก่ตนเอง / mentor ให้สิทธิ์ / ปลอม `granted_by` / แก้หรือลบสิทธิ์ | DENY | `150` + integration |
 | วิทยากร/ครูพี่เลี้ยง (หรือผู้เรียนเองผ่าน REST) อ่านคำตอบระหว่างทำ | DENY (42501) | `150` (mutation test ยืนยัน) + integration |
 | เผยแพร่การมอบหมายโดยไม่มีเวลาปิดรับ | DENY (23514) | `140` (mutation test ยืนยัน) |
+| การบันทึกที่มาช้าทับคำตอบใหม่ / หน้าเก่า (อีกเครื่อง) บันทึกหรือส่งหลังมีหน้าใหม่ | DENY (`stale`, SE005) | `160` (mutation test ยืนยัน) + integration + E2E สองเครื่อง |
 | Trainee อ่าน/อัปโหลดไฟล์ของบทเรียน draft หรือที่ตนไม่มีสิทธิ์ | DENY | `070` + `tests/integration/storage.test.js` |
 | ผู้เรียนเห็นหน่วย/บทเรียน draft; ผู้แก้เรียงลำดับข้ามหลักสูตร | DENY | `050`, `080` |
 | ฝัง `<script>`/`onerror`/`javascript:` ในบล็อกข้อความ | DENY (DB CHECK) | `080` |

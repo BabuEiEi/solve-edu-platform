@@ -124,6 +124,24 @@ run('Attempt timing (Supabase Local, real clock)', () => {
     expect((await staff().listAttempts(id)).filter((x) => x.user_id === U.teacher_a1)).toHaveLength(1)
   })
 
+  it('ordered saves: a late older save is ignored; a newer page makes the older one stale (SE005 on submit)', async () => {
+    const id = await assign('ลำดับการบันทึก', { minutes: 30, grace: 5 })
+    const pageA = learner('teacher_b1')
+    const a = await pageA.start(id)
+    expect(await pageA.saveDraft(a.attempt_id, ALL_RIGHT, a.draft_seq + 2)).toMatchObject({ stale: false })
+    expect(await pageA.saveDraft(a.attempt_id, ONE_RIGHT, a.draft_seq + 1)).toMatchObject({ stale: true })
+
+    const pageB = learner('teacher_b1') // another device, same person
+    const b = await pageB.start(id)
+    expect(b).toMatchObject({ attempt_id: a.attempt_id, resumed: true, draft: ALL_RIGHT })
+    expect(b.draft_seq).toBeGreaterThan(a.draft_seq + 2)
+    expect(await pageA.saveDraft(a.attempt_id, ONE_RIGHT, a.draft_seq + 3)).toMatchObject({ stale: true })
+    await expect(pageA.submit(a.attempt_id, ONE_RIGHT, a.draft_seq + 4)).rejects.toMatchObject({
+      code: 'SE005',
+    })
+    expect(await pageB.submit(b.attempt_id, ALL_RIGHT, b.draft_seq + 1)).toMatchObject({ score: 5 })
+  })
+
   it('a trainer grants one extra attempt; the trainee can start again', async () => {
     const id = await assign('ให้สิทธิ์เพิ่ม', { minutes: 30 })
     const a2 = learner('teacher_a2')

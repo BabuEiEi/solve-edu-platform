@@ -57,6 +57,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261103090340_assessment_assignment_guard.sql` | หลังมีผู้เริ่มทำ ห้ามแก้เกณฑ์ผ่าน/ประเภท/หลักสูตร หรือย้อนเป็นร่าง (SE004) |
 | `20261104090000_attempt_timing.sql` | (2B.1) เวลาทำต่อครั้ง, ช่วงผ่อนผัน, `save_attempt_draft`, ส่งอัตโนมัติเมื่อหมดเวลา (lazy + `pg_cron`), `assessment_extra_attempts` |
 | `20261104090100_close_required_drafts_private.sql` | (2B.1) เผยแพร่ต้องมีเวลาปิดรับ · ถอนสิทธิ์อ่าน `draft_json` จาก client |
+| `20261104090200_draft_sequence.sql` | (2B.1) ลำดับการบันทึก (`draft_seq`, `stale`, SE005) · audit attempts เฉพาะคอลัมน์หลักฐาน |
 
 ### เหตุผลการออกแบบสำคัญ
 

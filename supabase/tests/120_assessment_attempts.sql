@@ -14,7 +14,7 @@ grant select on all_right to authenticated;
 
 -- ---------- privileges ----------
 select ok(not has_function_privilege('anon', 'public.start_attempt(uuid)', 'execute')
-      and not has_function_privilege('anon', 'public.submit_attempt(uuid,jsonb)', 'execute'),
+      and not has_function_privilege('anon', 'public.submit_attempt(uuid,jsonb,bigint)', 'execute'),
   'anon cannot execute start/submit');
 select ok(not has_function_privilege('authenticated', 'private.score_response(text,jsonb,jsonb,jsonb)', 'execute')
       and not has_function_privilege('authenticated', 'private.response_error(text,jsonb,jsonb)', 'execute'),

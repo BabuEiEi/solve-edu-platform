@@ -23,7 +23,7 @@ grant select on r to authenticated;
 create or replace function pg_temp.body(p text) returns jsonb language sql stable as $$ select body from r where k = p $$;
 
 -- ---------- privileges / pure helpers ----------
-select ok(not has_function_privilege('anon', 'public.save_attempt_draft(uuid,jsonb)', 'execute'),
+select ok(not has_function_privilege('anon', 'public.save_attempt_draft(uuid,jsonb,bigint)', 'execute'),
   'anon cannot save drafts');
 select ok(not has_function_privilege('authenticated', 'private.finalize_expired_attempts()', 'execute')
       and not has_function_privilege('authenticated', 'private.finalize_attempt(uuid,jsonb,boolean)', 'execute'),

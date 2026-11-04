@@ -16,7 +16,7 @@ import {
   formatRemaining,
 } from './logic.js'
 
-const AUTOSAVE_DELAY_MS = 1500
+const AUTOSAVE_DELAY_MS = 800
 const LEAVE_PROMPT = 'ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่'
 const AUTOSAVE_RETRY_MS = 10_000
 
@@ -302,6 +302,9 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
     let saveTimer = null
     let tick = null
     let lastSaved = JSON.stringify(attempt.draft ?? {})
+    // Every save/submit is numbered from this page's base; the server keeps only newer ones.
+    let seq = attempt.draft_seq ?? null
+    const nextSeq = () => (seq === null ? null : ++seq)
 
     render(
       el,
@@ -321,6 +324,10 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
           <span class="text-sm text-ink-500">ครั้งที่ ${attempt.attempt_no} · เริ่ม ${formatThaiDateTime(attempt.started_at)}</span>
         </div>
         ${pageHeader(assignment.title, '')}
+        <div data-slot="top" aria-live="assertive"></div>
+        <p class="mb-4 text-xs text-ink-500">
+          ระบบบันทึกคำตอบอัตโนมัติ ถ้าเบราว์เซอร์ถามก่อนปิดหน้า แปลว่ายังบันทึกไม่เสร็จ ให้กดอยู่ในหน้านี้สักครู่
+        </p>
         <form data-form="attempt" class="space-y-4" novalidate>
           ${items.map((item, i) => renderItem(item, i, saved, media))}
           <div data-slot="message" aria-live="polite"></div>
@@ -340,6 +347,24 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
       clearTimeout(saveTimer)
       clearInterval(tick)
     }
+    // A page opened later (another device, or this one after a reload) took over.
+    const superseded = () => {
+      finished = true
+      stop()
+      detach()
+      form.querySelectorAll('input, button').forEach((c) => (c.disabled = true))
+      const top = el.querySelector('[data-slot=top]')
+      render(
+        top,
+        html`<div class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900" role="alert" data-superseded>
+          <span class="flex-1">มีการทำต่อจากอีกเครื่องแล้ว กรุณาโหลดหน้าใหม่</span>
+          <button type="button" class="${primaryBtn}" data-reload>โหลดหน้าใหม่</button>
+        </div>`
+      )
+      top.querySelector('[data-reload]').onclick = () => window.location.reload()
+      top.scrollIntoView?.({ block: 'center' })
+    }
+
     const done = () => {
       finished = true
       stop()
@@ -365,8 +390,9 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
       saving = true
       saveStatus.dataset.state = 'saving'
       try {
-        const r = await services.assessments.saveDraft(attempt.attempt_id, JSON.parse(body))
+        const r = await services.assessments.saveDraft(attempt.attempt_id, JSON.parse(body), nextSeq())
         if (r?.finalized) return done() // time was up: submitted from earlier saved answers
+        if (r?.stale) return superseded()
         lastSaved = body
         saveStatus.textContent = `บันทึกคำตอบแล้ว ${formatThaiDateTime(r?.saved_at ?? new Date())}`
         saveStatus.dataset.state = onScreen() === lastSaved ? 'saved' : 'dirty'
@@ -406,11 +432,12 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
       form.querySelectorAll('input, button').forEach((c) => (c.disabled = true))
       if (timeUp) say('หมดเวลา — กำลังส่งคำตอบ', 'info')
       try {
-        await services.assessments.submit(attempt.attempt_id, built.responses)
+        await services.assessments.submit(attempt.attempt_id, built.responses, nextSeq())
         navigate(resultPath(attempt.attempt_id))
       } catch (err) {
         // Already submitted (another tab, or the server finalised it): show the stored result.
         if (err?.code === 'SE003') return navigate(resultPath(attempt.attempt_id))
+        if (err?.code === 'SE005') return superseded()
         if (timeUp) {
           return say('หมดเวลา และส่งไม่สำเร็จ — ระบบจะให้คะแนนจากคำตอบที่บันทึกไว้ล่าสุดโดยอัตโนมัติ', 'info')
         }
@@ -421,7 +448,13 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
       return undefined
     }
 
-    // A choice is saved at once; typing (numeric answers) waits for a pause.
+    // A choice is saved at once; typing (numeric answers) waits for a short pause,
+    // or saves as soon as the trainee leaves the field.
+    form.onchange = (e) => {
+      if (e.target?.type !== 'text') return
+      clearTimeout(saveTimer)
+      saveNow()
+    }
     form.oninput = (e) => {
       confirmUnanswered = false
       saveStatus.dataset.state = 'dirty'
@@ -473,7 +506,8 @@ export async function renderAssessmentView(el, { services, session }, { id }) {
     const flushKeepalive = () => {
       if (!unsaved()) return
       const body = onScreen()
-      if (body !== lastSaved) services.assessments.saveDraftKeepalive?.(attempt.attempt_id, JSON.parse(body))
+      if (body !== lastSaved)
+        services.assessments.saveDraftKeepalive?.(attempt.attempt_id, JSON.parse(body), nextSeq())
     }
     // Closing the tab / reloading: browsers show their own wording, not ours.
     const onBeforeUnload = (e) => {

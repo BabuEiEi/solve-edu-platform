@@ -209,10 +209,11 @@ describe('assessment service', () => {
 
   it('submit sends only the attempt id and answers (no score, no timestamps)', async () => {
     const c = fakeClient({ data: [{ score: 1 }], error: null })
-    const out = await createAssessmentService(c).submit('t1', { i1: { choice: 'b' } })
+    const out = await createAssessmentService(c).submit('t1', { i1: { choice: 'b' } }, 7)
     expect(c.rpc).toHaveBeenCalledWith('submit_attempt', {
       p_attempt: 't1',
       p_responses: { i1: { choice: 'b' } },
+      p_seq: 7,
     })
     expect(out).toEqual({ score: 1 })
   })
@@ -236,12 +237,12 @@ describe('assessment service', () => {
     const svc = createAssessmentService(client, { restUrl: 'https://x.example.test/rest/v1', apiKey: 'pk' })
     expect(svc.saveDraftKeepalive('t1', {})).toBe(false) // no session yet: nothing sent
     listener('TOKEN_REFRESHED', { access_token: 'tok2' })
-    expect(svc.saveDraftKeepalive('t1', { i1: { choice: 'a' } })).toBe(true)
+    expect(svc.saveDraftKeepalive('t1', { i1: { choice: 'a' } }, 9)).toBe(true)
     const [url, init] = fetchMock.mock.calls[0]
     expect(url).toBe('https://x.example.test/rest/v1/rpc/save_attempt_draft')
     expect(init).toMatchObject({ method: 'POST', keepalive: true })
     expect(init.headers).toMatchObject({ apikey: 'pk', Authorization: 'Bearer tok2' })
-    expect(JSON.parse(init.body)).toEqual({ p_attempt: 't1', p_responses: { i1: { choice: 'a' } } })
+    expect(JSON.parse(init.body)).toEqual({ p_attempt: 't1', p_responses: { i1: { choice: 'a' } }, p_seq: 9 })
     fetchMock.mockRestore()
   })
 
@@ -254,6 +255,7 @@ describe('assessment service', () => {
     expect(c.rpc).toHaveBeenCalledWith('save_attempt_draft', {
       p_attempt: 't1',
       p_responses: { i1: { choice: 'a' } },
+      p_seq: null,
     })
   })
 })
@@ -330,7 +332,7 @@ describe('assessment views', () => {
 
     form.requestSubmit()
     await flush()
-    expect(svc.submit).toHaveBeenCalledWith('t1', { i1: { choice: 'b' }, i4: { value: 75 } })
+    expect(svc.submit).toHaveBeenCalledWith('t1', { i1: { choice: 'b' }, i4: { value: 75 } }, null) // no base: unordered
     expect(window.location.hash).toBe('#/assessments/attempts/t1')
     el.remove()
   })
@@ -442,6 +444,7 @@ describe('exam: server autosave and countdown', () => {
     server_now: T0.toISOString(),
     draft: { i1: { choice: 'a' } },
     timed_out: false,
+    draft_seq: 1_000_000,
     ...over,
   })
   const ctx = (assessments) => ({
@@ -478,6 +481,9 @@ describe('exam: server autosave and countdown', () => {
     const form = el.querySelector('form[data-form=attempt]')
     expect(form.querySelector('input[name="q:i1"][value=a]').checked).toBe(true) // restored from the server
     expect(el.querySelector('[data-remaining]').textContent).toBe('10:00')
+    expect(el.textContent).toContain(
+      'ถ้าเบราว์เซอร์ถามก่อนปิดหน้า แปลว่ายังบันทึกไม่เสร็จ ให้กดอยู่ในหน้านี้สักครู่'
+    )
 
     const status = el.querySelector('[data-save-status]')
     const tf = form.querySelector('input[name="q:i3"][value=true]')
@@ -485,22 +491,34 @@ describe('exam: server autosave and countdown', () => {
     tf.dispatchEvent(new Event('input', { bubbles: true }))
     expect(status.dataset.state).toBe('dirty')
     await vi.advanceTimersByTimeAsync(0) // a choice is saved at once
-    expect(svc.saveDraft).toHaveBeenLastCalledWith('t1', { i1: { choice: 'a' }, i3: { value: true } })
+    expect(svc.saveDraft).toHaveBeenLastCalledWith(
+      't1',
+      { i1: { choice: 'a' }, i3: { value: true } },
+      1_000_001
+    )
     expect(status.textContent).toContain('บันทึกคำตอบแล้ว')
     expect(status.dataset.state).toBe('saved')
 
     const num = form.querySelector('input[name="q:i4"]')
     num.value = '7'
     num.dispatchEvent(new Event('input', { bubbles: true }))
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(svc.saveDraft).toHaveBeenCalledTimes(1) // typing waits for a pause
     await vi.advanceTimersByTimeAsync(600)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(1) // typing waits for a pause (0.8 s)
+    await vi.advanceTimersByTimeAsync(300)
     expect(svc.saveDraft).toHaveBeenCalledTimes(2)
-    expect(svc.saveDraft).toHaveBeenLastCalledWith('t1', {
-      i1: { choice: 'a' },
-      i3: { value: true },
-      i4: { value: 7 },
-    })
+    expect(svc.saveDraft).toHaveBeenLastCalledWith(
+      't1',
+      { i1: { choice: 'a' }, i3: { value: true }, i4: { value: 7 } },
+      1_000_002 // each save gets the next number
+    )
+
+    num.value = '75'
+    num.dispatchEvent(new Event('input', { bubbles: true }))
+    num.dispatchEvent(new Event('change', { bubbles: true })) // leaving the field saves at once
+    await vi.advanceTimersByTimeAsync(0)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(svc.saveDraft).toHaveBeenCalledTimes(3) // the pending debounce found nothing new
   })
 
   it('a change made while a save is in flight is saved right after it (not dropped)', async () => {
@@ -530,7 +548,11 @@ describe('exam: server autosave and countdown', () => {
     release({ saved_at: T0.toISOString(), finalized: false })
     await vi.advanceTimersByTimeAsync(0)
     expect(svc.saveDraft).toHaveBeenCalledTimes(2)
-    expect(svc.saveDraft).toHaveBeenLastCalledWith('t1', { i1: { choice: 'b' }, i3: { value: false } })
+    expect(svc.saveDraft).toHaveBeenLastCalledWith(
+      't1',
+      { i1: { choice: 'b' }, i3: { value: false } },
+      1_000_002
+    )
     expect(status.dataset.state).toBe('saved')
   })
 
@@ -548,8 +570,53 @@ describe('exam: server autosave and countdown', () => {
     expect(el.querySelector('[data-time-alert]').textContent).toBe('เหลือเวลา 5 นาที')
     await vi.advanceTimersByTimeAsync(5 * 60_000)
     expect(svc.submit).toHaveBeenCalledTimes(1)
-    expect(svc.submit).toHaveBeenCalledWith('t1', { i1: { choice: 'a' } })
+    expect(svc.submit).toHaveBeenCalledWith('t1', { i1: { choice: 'a' } }, 1_000_001)
     expect(window.location.hash).toBe('#/assessments/attempts/t1')
+  })
+
+  it('another page took over (stale save) → banner, inputs disabled, no more saves or prompts', async () => {
+    const svc = {
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(async () => ({ saved_at: null, finalized: false, stale: true })),
+      saveDraftKeepalive: vi.fn(),
+      submit: vi.fn(),
+    }
+    const el = await mount(svc)
+    const b = el.querySelector('input[name="q:i1"][value=b]')
+    b.checked = true
+    b.dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(el.querySelector('[data-superseded]').textContent).toContain(
+      'มีการทำต่อจากอีกเครื่องแล้ว กรุณาโหลดหน้าใหม่'
+    )
+    expect([...el.querySelectorAll('form input, form button')].every((c) => c.disabled)).toBe(true)
+    const e = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(e)
+    expect(e.defaultPrevented).toBe(false) // nothing of this page's is pending any more
+    await vi.advanceTimersByTimeAsync(20 * 60_000) // the countdown stopped: no time-up submit
+    expect(svc.submit).not.toHaveBeenCalled()
+  })
+
+  it('submitting from a page another device took over (SE005) shows the same banner', async () => {
+    const svc = {
+      getAssignment: async () => timed,
+      start: async () => started(),
+      getItems: async () => ITEMS,
+      saveDraft: vi.fn(),
+      submit: vi.fn(async () => {
+        throw Object.assign(new Error('x'), { code: 'SE005' })
+      }),
+    }
+    const el = await mount(svc)
+    const form = el.querySelector('form[data-form=attempt]')
+    form.requestSubmit()
+    await vi.advanceTimersByTimeAsync(0)
+    form.requestSubmit() // confirm unanswered items
+    await vi.advanceTimersByTimeAsync(0)
+    expect(el.querySelector('[data-superseded]')).not.toBeNull()
+    expect(window.location.hash).not.toBe('#/assessments/attempts/t1')
   })
 
   it('the server says time was up while saving → go to the result', async () => {
@@ -623,10 +690,14 @@ describe('exam: server autosave and countdown', () => {
       const el = await mount(svc)
       typeNumber(el, '75')
       setVisibility('hidden')
-      expect(svc.saveDraftKeepalive).toHaveBeenCalledWith('t1', { i1: { choice: 'a' }, i4: { value: 75 } })
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledWith(
+        't1',
+        { i1: { choice: 'a' }, i4: { value: 75 } },
+        1_000_001
+      )
       setVisibility('visible')
       await vi.advanceTimersByTimeAsync(0)
-      expect(svc.saveDraft).toHaveBeenCalledWith('t1', { i1: { choice: 'a' }, i4: { value: 75 } })
+      expect(svc.saveDraft).toHaveBeenCalledWith('t1', { i1: { choice: 'a' }, i4: { value: 75 } }, 1_000_002)
     })
 
     it('the page being closed (pagehide) sends a keepalive save', async () => {
@@ -634,7 +705,11 @@ describe('exam: server autosave and countdown', () => {
       const el = await mount(svc)
       typeNumber(el, '12')
       window.dispatchEvent(new Event('pagehide'))
-      expect(svc.saveDraftKeepalive).toHaveBeenCalledWith('t1', { i1: { choice: 'a' }, i4: { value: 12 } })
+      expect(svc.saveDraftKeepalive).toHaveBeenCalledWith(
+        't1',
+        { i1: { choice: 'a' }, i4: { value: 12 } },
+        1_000_001
+      )
     })
 
     it('links inside the app ask "ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่"; cancel stays, OK saves then leaves', async () => {

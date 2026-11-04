@@ -237,7 +237,7 @@ select ok(exists (select 1 from private.audit_logs
                    where table_name = 'public.assessment_attempts'
                      and record_id = '84000000-0000-4000-a000-000000000001'
                      and action = 'UPDATE'),
-  'Any change to an attempt is audited');
+  'Changes to an attempt''s evidence (score, status, times) are audited');
 
 -- ---------- revocation ----------
 update public.cohort_memberships set status = 'withdrawn'

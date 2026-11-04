@@ -69,7 +69,7 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 | รุ่นที่มอบหมายได้ | `program_courses.select('programs(id, name, cohorts(id, code, name, status))').eq('course_id')` | UI กรองเฉพาะรุ่นที่ผู้ใช้เป็น trainer/coordinator/ผู้จัดการ; server ตัดสินจริง |
 | แบบทดสอบของฉัน | `assessment_assignments.select('…, assessment_attempts(…)').eq('status','published').in('cohort_id', mine).eq('assessment_attempts.user_id', uid)` | |
 | เริ่ม/ทำต่อ · ส่ง | `rpc('start_attempt', { p_assignment })` → `{attempt_id, attempt_no, started_at, resumed, deadline_at, server_now, draft, timed_out}` · `rpc('submit_attempt', { p_attempt, p_responses })` → คะแนนรวม + `auto_submitted` | `p_responses` = `{ [item_id]: {choice} \| {choices} \| {value} }`; ข้อที่ไม่ตอบไม่ต้องส่ง · `timed_out` = หมดเวลาแล้ว ระบบส่งให้ → ไปหน้าผล |
-| บันทึกคำตอบระหว่างทำ (2B.1) | `rpc('save_attempt_draft', { p_attempt, p_responses })` → `{saved_at, finalized}` | ตัวเลือก: บันทึกทันที · ช่องตัวเลข: รอหยุดพิมพ์ 1.5 วินาที · `finalized` = หมดเวลาแล้ว → ไปหน้าผล · ไม่ใช้ localStorage |
+| บันทึกคำตอบระหว่างทำ (2B.1) | `rpc('save_attempt_draft', { p_attempt, p_responses, p_seq })` → `{saved_at, finalized, stale}` | ตัวเลือก: บันทึกทันที · ช่องตัวเลข: รอหยุดพิมพ์ 0.8 วินาที หรือบันทึกทันทีเมื่อออกจากช่อง · `p_seq` = `draft_seq` จาก `start_attempt` + ลำดับ · `finalized` = หมดเวลาแล้ว → ไปหน้าผล · `stale` = มีหน้าใหม่กว่า → แถบ "มีการทำต่อจากอีกเครื่องแล้ว กรุณาโหลดหน้าใหม่" และหยุดบันทึก · ไม่ใช้ localStorage |
 | บันทึกครั้งสุดท้ายตอนออกจากหน้า (2B.1) | `fetch(POST /rest/v1/rpc/save_attempt_draft, { keepalive: true })` พร้อม `apikey` + `Authorization: Bearer <token ล่าสุด>` | เมื่อหน้าถูกซ่อน (สลับแอป/พับจอ), `pagehide` (ปิดแท็บ), ออกด้วยลิงก์ในระบบ · fire-and-forget · token จาก `onAuthStateChange` (หน้าที่กำลังปิดรอ supabase-js ไม่ได้) |
 | เตือนก่อนออก (2B.1) | ยังบันทึกไม่เสร็จ: ลิงก์/ออกจากระบบในแอป → `confirm('ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่')` · ปิดแท็บ/รีเฟรช → `beforeunload` (เบราว์เซอร์แสดงข้อความมาตรฐานของตัวเอง กำหนดข้อความเองไม่ได้) | |
 | ตัวจับเวลา (2B.1) | นับถึง `deadline_at` โดยชดเชยนาฬิกาเครื่องด้วย `server_now` | หมดเวลา → ส่งสิ่งที่อยู่บนจอ (ข้อมูลตัวเลขที่พิมพ์ไม่ครบถูกข้าม); server รับถึงเส้นตาย+ผ่อนผัน |
@@ -90,6 +90,7 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 | `SE002` | ท่านทำแบบทดสอบนี้ครบจำนวนครั้งที่กำหนดแล้ว |
 | `SE003` | ส่งคำตอบของครั้งนี้ไปแล้ว (UI พาไปหน้าผลแทน) |
 | `SE004` | มีผู้เริ่มทำแล้ว จึงแก้ประเภท เกณฑ์ผ่าน หรือหลักสูตร หรือย้อนเป็นฉบับร่างไม่ได้ (2B.1: รวมเวลาทำต่อครั้ง) |
+| `SE005` | มีการทำต่อจากอีกเครื่องแล้ว กรุณาโหลดหน้าใหม่ (ส่งจากหน้าที่ถูกแทนที่) |
 | `PGRST116` | ไม่พบข้อมูลที่ต้องการ |
 | อื่น ๆ | ข้อความทั่วไป (ไม่เปิดเผยข้อความจากฐานข้อมูล) |
 

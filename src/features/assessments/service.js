@@ -90,10 +90,14 @@ export function createAssessmentService(client, { restUrl = null, apiKey = null 
       )
     },
 
-    /** Saves the answers so far on the server. { saved_at, finalized } — finalized: time was up, attempt submitted. */
-    async saveDraft(attemptId, responses) {
+    /**
+     * Saves the answers so far on the server, numbered by `seq` (newer wins).
+     * { saved_at, finalized, stale } — finalized: time was up, attempt submitted;
+     * stale: a page opened later (another device, or after a reload) took over.
+     */
+    async saveDraft(attemptId, responses, seq = null) {
       const rows = unwrap(
-        await client.rpc('save_attempt_draft', { p_attempt: attemptId, p_responses: responses }),
+        await client.rpc('save_attempt_draft', { p_attempt: attemptId, p_responses: responses, p_seq: seq }),
         'assessments.save_draft'
       )
       return rows?.[0] ?? null
@@ -104,7 +108,7 @@ export function createAssessmentService(client, { restUrl = null, apiKey = null 
      * closing the tab). A keepalive request the browser completes even after the page
      * is gone; fire-and-forget. Returns false when it could not be sent.
      */
-    saveDraftKeepalive(attemptId, responses) {
+    saveDraftKeepalive(attemptId, responses, seq = null) {
       if (!restUrl || !apiKey || !accessToken) return false
       try {
         fetch(`${restUrl}/rpc/save_attempt_draft`, {
@@ -115,7 +119,7 @@ export function createAssessmentService(client, { restUrl = null, apiKey = null 
             Authorization: `Bearer ${accessToken}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ p_attempt: attemptId, p_responses: responses }),
+          body: JSON.stringify({ p_attempt: attemptId, p_responses: responses, p_seq: seq }),
         }).catch(() => {})
         return true
       } catch {
@@ -124,9 +128,9 @@ export function createAssessmentService(client, { restUrl = null, apiKey = null 
     },
 
     /** Only the answers go up; score, passed and timestamps come back from the server. */
-    async submit(attemptId, responses) {
+    async submit(attemptId, responses, seq = null) {
       const rows = unwrap(
-        await client.rpc('submit_attempt', { p_attempt: attemptId, p_responses: responses }),
+        await client.rpc('submit_attempt', { p_attempt: attemptId, p_responses: responses, p_seq: seq }),
         'assessments.submit'
       )
       return rows?.[0] ?? null

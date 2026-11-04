@@ -644,6 +644,7 @@
 | `draft_json` | jsonb |  |  | คำตอบที่บันทึกระหว่างทำ — ไม่ GRANT ให้ client (ผู้เรียนรับคืนผ่าน start_attempt เท่านั้น); ใช้ให้คะแนนเมื่อหมดเวลา; ล้างเมื่อส่งแล้ว |
 | `draft_saved_at` | timestamp with time zone |  |  |  |
 | `auto_submitted` | boolean | ✓ | `false` | true = ระบบส่งให้เมื่อหมดเวลา (คะแนนจากคำตอบที่บันทึกไว้) |
+| `draft_seq` | bigint | ✓ | `0` | ลำดับการบันทึกคำตอบล่าสุดที่รับไว้ — ไม่ GRANT ให้ client; กันคำขอที่มาช้าทับคำตอบใหม่ |
 
 **Constraints**
 
