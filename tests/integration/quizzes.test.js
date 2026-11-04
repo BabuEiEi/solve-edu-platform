@@ -86,6 +86,7 @@ run('Quiz authoring (Supabase Local)', () => {
         attempt_limit: 1,
         passing_percent: 50,
         status: 'published',
+        close_at: '2027-03-31T16:59:00Z',
       })
       .select('id')
       .single()

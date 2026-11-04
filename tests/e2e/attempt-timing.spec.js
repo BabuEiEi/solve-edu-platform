@@ -17,6 +17,7 @@ test('timed test: countdown, answers saved on the server follow the trainee to a
   await form.locator('[name=purpose]').selectOption('formative')
   await form.locator('[name=title]').fill(TITLE)
   await form.locator('[name=time_limit_minutes]').fill('15')
+  await form.locator('[name=close_at]').fill('2027-03-31T16:00')
   await expect(form.locator('[name=grace_minutes]')).toHaveValue('5')
   await form.getByRole('button', { name: 'บันทึกและเผยแพร่' }).click()
   await expect(trainer.getByRole('heading', { name: TITLE })).toBeVisible()

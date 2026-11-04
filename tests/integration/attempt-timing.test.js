@@ -39,7 +39,7 @@ run('Attempt timing (Supabase Local, real clock)', () => {
   const staff = () => createAssignmentService(supabaseAs(env, 'trainer'))
   const learner = (key) => createAssessmentService(supabaseAs(env, key))
 
-  /** A published assignment of the demo quiz; closes `closeInMs` from now (null = no close). */
+  /** A published assignment of the demo quiz; closes `closeInMs` from now (default: in a day). */
   const assign = async (title, { closeInMs = null, grace = 0, limit = 1, minutes = null } = {}) =>
     (
       await staff().create({
@@ -54,7 +54,7 @@ run('Attempt timing (Supabase Local, real clock)', () => {
         time_limit_minutes: minutes,
         grace_minutes: grace,
         open_at: null,
-        close_at: closeInMs === null ? null : new Date((await serverNow(env)) + closeInMs).toISOString(),
+        close_at: new Date((await serverNow(env)) + (closeInMs ?? 86_400_000)).toISOString(), // always closes
         instructions: null,
       })
     ).id
@@ -70,6 +70,14 @@ run('Attempt timing (Supabase Local, real clock)', () => {
     expect(resumed).toMatchObject({ attempt_id: t.attempt_id, resumed: true, draft: ONE_RIGHT })
     expect(JSON.stringify(resumed)).not.toMatch(KEY_MARKERS)
     await expect(learner('teacher_a2').saveDraft(t.attempt_id, {})).rejects.toMatchObject({ code: '42501' })
+    // In-progress answers stay private until submitted: no client role can read draft_json.
+    for (const key of ['trainer', 'mentor', 'teacher_a1']) {
+      const { error } = await supabaseAs(env, key)
+        .from('assessment_attempts')
+        .select('draft_json')
+        .eq('id', t.attempt_id)
+      expect(error?.code).toBe('42501')
+    }
   })
 
   it('saves racing a submit: one submit wins, later saves get SE003, responses written once', async () => {

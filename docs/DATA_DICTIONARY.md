@@ -590,7 +590,7 @@
 | `title` | text | ✓ |  |  |
 | `instructions` | text |  |  |  |
 | `open_at` | timestamp with time zone |  |  |  |
-| `close_at` | timestamp with time zone |  |  |  |
+| `close_at` | timestamp with time zone |  |  | เวลาปิดรับ — บังคับเมื่อเผยแพร่ (ทุกครั้งที่ทำจึงมีเส้นตาย และถูกปิดอัตโนมัติเสมอ) |
 | `attempt_limit` | integer | ✓ | `1` |  |
 | `passing_percent` | numeric(5,2) |  |  | เกณฑ์ผ่าน (%) ต่อการมอบหมาย; null = ไม่ตัดสินผ่าน/ไม่ผ่าน |
 | `status` | text | ✓ | `'draft'::text` |  |
@@ -606,6 +606,7 @@
 - `assessment_assignments_grace_minutes_check`: `CHECK (((grace_minutes >= 0) AND (grace_minutes <= 60)))`
 - `assessment_assignments_instructions_check`: `CHECK (((instructions IS NULL) OR (char_length(instructions) <= 5000)))`
 - `assessment_assignments_passing_percent_check`: `CHECK (((passing_percent IS NULL) OR ((passing_percent >= (0)::numeric) AND (passing_percent <= (100)::numeric))))`
+- `assessment_assignments_published_close`: `CHECK (((status <> 'published'::text) OR (close_at IS NOT NULL)))`
 - `assessment_assignments_purpose_check`: `CHECK ((purpose = ANY (ARRAY['pretest'::text, 'posttest'::text, 'formative'::text])))`
 - `assessment_assignments_status_check`: `CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text])))`
 - `assessment_assignments_time_limit_minutes_check`: `CHECK (((time_limit_minutes IS NULL) OR ((time_limit_minutes >= 1) AND (time_limit_minutes <= 600))))`
@@ -640,7 +641,7 @@
 | `passed` | boolean |  |  |  |
 | `correct_count` | integer |  |  | จำนวนข้อที่ได้คะแนนเต็ม — แสดงผู้เรียนได้ (ไม่บอกว่าข้อไหน) |
 | `item_count` | integer |  |  |  |
-| `draft_json` | jsonb |  |  | คำตอบที่บันทึกระหว่างทำ (save_attempt_draft) — ใช้ให้คะแนนเมื่อหมดเวลา; ล้างเมื่อส่งแล้ว |
+| `draft_json` | jsonb |  |  | คำตอบที่บันทึกระหว่างทำ — ไม่ GRANT ให้ client (ผู้เรียนรับคืนผ่าน start_attempt เท่านั้น); ใช้ให้คะแนนเมื่อหมดเวลา; ล้างเมื่อส่งแล้ว |
 | `draft_saved_at` | timestamp with time zone |  |  |  |
 | `auto_submitted` | boolean | ✓ | `false` | true = ระบบส่งให้เมื่อหมดเวลา (คะแนนจากคำตอบที่บันทึกไว้) |
 

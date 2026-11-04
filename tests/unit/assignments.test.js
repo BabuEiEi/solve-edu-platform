@@ -55,12 +55,18 @@ describe('assignment logic', () => {
   })
 
   it('payload: validates title, limit, pass mark and window', () => {
-    const base = { title: ' หลังเรียน ', purpose: 'posttest', attempt_limit: '2', passing_percent: '' }
+    const base = {
+      title: ' หลังเรียน ',
+      purpose: 'posttest',
+      attempt_limit: '2',
+      passing_percent: '',
+      close_at: '2027-03-31T16:00',
+    }
     expect(buildAssignmentPayload(base)).toEqual({
       title: 'หลังเรียน',
       instructions: null,
       open_at: null,
-      close_at: null,
+      close_at: '2027-03-31T16:00:00+07:00',
       attempt_limit: 2,
       grace_minutes: 5,
       purpose: 'posttest',
@@ -76,6 +82,7 @@ describe('assignment logic', () => {
     expect(() => buildAssignmentPayload({ ...base, grace_minutes: '61' })).toThrow(/0–60/)
     expect(buildAssignmentPayload({ ...base, passing_percent: '60.5' }).passing_percent).toBe(60.5)
     expect(() => buildAssignmentPayload({ ...base, title: ' ' })).toThrow(AppError)
+    expect(() => buildAssignmentPayload({ ...base, close_at: '' })).toThrow(/วันเวลาปิดรับ/) // every assignment closes
     expect(() => buildAssignmentPayload({ ...base, attempt_limit: '0' })).toThrow(/1–20/)
     expect(() => buildAssignmentPayload({ ...base, attempt_limit: '1.5' })).toThrow(/1–20/)
     expect(() => buildAssignmentPayload({ ...base, passing_percent: '101' })).toThrow(/0–100/)
@@ -285,7 +292,7 @@ describe('assignment views', () => {
     attempt_limit: 2,
     passing_percent: 60,
     open_at: null,
-    close_at: null,
+    close_at: '2027-03-31T16:59:00Z',
     instructions: null,
     cohorts: { id: 'C1', code: 'C1', name: 'รุ่น 1' },
     courses: { id: 'K', title: 'AfL' },
@@ -333,7 +340,7 @@ describe('assignment views', () => {
     expect(el.querySelector('[data-summary]').textContent).toContain('1 / 2')
     expect(el.querySelectorAll('[data-results] tbody tr')).toHaveLength(2)
     expect(el.textContent).toContain('ยังไม่เริ่ม')
-    expect(el.querySelector('[data-date-label=close_at]').textContent).toBe('')
+    expect(el.querySelector('[data-date-label=close_at]').textContent).toBe('31 มี.ค. 2570 23:59 น.')
     const close = el.querySelector('input[name=close_at]')
     close.value = '2027-01-15T09:30'
     close.dispatchEvent(new Event('input', { bubbles: true }))
@@ -375,6 +382,20 @@ describe('assignment views', () => {
     expect(el.textContent).toContain('แสดงเฉพาะผู้เรียนที่ท่านมีสิทธิ์ดูผล')
   })
 
+  it('a draft without a closing time cannot be published', async () => {
+    const el = document.createElement('div')
+    const services = makeServices({
+      get: vi.fn(async () => ({ ...assignment, status: 'draft', close_at: null })),
+      listAttempts: vi.fn(async () => []),
+    })
+    await renderAssignmentDetailView(el, ctx(services, trainer), { id: 'A1' })
+    expect(el.querySelector('input[name=close_at]').required).toBe(true)
+    el.querySelector('[data-action=publish]').click()
+    await settle()
+    expect(services.assignments.update).not.toHaveBeenCalled()
+    expect(el.textContent).toContain('กรุณากำหนดวันเวลาปิดรับ')
+  })
+
   it('detail: SE004 from the server is shown in Thai', async () => {
     const el = document.createElement('div')
     const services = makeServices({
@@ -407,6 +428,7 @@ describe('assignment views', () => {
     await renderNewAssignmentView(el, ctx(services, trainer), { versionId: 'V1' })
     expect([...el.querySelectorAll('select[name=cohort_id] option')].map((o) => o.value)).toEqual(['C1'])
     el.querySelector('input[name=passing_percent]').value = '70'
+    el.querySelector('input[name=close_at]').value = '2027-03-31T16:00'
     const form = el.querySelector('form[data-form=assignment]')
     form.requestSubmit(form.querySelector('button[value=published]'))
     await settle()

@@ -66,8 +66,8 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `instrument_versions` (2B) | ผู้สร้าง หรือ `can_view_version` | `instrument_id` เท่านั้น (เลขฉบับ/สถานะโดย server; ร่างได้ทีละ 1) | ❌ — publish/clone ผ่าน RPC | ❌ |
 | `instrument_items` (2B) | `can_view_version` | ผู้สร้าง + trigger: เฉพาะฉบับ draft · `options_json` ห้ามมีเฉลย | ไม่รวม `instrument_version_id` (draft เท่านั้น) | ผู้สร้าง (draft เท่านั้น) |
 | `private.instrument_answer_keys` (2B) | ❌ ทุก role ของ client — **ตั้งได้แต่อ่านกลับไม่ได้** | ผ่าน `set_item_key` | ผ่าน `set_item_key` | ❌ |
-| `assessment_assignments` (2B) | assessor · mentor ของรุ่น · trainee ของรุ่นเฉพาะที่ `published` | assessor + มองเห็นฉบับ + trigger: ฉบับต้อง published, หลักสูตรต้องอยู่ในโครงการของรุ่น | ไม่รวม `instrument_version_id, cohort_id` · **หลังมีผู้เริ่มทำ: `passing_percent, purpose, course_id, time_limit_minutes` แก้ไม่ได้ และย้อนเป็น draft ไม่ได้ (SE004)** | assessor, เฉพาะ `draft` (มี attempt แล้ว → FK RESTRICT) |
-| `assessment_attempts` (2B) | `can_view_attempt` (รวม `draft_json` คำตอบระหว่างทำ — assessor/mentor ติดตามได้) | ❌ — `start_attempt` | ❌ — `save_attempt_draft` / `submit_attempt` / งานปิดอัตโนมัติ | ❌ |
+| `assessment_assignments` (2B) | assessor · mentor ของรุ่น · trainee ของรุ่นเฉพาะที่ `published` | assessor + มองเห็นฉบับ + trigger: ฉบับต้อง published, หลักสูตรต้องอยู่ในโครงการของรุ่น · CHECK: เผยแพร่ได้เมื่อมี `close_at` เท่านั้น (2B.1) | ไม่รวม `instrument_version_id, cohort_id` · **หลังมีผู้เริ่มทำ: `passing_percent, purpose, course_id, time_limit_minutes` แก้ไม่ได้ และย้อนเป็น draft ไม่ได้ (SE004)** | assessor, เฉพาะ `draft` (มี attempt แล้ว → FK RESTRICT) |
+| `assessment_attempts` (2B) | `can_view_attempt` — **ไม่มี `draft_json`** (คำตอบระหว่างทำเป็นของผู้เรียนจนกว่าจะส่ง; ผู้เรียนรับคืนผ่าน `start_attempt` เท่านั้น) · `draft_saved_at` เห็นได้ | ❌ — `start_attempt` | ❌ — `save_attempt_draft` / `submit_attempt` / งานปิดอัตโนมัติ | ❌ |
 | `assessment_extra_attempts` (2B.1) | `can_view_attempt(assignment, user)` | `can_assess_assignment` (`assignment_id, user_id, reason`) + trigger: ผู้รับต้องเป็น trainee active ของรุ่น · `granted_by`/`created_at` โดย server | ❌ (append-only) | ❌ |
 | `assessment_responses` (2B) | `can_view_attempt_id` — **ไม่มี `awarded_score`, `graded_*`** | ❌ — `submit_attempt` | ❌ | ❌ |
 | `preregistrations` (2A) | ผู้นำเข้า · platform admin · district/school admin ของหน่วยงานนั้น (มีอีเมล = PII) | `can_grant_org_role` **และ** (ถ้ามีรุ่น) `can_grant_cohort_role` — สิทธิ์เท่ากับการมอบบทบาทโดยตรง | `status` → `cancelled` เฉพาะแถว pending | ❌ |
@@ -150,6 +150,8 @@ Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (ส�
 | mentor เห็นผลของผู้เรียนที่ไม่ได้ดูแล / trainee เห็นผลคนอื่น | DENY | `100`, `140` + integration + E2E |
 | ส่งคำตอบหลังหมดเวลาเพื่อแก้คำตอบ / บันทึกคำตอบลง attempt ของคนอื่น | DENY (ใช้คำตอบที่บันทึกก่อนหมดเวลา) / DENY | `150` (mutation test ยืนยัน) + `tests/integration/attempt-timing.test.js` |
 | ให้สิทธิ์ทำเพิ่มแก่ตนเอง / mentor ให้สิทธิ์ / ปลอม `granted_by` / แก้หรือลบสิทธิ์ | DENY | `150` + integration |
+| วิทยากร/ครูพี่เลี้ยง (หรือผู้เรียนเองผ่าน REST) อ่านคำตอบระหว่างทำ | DENY (42501) | `150` (mutation test ยืนยัน) + integration |
+| เผยแพร่การมอบหมายโดยไม่มีเวลาปิดรับ | DENY (23514) | `140` (mutation test ยืนยัน) |
 | Trainee อ่าน/อัปโหลดไฟล์ของบทเรียน draft หรือที่ตนไม่มีสิทธิ์ | DENY | `070` + `tests/integration/storage.test.js` |
 | ผู้เรียนเห็นหน่วย/บทเรียน draft; ผู้แก้เรียงลำดับข้ามหลักสูตร | DENY | `050`, `080` |
 | ฝัง `<script>`/`onerror`/`javascript:` ในบล็อกข้อความ | DENY (DB CHECK) | `080` |

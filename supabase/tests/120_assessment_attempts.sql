@@ -168,7 +168,7 @@ select tests.authenticate_as('teacher_a2');
 select throws_ok($$ select * from public.start_attempt(tests.uid('formative')) $$, 'SE001', null,
   'Starting after close_at is refused');
 reset role;
-update public.assessment_assignments set open_at = now() + interval '1 day', close_at = null
+update public.assessment_assignments set open_at = now() + interval '1 day', close_at = now() + interval '2 days'
  where id = tests.uid('formative');
 select tests.authenticate_as('teacher_a2');
 select throws_ok($$ select * from public.start_attempt(tests.uid('formative')) $$, 'SE001', null,

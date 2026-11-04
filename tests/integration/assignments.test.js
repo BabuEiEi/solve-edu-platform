@@ -42,7 +42,7 @@ run('Assignments and cohort results (Supabase Local)', () => {
       attempt_limit: 2,
       passing_percent: 60,
       open_at: null,
-      close_at: null,
+      close_at: '2027-03-31T16:59:00Z',
       instructions: null,
     })
     assignmentId = created.id

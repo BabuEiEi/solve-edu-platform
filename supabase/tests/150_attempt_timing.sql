@@ -2,7 +2,7 @@
 -- now() is fixed inside a transaction, so "time passing" is simulated by
 -- moving started_at / close_at back as postgres.
 begin;
-select plan(49);
+select plan(52);
 
 create temporary table ids (k text primary key, v uuid);
 grant select, insert on ids to authenticated;
@@ -67,9 +67,20 @@ select tests.authenticate_as('teacher_a2');
 select throws_ok(format($$ select * from public.save_attempt_draft(%L, '{}') $$, pg_temp.id('a1_1')),
   '42501', null, 'Another trainee cannot save into my attempt');
 reset role;
+-- In-progress answers stay private until submitted (owner decision): no client reads draft_json.
 select tests.authenticate_as('mentor');
-select isnt_empty(format('select 1 from public.assessment_attempts where id = %L and draft_json is not null', pg_temp.id('a1_1')),
-  'The mentee''s mentor can follow in-progress answers');
+select throws_ok(format('select draft_json from public.assessment_attempts where id = %L', pg_temp.id('a1_1')),
+  '42501', null, 'The mentor cannot read in-progress answers');
+reset role;
+select tests.authenticate_as('trainer');
+select throws_ok(format('select draft_json from public.assessment_attempts where id = %L', pg_temp.id('a1_1')),
+  '42501', null, 'The trainer cannot read in-progress answers');
+select is((select draft_saved_at is not null from public.assessment_attempts where id = pg_temp.id('a1_1')), true,
+  '…but can see that answers were saved, and when');
+reset role;
+select tests.authenticate_as('teacher_a1');
+select throws_ok(format('select draft_json from public.assessment_attempts where id = %L', pg_temp.id('a1_1')),
+  '42501', null, 'Even the trainee reads the draft only through start_attempt');
 reset role;
 
 -- ---------- within grace: the submitted answers count ----------
@@ -78,8 +89,10 @@ select tests.authenticate_as('teacher_a1');
 select results_eq(format($$ select score, auto_submitted from public.submit_attempt(%L, %L) $$,
                          pg_temp.id('a1_1'), pg_temp.body('all_right')),
   $$ values (5.00::numeric, false) $$, '3 minutes late, inside the 5-minute grace: submission scored as sent');
+reset role;
 select is((select draft_json from public.assessment_attempts where id = pg_temp.id('a1_1')), null,
   'The draft is cleared once submitted');
+select tests.authenticate_as('teacher_a1');
 
 -- ---------- past the cutoff: saved answers count, late payload ignored ----------
 insert into ids select 'a1_2', attempt_id from public.start_attempt(tests.uid('formative'));

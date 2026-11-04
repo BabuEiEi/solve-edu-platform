@@ -64,7 +64,7 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 | สถานะเฉลย | `rpc('item_key_status', { p_version })` → `[{item_id, has_key, key_valid}]` | |
 | เผยแพร่ / สร้างฉบับใหม่ | `rpc('publish_instrument_version', { p_version })` → hash · `rpc('clone_instrument_version', { p_version })` → uuid | |
 | รูปข้อสอบ | `storage.from('assessment-media').upload('<instrument_id>/<uuid>.<ext>')` · `createSignedUrls` | |
-| มอบหมายให้รุ่น | `assessment_assignments.insert({instrument_version_id, cohort_id, course_id, purpose, title, instructions, open_at, close_at, attempt_limit, passing_percent, status})` | `open_at/close_at` ส่งเป็น ISO `+07:00` จากช่องเวลาไทย |
+| มอบหมายให้รุ่น | `assessment_assignments.insert({instrument_version_id, cohort_id, course_id, purpose, title, instructions, open_at, close_at, attempt_limit, passing_percent, time_limit_minutes, grace_minutes, status})` | `open_at/close_at` ส่งเป็น ISO `+07:00` จากช่องเวลาไทย · **`close_at` บังคับ** (UI ทุกกรณี; DB เมื่อ `published`) |
 | แก้การตั้งค่า / เผยแพร่ / ปิดรับ / เก็บถาวร | `assessment_assignments.update({...}).eq('id').select('id')` | ปิดรับทันที = `close_at = now`; หลังมีผู้เริ่มทำ ห้ามส่ง `passing_percent/purpose/course_id` ที่เปลี่ยนค่า (SE004) |
 | รุ่นที่มอบหมายได้ | `program_courses.select('programs(id, name, cohorts(id, code, name, status))').eq('course_id')` | UI กรองเฉพาะรุ่นที่ผู้ใช้เป็น trainer/coordinator/ผู้จัดการ; server ตัดสินจริง |
 | แบบทดสอบของฉัน | `assessment_assignments.select('…, assessment_attempts(…)').eq('status','published').in('cohort_id', mine).eq('assessment_attempts.user_id', uid)` | |

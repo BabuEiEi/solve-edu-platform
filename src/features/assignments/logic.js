@@ -63,6 +63,8 @@ export function buildAssignmentPayload(fields, { locked = false } = {}) {
 
   const openAt = fromBangkokInput(fields.open_at, 'เวลาเปิด')
   const closeAt = fromBangkokInput(fields.close_at, 'เวลาปิด')
+  // Every assignment closes at a set time, so every attempt has a deadline (DB enforces it for published ones).
+  if (!closeAt) throw new AppError('กรุณากำหนดวันเวลาปิดรับ')
   if (openAt && closeAt && new Date(closeAt) <= new Date(openAt))
     throw new AppError('เวลาปิดต้องอยู่หลังเวลาเปิด')
 

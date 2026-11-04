@@ -1,7 +1,7 @@
 -- Assigning tests to a cohort and reading results: who may assign, publish,
 -- edit and delete; settings frozen once attempts exist; who sees whose results.
 begin;
-select plan(34);
+select plan(35);
 
 create temporary table ids (k text primary key, v uuid);
 grant select, insert on ids to authenticated;
@@ -15,8 +15,9 @@ select ok(not has_function_privilege('authenticated', 'private.assessment_assign
 select tests.authenticate_as('trainer');
 with r as (
   insert into public.assessment_assignments
-    (instrument_version_id, cohort_id, course_id, purpose, title, attempt_limit, passing_percent)
-  values (tests.uid('quiz_v1'), tests.uid('cohort'), tests.uid('course'), 'posttest', 'Posttest ทดสอบ', 1, 50)
+    (instrument_version_id, cohort_id, course_id, purpose, title, attempt_limit, passing_percent, close_at)
+  values (tests.uid('quiz_v1'), tests.uid('cohort'), tests.uid('course'), 'posttest', 'Posttest ทดสอบ', 1, 50,
+          now() + interval '30 days')
   returning id)
 insert into ids select 'a', id from r;
 select isnt(pg_temp.id('a'), null, 'Cohort trainer creates an assignment (INSERT … RETURNING sees it)');
@@ -59,6 +60,9 @@ select is((select title || '/' || attempt_limit from public.assessment_assignmen
 
 -- ---------- before any attempt: everything editable ----------
 select tests.authenticate_as('trainer');
+select throws_ok($$ insert into public.assessment_assignments (instrument_version_id, cohort_id, purpose, title, status)
+                    values (tests.uid('quiz_v1'), tests.uid('cohort'), 'formative', 'ไม่มีเวลาปิด', 'published') $$,
+  '23514', null, 'A published assignment must have a closing date and time');
 select lives_ok(format($$ update public.assessment_assignments
                             set passing_percent = 60, purpose = 'formative', status = 'published' where id = %L $$, pg_temp.id('a')),
   'Without attempts, passing %, purpose and status can change');

@@ -37,10 +37,16 @@ const versionText = (v) =>
   v ? `${v.instruments?.title ?? 'แบบทดสอบ'} · ฉบับที่ ${v.version_no}` : 'แบบทดสอบ'
 
 /** datetime-local + its value echoed as พ.ศ. (kept current by watchDateLabels). */
-function dateField(name, text, value) {
+function dateField(name, text, value, { required = false } = {}) {
   const v = toBangkokInput(value)
   return html`<label class="${label}"
-    >${text}<input name="${name}" type="datetime-local" value="${v}" class="${input}" />
+    >${text}<input
+      name="${name}"
+      type="datetime-local"
+      value="${v}"
+      class="${input}"
+      ${required ? html`required` : ''}
+    />
     <span class="mt-1 block text-xs font-normal text-ink-500" data-date-label="${name}" aria-live="polite"
       >${bangkokInputLabel(v)}</span
     >
@@ -82,7 +88,7 @@ function settingsFields(a, { locked = false } = {}) {
         ${locked ? html`disabled` : ''}
       />
     </label>
-    ${dateField('open_at', 'เปิดให้ทำ (เวลาไทย)', a.open_at)} ${dateField('close_at', 'ปิดรับ (เวลาไทย)', a.close_at)}
+    ${dateField('open_at', 'เปิดให้ทำ (เวลาไทย)', a.open_at)} ${dateField('close_at', 'ปิดรับ (เวลาไทย) — บังคับ', a.close_at, { required: true })}
     <label class="${label}"
       >จำนวนครั้งที่ทำได้
       <input
@@ -97,7 +103,7 @@ function settingsFields(a, { locked = false } = {}) {
       />
     </label>
     <p class="self-end text-xs text-ink-500">
-      เว้นเวลาเปิด/ปิดว่างได้ (ไม่จำกัดช่วงเวลา) · การกดเริ่มทำนับเป็น 1 ครั้งทันที
+      เว้นเวลาเปิดว่างได้ (เปิดทันทีเมื่อเผยแพร่) · ต้องกำหนดเวลาปิดรับ เมื่อถึงเวลาระบบปิดและส่งคำตอบที่บันทึกไว้ให้ทุกคน · การกดเริ่มทำนับเป็น 1 ครั้งทันที
     </p>
     <label class="${label}"
       >เวลาทำต่อครั้ง (นาที)
@@ -491,6 +497,11 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
         )
       }
       case 'publish':
+        if (!assignment.close_at) {
+          message = 'กรุณากำหนดวันเวลาปิดรับและบันทึกการตั้งค่าก่อนเผยแพร่'
+          tone = 'error'
+          return draw()
+        }
         return run(
           () => services.assignments.update(id, { status: 'published' }),
           'เผยแพร่แล้ว — ผู้เรียนในรุ่นเห็นแบบทดสอบนี้แล้ว'
