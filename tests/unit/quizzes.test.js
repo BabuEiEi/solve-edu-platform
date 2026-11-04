@@ -5,7 +5,9 @@ import {
   keyState,
   publishBlockers,
   defaultVersion,
+  unusedMedia,
 } from '../../src/features/quizzes/logic.js'
+import { createMediaService } from '../../src/features/lessons/media.js'
 import { createQuizBuilderService } from '../../src/features/quizzes/service.js'
 import { renderQuizEditorView, renderCourseQuizzesView } from '../../src/features/quizzes/views.js'
 import { buildBlockContent, blockSummary } from '../../src/features/lessons/blocks.js'
@@ -213,6 +215,38 @@ describe('quiz builder service', () => {
   })
 })
 
+describe('unused quiz images', () => {
+  const now = new Date('2026-11-05T00:00:00Z')
+  const files = [
+    { path: 'I1/used.png', created_at: '2026-11-01T00:00:00Z' },
+    { path: 'I1/old-unused.png', created_at: '2026-11-03T00:00:00Z' },
+    { path: 'I1/fresh-unused.png', created_at: '2026-11-04T12:00:00Z' }, // 12 h: maybe an item being written
+    { path: 'I1/no-date.png', created_at: null },
+  ]
+  it('only files no version uses and older than 24 hours', () => {
+    expect(unusedMedia(files, ['I1/used.png'], now)).toEqual(['I1/old-unused.png'])
+    expect(unusedMedia(files, ['I1/used.png'], now, 0)).toEqual(['I1/old-unused.png', 'I1/fresh-unused.png'])
+  })
+
+  it('media service lists a folder and reports what was really removed', async () => {
+    const storage = {
+      list: vi.fn(async () => ({
+        data: [
+          { id: '1', name: 'a.png', created_at: 'x' },
+          { id: null, name: 'sub' }, // a folder
+          { id: '2', name: '.emptyFolderPlaceholder' },
+        ],
+        error: null,
+      })),
+      remove: vi.fn(async () => ({ data: [{ name: 'I1/a.png' }], error: null })),
+    }
+    const media = createMediaService({ storage: { from: () => storage } }, 'assessment-media')
+    expect(await media.list('I1')).toEqual([{ path: 'I1/a.png', created_at: 'x' }])
+    expect(await media.remove(['I1/a.png', 'I1/b.png'])).toEqual(['I1/a.png'])
+    expect(await media.remove([])).toEqual([])
+  })
+})
+
 describe('quiz editor view', () => {
   const course = { id: 'K', title: 'AfL', owner_org_id: 'ORG', course_units: [] }
   const draftItems = [
@@ -247,16 +281,57 @@ describe('quiz editor view', () => {
       setKey: vi.fn(async () => {}),
       publish: vi.fn(async () => 'hash'),
       clone: vi.fn(async () => 'V2'),
+      usedMediaPaths: vi.fn(async () => ['I1/used.png']),
       ...overrides,
     }
     return {
       courses: { getAccess: async () => 'manage' },
       builder: { getCourseTree: async () => course },
-      assessmentMedia: { signedUrls: async () => ({}), upload: vi.fn() },
+      assessmentMedia: {
+        signedUrls: async () => ({}),
+        upload: vi.fn(),
+        list: vi.fn(async () => [
+          { path: 'I1/used.png', created_at: '2026-01-01T00:00:00Z' },
+          { path: 'I1/a.png', created_at: '2026-01-01T00:00:00Z' },
+          { path: 'I1/b.png', created_at: '2026-01-01T00:00:00Z' },
+        ]),
+        remove: vi.fn(async () => ['I1/a.png']),
+      },
       quizzes,
     }
   }
   const draft = [{ id: 'V1', version_no: 1, status: 'draft', published_at: null }]
+
+  it('clean unused images: confirms the count, removes only unused ones, reports what the server refused', async () => {
+    const el = document.createElement('div')
+    const services = makeServices(draft)
+    await renderQuizEditorView(el, { services }, { id: 'K', quizId: 'I1' })
+    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    el.querySelector('[data-action=clean-media]').click()
+    await settle()
+    expect(confirm).toHaveBeenLastCalledWith('ลบรูปที่ไม่มีข้อใดใช้ 2 ไฟล์? ลบแล้วกู้คืนไม่ได้')
+    expect(services.assessmentMedia.remove).not.toHaveBeenCalled() // cancelled
+    el.querySelector('[data-action=clean-media]').click()
+    await settle()
+    expect(services.assessmentMedia.remove).toHaveBeenCalledWith(['I1/a.png', 'I1/b.png'])
+    expect(el.textContent).toContain('ลบแล้ว 1 จาก 2 ไฟล์ — ที่เหลือถูกใช้อยู่ ระบบจึงไม่ลบ')
+    confirm.mockRestore()
+  })
+
+  it('clean unused images: nothing to remove → says so without asking', async () => {
+    const el = document.createElement('div')
+    const services = makeServices(draft)
+    services.assessmentMedia.list = vi.fn(async () => [
+      { path: 'I1/used.png', created_at: '2026-01-01T00:00:00Z' },
+    ])
+    await renderQuizEditorView(el, { services }, { id: 'K', quizId: 'I1' })
+    const confirm = vi.spyOn(window, 'confirm')
+    el.querySelector('[data-action=clean-media]').click()
+    await settle()
+    expect(confirm).not.toHaveBeenCalled()
+    expect(el.textContent).toContain('ไม่มีรูปที่ไม่ได้ใช้ให้ลบ')
+    confirm.mockRestore()
+  })
 
   it('denies users who cannot manage the course', async () => {
     const el = document.createElement('div')

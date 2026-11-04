@@ -103,6 +103,20 @@ run('Quiz authoring (Supabase Local)', () => {
     expect(rows.map((r) => r.id)).toContain(assignmentId)
   })
 
+  it('cleanup through the real Storage API removes only images no version uses', async () => {
+    const media = mediaAs('trainer')
+    const spare = await media.upload(instrument.id, 'image', png())
+    expect((await media.list(instrument.id)).map((f) => f.path)).toEqual(
+      expect.arrayContaining([imagePath, spare])
+    )
+    expect(await quizzesAs('trainer').usedMediaPaths(instrument.id)).toEqual([imagePath])
+
+    expect(await mediaAs('teacher_a2').remove([spare])).toEqual([]) // trainee: nothing removed
+    expect(await media.remove([imagePath, spare])).toEqual([spare]) // the used one is refused
+    expect(Object.keys(await media.signedUrls([imagePath]))).toEqual([imagePath])
+    expect((await media.list(instrument.id)).map((f) => f.path)).not.toContain(spare)
+  })
+
   it('outsiders cannot author or upload', async () => {
     await expect(mediaAs('teacher_a1').upload(instrument.id, 'image', png())).rejects.toThrow()
     await expect(mediaAs('school_admin_b').upload(DEMO_QUIZ, 'image', png())).rejects.toThrow()

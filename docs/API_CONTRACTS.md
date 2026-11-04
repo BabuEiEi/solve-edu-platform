@@ -64,6 +64,7 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 | สถานะเฉลย | `rpc('item_key_status', { p_version })` → `[{item_id, has_key, key_valid}]` | |
 | เผยแพร่ / สร้างฉบับใหม่ | `rpc('publish_instrument_version', { p_version })` → hash · `rpc('clone_instrument_version', { p_version })` → uuid | |
 | รูปข้อสอบ | `storage.from('assessment-media').upload('<instrument_id>/<uuid>.<ext>')` · `createSignedUrls` | |
+| ล้างรูปที่ไม่ได้ใช้ (2B.1) | `storage.from('assessment-media').list('<instrument_id>')` + `instrument_items.select('media_path, options_json, instrument_versions!inner(instrument_id)')` → `remove(paths)` คืนเฉพาะไฟล์ที่ลบได้จริง | หน้าจอเลือกเฉพาะไฟล์ที่ไม่มีข้อใดใช้และเก่ากว่า 24 ชม. · DB ปฏิเสธไฟล์ที่ยังใช้อยู่เสมอ |
 | มอบหมายให้รุ่น | `assessment_assignments.insert({instrument_version_id, cohort_id, course_id, purpose, title, instructions, open_at, close_at, attempt_limit, passing_percent, time_limit_minutes, grace_minutes, status})` | `open_at/close_at` ส่งเป็น ISO `+07:00` จากช่องเวลาไทย · **`close_at` บังคับ** (UI ทุกกรณี; DB เมื่อ `published`) |
 | แก้การตั้งค่า / เผยแพร่ / ปิดรับ / เก็บถาวร | `assessment_assignments.update({...}).eq('id').select('id')` | ปิดรับทันที = `close_at = now`; หลังมีผู้เริ่มทำ ห้ามส่ง `passing_percent/purpose/course_id` ที่เปลี่ยนค่า (SE004) |
 | รุ่นที่มอบหมายได้ | `program_courses.select('programs(id, name, cohorts(id, code, name, status))').eq('course_id')` | UI กรองเฉพาะรุ่นที่ผู้ใช้เป็น trainer/coordinator/ผู้จัดการ; server ตัดสินจริง |

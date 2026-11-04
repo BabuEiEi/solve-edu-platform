@@ -121,7 +121,7 @@ path = `<resource_id>/<random>.<ext>` — โฟลเดอร์แรกก�
 |---|---|---|---|
 | `lesson-media` | `authz.can_view_lesson(โฟลเดอร์แรก)` | `authz.can_manage_lesson(โฟลเดอร์แรก)` | 50 MiB · รูป/PDF/Office/mp4/webm (ไม่รับ `text/html`) |
 | `avatars` | `authz.can_view_profile(โฟลเดอร์แรก)` | เจ้าของโฟลเดอร์เท่านั้น (`= auth.uid()`) · `profiles.avatar_path` ต้องอยู่ในโฟลเดอร์ตนเอง | 2 MiB · png/jpeg/webp |
-| `assessment-media` (2B) | `can_manage_instrument(โฟลเดอร์แรก)` หรือ `can_view_instrument(โฟลเดอร์แรก)` — ผู้เรียนเห็นรูปหลังเริ่มทำแล้วเท่านั้น | `can_manage_instrument(โฟลเดอร์แรก)` | 5 MiB · png/jpeg/webp/gif · path `<instrument_id>/<uuid>.<ext>` |
+| `assessment-media` (2B) | `can_manage_instrument(โฟลเดอร์แรก)` หรือ `can_view_instrument(โฟลเดอร์แรก)` — ผู้เรียนเห็นรูปหลังเริ่มทำแล้วเท่านั้น | เพิ่ม: `can_manage_instrument(โฟลเดอร์แรก)` · แก้/ลบ (2B.1): ต้องเป็นผู้สร้าง **และ** `not authz.assessment_media_in_use(name)` — รูปที่ข้อใดของฉบับใดยังใช้อยู่ (รวมฉบับที่เผยแพร่) ลบหรือเขียนทับไม่ได้ | 5 MiB · png/jpeg/webp/gif · path `<instrument_id>/<uuid>.<ext>` |
 
 `anon` ไม่มีสิทธิ์ใด ๆ · `lesson_blocks.object_path` ต้องอยู่ในโฟลเดอร์ของบทเรียนเดียวกับบล็อก และห้าม `..`
 
@@ -158,6 +158,7 @@ Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (ส�
 | เผยแพร่การมอบหมายโดยไม่มีเวลาปิดรับ | DENY (23514) | `140` (mutation test ยืนยัน) |
 | การบันทึกที่มาช้าทับคำตอบใหม่ / หน้าเก่า (อีกเครื่อง) บันทึกหรือส่งหลังมีหน้าใหม่ | DENY (`stale`, SE005) | `160` (mutation test ยืนยัน) + integration + E2E สองเครื่อง |
 | mentor/trainee/คนนอก ดูผลวิเคราะห์ข้อสอบ · ผลวิเคราะห์เปิดเผยรายบุคคลหรือเฉลย | DENY | `170` + integration |
+| ลบหรือเขียนทับรูปข้อสอบที่ยังใช้อยู่ (แม้เป็นผู้สร้าง) | DENY | `180` (mutation test ยืนยัน) + integration ผ่าน Storage API จริง |
 | Trainee อ่าน/อัปโหลดไฟล์ของบทเรียน draft หรือที่ตนไม่มีสิทธิ์ | DENY | `070` + `tests/integration/storage.test.js` |
 | ผู้เรียนเห็นหน่วย/บทเรียน draft; ผู้แก้เรียงลำดับข้ามหลักสูตร | DENY | `050`, `080` |
 | ฝัง `<script>`/`onerror`/`javascript:` ในบล็อกข้อความ | DENY (DB CHECK) | `080` |
