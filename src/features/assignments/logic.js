@@ -1,4 +1,5 @@
 import { AppError } from '../../core/errors.js'
+import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { PURPOSE_LABELS, attemptPercent } from '../assessments/logic.js'
 
 /**
@@ -29,6 +30,16 @@ export function fromBangkokInput(value, fieldLabel) {
   if (!INPUT_FORMAT.test(s) || Number.isNaN(new Date(`${s}:00+07:00`).getTime()))
     throw new AppError(`${fieldLabel}: รูปแบบวันเวลาไม่ถูกต้อง`)
   return `${s}:00+07:00`
+}
+
+/**
+ * The browser's date picker shows the Gregorian year; echo the chosen value
+ * in the platform's format (พ.ศ., Bangkok) underneath. '' when blank/invalid.
+ */
+export function bangkokInputLabel(value) {
+  const s = String(value ?? '').trim()
+  if (!INPUT_FORMAT.test(s)) return ''
+  return formatThaiDateTime(`${s}:00+07:00`)
 }
 
 /**

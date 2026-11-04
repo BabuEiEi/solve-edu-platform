@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   toBangkokInput,
   fromBangkokInput,
+  bangkokInputLabel,
   buildAssignmentPayload,
   canAssessHint,
   traineeOnlyCohorts,
@@ -45,6 +46,12 @@ describe('assignment logic', () => {
     expect(toBangkokInput(null)).toBe('')
     expect(fromBangkokInput('', 'x')).toBeNull()
     expect(() => fromBangkokInput('20/11/2569', 'เวลาเปิด')).toThrow(/เวลาเปิด/)
+  })
+
+  it('date inputs are echoed in พ.ศ. (the native picker shows ค.ศ.)', () => {
+    expect(bangkokInputLabel('2027-03-31T16:00')).toBe('31 มี.ค. 2570 16:00 น.')
+    expect(bangkokInputLabel('')).toBe('')
+    expect(bangkokInputLabel('31/03/2027')).toBe('')
   })
 
   it('payload: validates title, limit, pass mark and window', () => {
@@ -300,6 +307,11 @@ describe('assignment views', () => {
     expect(el.querySelector('[data-summary]').textContent).toContain('1 / 2')
     expect(el.querySelectorAll('[data-results] tbody tr')).toHaveLength(2)
     expect(el.textContent).toContain('ยังไม่เริ่ม')
+    expect(el.querySelector('[data-date-label=close_at]').textContent).toBe('')
+    const close = el.querySelector('input[name=close_at]')
+    close.value = '2027-01-15T09:30'
+    close.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(el.querySelector('[data-date-label=close_at]').textContent).toBe('15 ม.ค. 2570 09:30 น.')
     expect(el.querySelector('select[name=purpose]').disabled).toBe(true)
     expect(el.querySelector('input[name=passing_percent]').disabled).toBe(true)
     expect(el.querySelector('[data-action=delete]')).toBeNull()

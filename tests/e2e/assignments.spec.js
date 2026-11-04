@@ -20,6 +20,7 @@ test('trainer assigns a posttest, follows the cohort results and exports them; a
   await form.locator('[name=title]').fill(TITLE)
   await form.locator('[name=passing_percent]').fill('50')
   await form.locator('[name=close_at]').fill('2027-03-31T16:00')
+  await expect(form.locator('[data-date-label=close_at]')).toHaveText('31 มี.ค. 2570 16:00 น.') // พ.ศ. echo
   await form.getByRole('button', { name: 'บันทึกและเผยแพร่' }).click()
 
   await expect(trainer.getByRole('heading', { name: TITLE })).toBeVisible()

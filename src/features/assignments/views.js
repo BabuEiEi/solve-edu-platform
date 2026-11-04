@@ -10,6 +10,7 @@ import { purposeChip, resultBadge, windowText } from '../assessments/views.js'
 import {
   ATTEMPT_LIMIT_MAX,
   toBangkokInput,
+  bangkokInputLabel,
   buildAssignmentPayload,
   canAssessHint,
   traineeOnlyCohorts,
@@ -31,6 +32,25 @@ const LIST_PATH = '/staff/assessments'
 const cohortLabel = (c) => (c ? `${c.name} (${c.code})` : '—')
 const versionText = (v) =>
   v ? `${v.instruments?.title ?? 'แบบทดสอบ'} · ฉบับที่ ${v.version_no}` : 'แบบทดสอบ'
+
+/** datetime-local + its value echoed as พ.ศ. (kept current by watchDateLabels). */
+function dateField(name, text, value) {
+  const v = toBangkokInput(value)
+  return html`<label class="${label}"
+    >${text}<input name="${name}" type="datetime-local" value="${v}" class="${input}" />
+    <span class="mt-1 block text-xs font-normal text-ink-500" data-date-label="${name}" aria-live="polite"
+      >${bangkokInputLabel(v)}</span
+    >
+  </label>`
+}
+
+function watchDateLabels(el) {
+  el.oninput = (e) => {
+    const name = e.target.matches?.('input[type=datetime-local]') ? e.target.name : null
+    const out = name && e.target.form?.querySelector(`[data-date-label="${name}"]`)
+    if (out) out.textContent = bangkokInputLabel(e.target.value)
+  }
+}
 
 /** Settings shared by "create" and "edit". `locked`: an attempt exists (server freezes purpose / pass mark). */
 function settingsFields(a, { locked = false } = {}) {
@@ -59,12 +79,7 @@ function settingsFields(a, { locked = false } = {}) {
         ${locked ? html`disabled` : ''}
       />
     </label>
-    <label class="${label}"
-      >เปิดให้ทำ (เวลาไทย)<input name="open_at" type="datetime-local" value="${toBangkokInput(a.open_at)}" class="${input}"
-    /></label>
-    <label class="${label}"
-      >ปิดรับ (เวลาไทย)<input name="close_at" type="datetime-local" value="${toBangkokInput(a.close_at)}" class="${input}"
-    /></label>
+    ${dateField('open_at', 'เปิดให้ทำ (เวลาไทย)', a.open_at)} ${dateField('close_at', 'ปิดรับ (เวลาไทย)', a.close_at)}
     <label class="${label}"
       >จำนวนครั้งที่ทำได้
       <input
@@ -206,6 +221,7 @@ export async function renderNewAssignmentView(el, { services, caps, context }, {
         }`
     )
 
+  watchDateLabels(el)
   el.onsubmit = async (e) => {
     e.preventDefault()
     const form = e.target
@@ -436,6 +452,7 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
     return undefined
   }
 
+  watchDateLabels(el)
   el.onsubmit = (e) => {
     e.preventDefault()
     if (e.target.dataset.form !== 'assignment') return
