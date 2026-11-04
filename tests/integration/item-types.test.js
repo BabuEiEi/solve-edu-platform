@@ -2,7 +2,8 @@
 /**
  * Integration: Phase 2C group A item types through the real Data API —
  * authoring JSON round-trips, keys stay write-only, the server-built
- * presentation reaches the trainee without any key, scoring of a mix.
+ * presentation reaches the trainee without any key, scoring of a mix
+ * (the scoring mode is on the item and readable back — 2C.1).
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { supabaseAs, serverNow, IDS } from './helpers.js'
@@ -41,6 +42,7 @@ const ITEMS = [
     item_type: 'choice_matrix',
     options_json: { rows: entries(['w1', 'w2']), columns: entries(['t', 'f']) },
     key: { slots: { w1: 't', w2: 'f' } },
+    scoring_mode: 'all_or_nothing', // on the item since 2C.1
   },
 ]
 
@@ -67,14 +69,22 @@ run('Phase 2C group A item types (Supabase Local)', () => {
           media_path: null,
           max_score: 1,
           options_json: it.options_json,
+          scoring_mode: it.scoring_mode ?? null,
         },
         i + 1
       )
-      await q.setKey(saved.id, { answer: it.key, scoring: {} })
+      await q.setKey(saved.id, { answer: it.key })
     }
     items = await q.getItems(versionId)
     expect(items.map((i) => i.item_type)).toEqual(ITEMS.map((i) => i.item_type))
     expect(items[1].options_json).toEqual(ITEMS[1].options_json) // JSON round-trip, nothing added
+    expect(items.map((i) => i.scoring_mode)).toEqual([null, null, null, 'all_or_nothing']) // readable back
+    const withMode = await supabaseAs(env, 'trainer').rpc('set_item_key', {
+      p_item: items[0].id,
+      p_answer: ITEMS[0].key,
+      p_scoring: { mode: 'partial' },
+    })
+    expect(withMode.error?.code).toBe('23514') // the key holds only the answer
     expect(Object.values(await q.keyStatus(versionId)).every((s) => s.has_key && s.key_valid)).toBe(true)
     await expect(
       q.addItem(
@@ -130,9 +140,9 @@ run('Phase 2C group A item types (Supabase Local)', () => {
       [ord.id]: { order: ['a', 'b', 'd', 'c'] }, // 2/4
       [match.id]: { slots: { l1: 'r1' } }, // 1/2
       [cls.id]: { slots: { i1: 'c1', i2: 'c2' } }, // 2/2
-      [mtx.id]: { slots: { w1: 'f', w2: 'f' } }, // 1/2
+      [mtx.id]: { slots: { w1: 'f', w2: 'f' } }, // 1/2 right, but all-or-nothing → 0
     })
-    expect(out).toMatchObject({ score: 2.5, max_score: 4, percent: 62.5, passed: true })
+    expect(out).toMatchObject({ score: 2, max_score: 4, percent: 50, passed: true })
     await expect(
       createAssessmentService(supabaseAs(env, 'teacher_a2')).submit(
         (await createAssessmentService(supabaseAs(env, 'teacher_a2')).start(assignmentId)).attempt_id,
@@ -197,7 +207,7 @@ run('Phase 2C group B item types (Supabase Local)', () => {
     ]
     for (const [i, d] of defs.entries()) {
       const saved = await q().addItem(versionId, { ...d.item, prompt: `ข้อ ${i + 1}`, max_score: 1 }, i + 1)
-      await q().setKey(saved.id, { answer: d.key, scoring: {} })
+      await q().setKey(saved.id, { answer: d.key })
     }
     items = await q().getItems(versionId)
     expect(JSON.stringify(items)).not.toMatch(/accept|"slots"|น้ำ/) // answers stay in the private key

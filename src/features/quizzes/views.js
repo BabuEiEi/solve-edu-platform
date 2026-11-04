@@ -9,7 +9,8 @@ import { acceptAttr } from '../lessons/media.js'
 import { itemMediaPaths } from '../assessments/logic.js'
 import {
   ITEM_TYPES,
-  SCORING_MODES,
+  scoringModesFor,
+  defaultScoringMode,
   MAX_CHOICES,
   isChoiceType,
   nextOptionId,
@@ -174,6 +175,21 @@ function optionRow(type, option, media) {
   </div>`
 }
 
+/** Scoring mode select for types that have one; shows the item's stored mode (not part of the key). */
+function modeField(type, item) {
+  const modes = scoringModesFor(type)
+  if (!modes) return ''
+  const current = item?.scoring_mode ?? defaultScoringMode(type)
+  return html`<label class="${label}"
+    >วิธีให้คะแนน
+    <select name="mode" class="${input} mt-1">
+      ${Object.entries(modes).map(
+        ([v, l]) => html`<option value="${v}" ${v === current ? html`selected` : ''}>${l}</option>`
+      )}
+    </select>
+  </label>`
+}
+
 function itemForm(type, item, media) {
   const editing = Boolean(item)
   const options = item?.options_json?.options ?? [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]
@@ -181,7 +197,6 @@ function itemForm(type, item, media) {
   const keyHint = editing
     ? html`<p class="rounded-lg bg-ink-50 px-3 py-2 text-xs text-ink-600">
         ระบบไม่แสดงเฉลยเดิมกลับมา หากไม่เลือก/กรอกคำตอบที่ถูกใหม่ เฉลยเดิมจะคงไว้
-        ${type === 'mcq_multiple' ? ' (การเปลี่ยนวิธีให้คะแนนต้องเลือกคำตอบที่ถูกใหม่ทั้งหมด)' : ''}
       </p>`
     : ''
 
@@ -198,16 +213,7 @@ function itemForm(type, item, media) {
         <div data-options class="space-y-2">${options.map((o) => optionRow(type, o, media))}</div>
         <button type="button" class="${secondary}" data-action="add-option">+ เพิ่มตัวเลือก</button>
       </fieldset>
-      ${
-        type === 'mcq_multiple'
-          ? html`<label class="${label}"
-              >วิธีให้คะแนน
-              <select name="mode" class="${input}">
-                ${Object.entries(SCORING_MODES).map(([v, l]) => html`<option value="${v}">${l}</option>`)}
-              </select>
-            </label>`
-          : ''
-      }`
+`
   } else if (type === 'true_false') {
     typeFields = html`<fieldset>
       <legend class="${label}">คำตอบที่ถูก</legend>
@@ -252,7 +258,7 @@ function itemForm(type, item, media) {
         <input type="file" name="media_file" accept="${acceptAttr('image')}" class="mt-1 text-xs" />
       </div>
     </div>
-    ${typeFields} ${keyHint}
+    ${typeFields} ${modeField(type, item)} ${keyHint}
     <div data-form-error></div>
     <div class="flex gap-2">
       <button class="${primary}" type="submit">บันทึกข้อ</button>

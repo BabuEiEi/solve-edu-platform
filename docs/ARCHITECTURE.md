@@ -66,6 +66,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261104090700_key_position_guard.sql` | (2C) เฉลยไม่ถูกต้องถ้าลำดับที่เก็บบอกเฉลย (เรียงลำดับ: เก็บในลำดับที่ถูก · จับคู่: ทุกคู่อยู่ตำแหน่งเดียวกัน) |
 | `20261104090800_item_statistics_slots.sql` | (2C) `private.slot_hits` ถูก/ผิดรายส่วน (ใช้ทั้งให้คะแนนและวิเคราะห์) · `private.slot_labels` · `item_statistics` เพิ่ม `slots` (สัดส่วนถูกรายส่วน ไม่บอกเฉลย) |
 | `20261105090000_thai_mark_order.sql` | (2C.1) `private.thai_mark_order`: เทียบคำตอบไทยได้ทุกลำดับการพิมพ์สระ/วรรณยุกต์ (ไม่ตรวจคำสะกดใกล้เคียง) |
+| `20261105090100_scoring_mode_on_item.sql` | (2C.1) วิธีให้คะแนนย้ายจากเฉลยไป `instrument_items.scoring_mode` (อ่านกลับได้, เฉลยยังอ่านไม่ได้) · ย้ายค่าข้อเดิม · `scoring_json` = `{}` เสมอ · `finalize_attempt` และ `clone_instrument_version` อ่าน/คัดลอกโหมดจากข้อ |
 
 ### เหตุผลการออกแบบสำคัญ
 

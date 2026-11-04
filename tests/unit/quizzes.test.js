@@ -6,6 +6,8 @@ import {
   publishBlockers,
   defaultVersion,
   unusedMedia,
+  scoringModesFor,
+  defaultScoringMode,
 } from '../../src/features/quizzes/logic.js'
 import { createMediaService } from '../../src/features/lessons/media.js'
 import { createQuizBuilderService } from '../../src/features/quizzes/service.js'
@@ -46,6 +48,7 @@ describe('quiz builder logic', () => {
       prompt: 'โจทย์',
       media_path: null,
       max_score: 2,
+      scoring_mode: null,
       options_json: {
         options: [
           { id: 'a', text: 'ก' },
@@ -53,28 +56,37 @@ describe('quiz builder logic', () => {
         ],
       },
     })
-    expect(key).toEqual({ answer: { correct: ['b'] }, scoring: {} })
+    expect(key).toEqual({ answer: { correct: ['b'] } })
     expect(JSON.stringify(item)).not.toMatch(/correct/)
   })
 
-  it('mcq_multiple carries the scoring mode in the key', () => {
+  it('mcq_multiple: the scoring mode is on the item (readable), the key holds only the answer', () => {
     const opts = [
       { id: 'a', text: 'ก' },
       { id: 'b', text: 'ข' },
       { id: 'c', text: 'ค' },
     ]
-    const { key } = buildItemDraft('mcq_multiple', {
+    const { item, key } = buildItemDraft('mcq_multiple', {
       prompt: 'x',
       options: opts,
       correct: ['a', 'c'],
       mode: 'partial',
     })
-    expect(key).toEqual({ answer: { correct: ['a', 'c'] }, scoring: { mode: 'partial' } })
+    expect(key).toEqual({ answer: { correct: ['a', 'c'] } })
+    expect(item.scoring_mode).toBe('partial')
+    expect(buildItemDraft('mcq_multiple', { prompt: 'x', options: opts }).item.scoring_mode).toBe(
+      'all_or_nothing' // default, and set even when no new key is picked
+    )
     expect(
-      buildItemDraft('mcq_multiple', { prompt: 'x', options: opts, correct: ['a'] }).key.scoring
-    ).toEqual({
-      mode: 'all_or_nothing',
-    })
+      buildItemDraft('mcq_multiple', { prompt: 'x', options: opts, mode: '__proto__' }).item.scoring_mode
+    ).toBe('all_or_nothing')
+    expect(scoringModesFor('mcq_single')).toBeNull()
+    expect(Object.keys(scoringModesFor('cloze'))).toEqual(['partial', 'all_or_nothing'])
+    expect(['mcq_multiple', 'ordering', 'numeric'].map(defaultScoringMode)).toEqual([
+      'all_or_nothing',
+      'partial',
+      null,
+    ])
   })
 
   it('no answer picked: required on create, "keep the stored key" on edit', () => {
@@ -107,12 +119,19 @@ describe('quiz builder logic', () => {
 
   it('true_false and numeric keys', () => {
     expect(buildItemDraft('true_false', { prompt: 'x', tf: 'false' })).toEqual({
-      item: { item_type: 'true_false', prompt: 'x', media_path: null, max_score: 1, options_json: {} },
-      key: { answer: { correct: false }, scoring: {} },
+      item: {
+        item_type: 'true_false',
+        prompt: 'x',
+        media_path: null,
+        max_score: 1,
+        scoring_mode: null,
+        options_json: {},
+      },
+      key: { answer: { correct: false } },
     })
     const n = buildItemDraft('numeric', { prompt: 'x', unit: '%', value: '๗๕', tolerance: '0.5' })
     expect(n.item.options_json).toEqual({ unit: '%' })
-    expect(n.key).toEqual({ answer: { value: 75, tolerance: 0.5 }, scoring: {} })
+    expect(n.key).toEqual({ answer: { value: 75, tolerance: 0.5 } })
   })
 
   it('key status, publish blockers and the default version', () => {
@@ -199,12 +218,8 @@ describe('quiz builder service', () => {
   it('setKey / keyStatus use the write-only RPCs', async () => {
     const c = fakeClient({ data: [{ item_id: 'i1', has_key: true, key_valid: false }], error: null })
     const svc = createQuizBuilderService(c)
-    await svc.setKey('i1', { answer: { correct: ['b'] }, scoring: {} })
-    expect(c.rpc).toHaveBeenCalledWith('set_item_key', {
-      p_item: 'i1',
-      p_answer: { correct: ['b'] },
-      p_scoring: {},
-    })
+    await svc.setKey('i1', { answer: { correct: ['b'] } })
+    expect(c.rpc).toHaveBeenCalledWith('set_item_key', { p_item: 'i1', p_answer: { correct: ['b'] } })
     expect(await svc.keyStatus('v1')).toEqual({ i1: { has_key: true, key_valid: false } })
     for (const [op, cols] of c.calls.filter(([op]) => op === 'select')) expect([op, cols]).not.toContain('*')
   })
@@ -378,6 +393,7 @@ describe('quiz editor view', () => {
         prompt: 'โจทย์ใหม่',
         media_path: null,
         max_score: 1,
+        scoring_mode: null,
         options_json: {
           options: [
             { id: 'a', text: 'หนึ่ง' },
@@ -387,7 +403,7 @@ describe('quiz editor view', () => {
       },
       3
     )
-    expect(services.quizzes.setKey).toHaveBeenCalledWith('new', { answer: { correct: ['b'] }, scoring: {} })
+    expect(services.quizzes.setKey).toHaveBeenCalledWith('new', { answer: { correct: ['b'] } })
     el.remove()
   })
 

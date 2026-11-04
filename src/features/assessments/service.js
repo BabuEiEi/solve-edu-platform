@@ -5,7 +5,8 @@ export const ASSIGNMENT_COLUMNS =
 export const ATTEMPT_COLUMNS =
   'id, assignment_id, attempt_no, status, started_at, submitted_at, score, max_score, passed, correct_count, item_count, auto_submitted'
 // No answer key exists in these columns (keys live in schema private).
-export const ITEM_COLUMNS = 'id, item_type, prompt, media_path, options_json, max_score, display_order'
+export const ITEM_COLUMNS =
+  'id, item_type, prompt, media_path, options_json, max_score, display_order, scoring_mode'
 
 const withMyAttempts = `${ASSIGNMENT_COLUMNS}, courses ( id, title ), assessment_attempts ( ${ATTEMPT_COLUMNS} ), assessment_extra_attempts ( id )`
 

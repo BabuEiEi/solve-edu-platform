@@ -60,7 +60,7 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 |---|---|---|
 | สร้างแบบทดสอบ | `instruments.insert({owner_org_id, course_id, code, title, description})` แล้ว `instrument_versions.insert({instrument_id})` | เลขฉบับ/สถานะโดย server |
 | เพิ่ม/แก้/ลบข้อ | `instrument_items.insert/update/delete` (ฉบับ draft) · เรียงด้วย `rpc('reorder_course_items', { p_kind: 'item', p_parent: version, p_ids })` | UPDATE ที่ RLS กรอง → service โยน 42501 |
-| ตั้งเฉลย | `rpc('set_item_key', { p_item, p_answer, p_scoring })` | `p_answer`: `{correct:[ids]}` · `{correct:true\|false}` · `{value, tolerance}`; `p_scoring`: `{mode:'all_or_nothing'\|'partial'}` (mcq_multiple) |
+| ตั้งเฉลย | `rpc('set_item_key', { p_item, p_answer })` | `p_answer`: `{correct:[ids]}` · `{correct:true\|false}` · `{value, tolerance}` · `p_scoring` ต้องเป็น `{}` (ส่งโหมดมา → 23514) — **วิธีให้คะแนนอยู่ที่ `instrument_items.scoring_mode`** (2C.1): `'all_or_nothing'\|'partial'\|null` (null = ค่าเริ่มต้นของประเภท) ส่งพร้อม insert/update ข้อ และอ่านกลับได้ (ไม่ใช่ความลับ) |
 | สถานะเฉลย | `rpc('item_key_status', { p_version })` → `[{item_id, has_key, key_valid}]` | |
 | เผยแพร่ / สร้างฉบับใหม่ | `rpc('publish_instrument_version', { p_version })` → hash · `rpc('clone_instrument_version', { p_version })` → uuid | |
 | รูปข้อสอบ | `storage.from('assessment-media').upload('<instrument_id>/<uuid>.<ext>')` · `createSignedUrls` | |
@@ -98,7 +98,7 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 
 **ลำดับที่เก็บต้องไม่บอกเฉลย:** ผู้เรียนอ่าน `options_json` ได้หลังเริ่มทำ จึงห้ามเก็บข้อเรียงลำดับในลำดับที่ถูก และห้ามเก็บฝั่งขวาของข้อจับคู่ให้ทุกคู่อยู่ตำแหน่งเดียวกับฝั่งซ้าย (`set_item_key` ปฏิเสธ, `item_key_status.key_valid = false`) — หน้าสร้างข้อสอบใช้รหัสสุ่มและเก็บแบบสลับให้อัตโนมัติ
 
-entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `scoring_json` = `{mode: 'partial' | 'all_or_nothing'}` ค่าเริ่มต้น **partial** (ตำแหน่ง/ช่องที่ถูก ÷ ทั้งหมด)
+entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_mode` = `'partial' | 'all_or_nothing'` ค่าเริ่มต้น (null) **partial** (ตำแหน่ง/ช่องที่ถูก ÷ ทั้งหมด) · mcq_multiple ค่าเริ่มต้น all_or_nothing · ข้อเลือกตอบเดียว/ถูกผิด/ตัวเลขไม่มีโหมด
 
 **วิเคราะห์ข้อสอบรายส่วน (ขั้น 6):** `item_statistics` คืน `slots` ของข้อแบบใหม่ — หนึ่งแถวต่อส่วน (ตำแหน่งของข้อเรียงลำดับ · รายการฝั่งซ้าย/รายการที่จัดกลุ่ม/แถว · ช่องของดรอปดาวน์และเติมคำ เรียงตามที่ปรากฏในข้อความ · จุดบนรูป) มี `no` (ลำดับที่ผู้เรียนเห็น), `label` (ข้อความของส่วนนั้นถ้ามี), `correct_rate` (สัดส่วนคนที่ตอบส่วนนั้นถูก จากครั้งแรก), `answered` (จำนวนคนที่ตอบส่วนนั้น) · **ไม่มีจำนวนที่เลือกแต่ละตัวเลือกรายส่วน** เพื่อไม่ให้อนุมานเฉลยได้ · ข้อแบบเดิมได้ `slots: []` · ถูก/ผิดรายส่วนตัดสินด้วย `private.slot_hits` ตัวเดียวกับที่ให้คะแนน
 

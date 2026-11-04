@@ -57,7 +57,7 @@ run('Quiz authoring (Supabase Local)', () => {
     )
     expect(await q.keyStatus(versionId)).toEqual({ [item.id]: { has_key: false, key_valid: false } })
     await expect(q.publish(versionId)).rejects.toThrow() // no key yet
-    await q.setKey(item.id, { answer: { correct: ['a'] }, scoring: {} })
+    await q.setKey(item.id, { answer: { correct: ['a'] } })
     expect(await q.keyStatus(versionId)).toEqual({ [item.id]: { has_key: true, key_valid: true } })
     expect(await q.publish(versionId)).toMatch(/^[0-9a-f]{64}$/)
   })

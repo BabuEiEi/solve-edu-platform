@@ -28,7 +28,7 @@ psql = shlex.split(os.environ["PSQL"]) if os.environ.get("PSQL") else ["psql", "
 out = subprocess.run([*psql, "-X", "-At", "-c", SQL], capture_output=True, text=True, check=True).stdout
 tables = json.loads(out)
 esc = lambda s: (s or "").replace("|", "\\|").replace("\n", " ")
-print("# Data Dictionary — SolveEdu Platform (Phase 2C)\n")
+print("# Data Dictionary — SolveEdu Platform (Phase 2C.1)\n")
 print(f"> สร้างอัตโนมัติจากฐานข้อมูล Local ด้วย `scripts/db-local/gen-data-dictionary.py` — อย่าแก้ไขด้วยมือ  ")
 print("> ทุกตารางใน `public` เปิด RLS; สิทธิ์รายคอลัมน์ดู `PERMISSIONS.md`\n")
 print("## สารบัญ\n")
