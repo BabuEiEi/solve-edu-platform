@@ -558,7 +558,7 @@
 |---|---|:-:|---|---|
 | `id` | uuid | ✓ | `gen_random_uuid()` |  |
 | `instrument_version_id` | uuid | ✓ |  |  |
-| `item_type` | text | ✓ |  | mcq_single\|mcq_multiple\|true_false\|numeric (2B) · ordering\|matching\|classification\|choice_matrix (2C) |
+| `item_type` | text | ✓ |  | mcq_single\|mcq_multiple\|true_false\|numeric (2B) · ordering\|matching\|classification\|choice_matrix\|dropdown\|cloze\|image_labelling (2C) |
 | `prompt` | text | ✓ |  |  |
 | `media_path` | text |  |  |  |
 | `options_json` | jsonb | ✓ | `'{}'::jsonb` |  |
@@ -569,7 +569,7 @@
 
 **Constraints**
 
-- `instrument_items_item_type_check`: `CHECK ((item_type = ANY (ARRAY['mcq_single'::text, 'mcq_multiple'::text, 'true_false'::text, 'numeric'::text, 'ordering'::text, 'matching'::text, 'classification'::text, 'choice_matrix'::text])))`
+- `instrument_items_item_type_check`: `CHECK ((item_type = ANY (ARRAY['mcq_single'::text, 'mcq_multiple'::text, 'true_false'::text, 'numeric'::text, 'ordering'::text, 'matching'::text, 'classification'::text, 'choice_matrix'::text, 'dropdown'::text, 'cloze'::text, 'image_labelling'::text])))`
 - `instrument_items_max_score_check`: `CHECK (((max_score > (0)::numeric) AND (max_score <= (1000)::numeric)))`
 - `instrument_items_prompt_check`: `CHECK (((char_length(prompt) >= 1) AND (char_length(prompt) <= 5000)))`
 - `instrument_items_instrument_version_id_fkey`: `FOREIGN KEY (instrument_version_id) REFERENCES instrument_versions(id) ON DELETE CASCADE`

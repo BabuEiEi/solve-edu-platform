@@ -141,3 +141,91 @@ run('Phase 2C group A item types (Supabase Local)', () => {
     ).rejects.toMatchObject({ code: '22023' }) // incomplete ordering is malformed
   })
 })
+
+run('Phase 2C group B item types (Supabase Local)', () => {
+  beforeAll(() => vi.spyOn(console, 'error').mockImplementation(() => {}))
+  const q = () => createQuizBuilderService(supabaseAs(env, 'trainer'))
+  let assignmentId
+  let items
+
+  it('dropdown, cloze and image labelling: author, key, publish, take; Thai typed answers match', async () => {
+    const instrument = await q().createInstrument(
+      { id: IDS.course, owner_org_id: '10000000-0000-4000-a000-000000000001' },
+      { code: 'TYPES-B', title: 'ข้อสอบแบบใหม่ กลุ่ม ข (ทดสอบ)' }
+    )
+    const versionId = (await q().getInstrument(instrument.id)).instrument_versions[0].id
+    const defs = [
+      {
+        item: {
+          item_type: 'dropdown',
+          media_path: null,
+          options_json: {
+            text: 'ประเมิน {{b1}} เพื่อ {{b2}}',
+            blanks: [
+              { id: 'b1', options: entries(['a', 'b']) },
+              { id: 'b2', options: entries(['x', 'y']) },
+            ],
+          },
+        },
+        key: { slots: { b1: 'a', b2: 'x' } },
+      },
+      {
+        item: {
+          item_type: 'cloze',
+          media_path: null,
+          options_json: {
+            text: '{{b1}} ผ่านเกณฑ์ {{b2}} คน',
+            blanks: [{ id: 'b1' }, { id: 'b2', kind: 'number' }],
+          },
+        },
+        key: { blanks: { b1: { accept: ['น้ำ'] }, b2: { value: 30, tolerance: 0 } } },
+      },
+      {
+        item: {
+          item_type: 'image_labelling',
+          media_path: `${instrument.id}/diagram.png`,
+          options_json: {
+            markers: [
+              { id: 'm1', x: 10, y: 20 },
+              { id: 'm2', x: 60, y: 70 },
+            ],
+            labels: entries(['p', 'q', 'r']),
+          },
+        },
+        key: { slots: { m1: 'p', m2: 'q' } },
+      },
+    ]
+    for (const [i, d] of defs.entries()) {
+      const saved = await q().addItem(versionId, { ...d.item, prompt: `ข้อ ${i + 1}`, max_score: 1 }, i + 1)
+      await q().setKey(saved.id, { answer: d.key, scoring: {} })
+    }
+    items = await q().getItems(versionId)
+    expect(JSON.stringify(items)).not.toMatch(/accept|"slots"|น้ำ/) // answers stay in the private key
+    await q().publish(versionId)
+    assignmentId = (
+      await createAssignmentService(supabaseAs(env, 'trainer')).create({
+        versionId,
+        cohortId: COHORT,
+        courseId: IDS.course,
+        status: 'published',
+        title: 'กลุ่ม ข',
+        purpose: 'formative',
+        attempt_limit: 1,
+        shuffle_choices: true,
+        close_at: new Date((await serverNow(env)) + 86_400_000).toISOString(),
+      })
+    ).id
+
+    const svc = createAssessmentService(supabaseAs(env, 'teacher_b1'))
+    const t = await svc.start(assignmentId)
+    expect(Object.keys(t.presentation.lists[items[0].id]).sort()).toEqual(['blank:b1', 'blank:b2'])
+    const [dd, cz, lb] = items
+    const decomposed = 'น' + 'ํ้า' // ํ typed before the tone mark
+    const out = await svc.submit(t.attempt_id, {
+      [dd.id]: { slots: { b1: 'a', b2: 'y' } }, // 1/2
+      [cz.id]: { blanks: { b1: ` ${decomposed} `, b2: 30 } }, // 2/2
+      [lb.id]: { slots: { m1: 'p' } }, // 1/2
+    })
+    expect(out).toMatchObject({ score: 2, max_score: 3 })
+  })
+})
