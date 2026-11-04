@@ -79,6 +79,19 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 | วิเคราะห์ข้อสอบ (2B.1) | `rpc('item_statistics', { p_assignment })` → `{n, min_n, suppressed, basis:'first_attempt', group_size, k, max_score, mean_score, sd_score, reliability, reliability_kind:'kr20'\|'alpha', items:[{item_id, display_order, item_type, prompt, max_score, p, d, r_it, blank, choices}]}` | assessor เท่านั้น · `suppressed` เมื่อน้อยกว่า 5 คน (คืนแค่ `n`) |
 | รายชื่อที่ควรทำ | `cohort_memberships.select('user_id, profiles!cohort_memberships_user_id_fkey(…)')` ∪ `mentor_assignments.select('trainee_id, profiles!mentor_assignments_trainee_id_fkey(…)').eq('mentor_id', uid)` | ต้องระบุชื่อ FK (มี 2 เส้นทางไป profiles) |
 
+## 2.3 Phase 2C — ข้อสอบแบบใหม่ (กลุ่ม ก)
+
+| item_type | `options_json` (ไม่มีเฉลย) | เฉลย (`set_item_key`) | คำตอบ (`p_responses[item_id]`) |
+|---|---|---|---|
+| `ordering` | `{options:[3–10 entries]}` | `{order:[ทุก id ครั้งเดียว]}` | `{order:[ทุก id ครั้งเดียว]}` |
+| `matching` | `{left:[2–10], right:[≥ left, ≤ 15]}` | `{slots:{left id: right id}}` ครบทุกข้อ ไม่ซ้ำ | `{slots:{…}}` เว้นบางช่องได้ |
+| `classification` | `{categories:[2–6], items:[2–15]}` | `{slots:{item id: category id}}` ครบ | `{slots:{…}}` |
+| `choice_matrix` | `{rows:[1–15], columns:[2–6]}` | `{slots:{row id: column id}}` ครบ | `{slots:{…}}` |
+
+entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `scoring_json` = `{mode: 'partial' | 'all_or_nothing'}` ค่าเริ่มต้น **partial** (ตำแหน่ง/ช่องที่ถูก ÷ ทั้งหมด)
+
+`start_attempt` คืน `presentation` = `{items:[item ids ตามลำดับที่เห็น], lists:{item id:{list:[ids]}}}` — ข้อเรียงลำดับสลับเสมอ (ไม่เริ่มในลำดับที่ถูก) · ฝั่งขวาของข้อจับคู่สลับเสมอ · อื่น ๆ ตาม `assessment_assignments.shuffle_items / shuffle_choices` (ค่าเริ่มต้นปิด) · เก็บไว้ที่ `assessment_attempts.presentation_json`
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

@@ -60,6 +60,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261104090200_draft_sequence.sql` | (2B.1) ลำดับการบันทึก (`draft_seq`, `stale`, SE005) · audit attempts เฉพาะคอลัมน์หลักฐาน |
 | `20261104090300_results_and_item_statistics.sql` | (2B.1) `assignment_results` (invoker) · `item_statistics` (p, D, r, ตัวเลือก, KR-20/α) |
 | `20261104090400_assessment_media_cleanup.sql` | (2B.1) ลบ/เขียนทับรูปข้อสอบได้เฉพาะที่ไม่มีข้อใดใช้ |
+| `20261104090500_item_types_group_a.sql` | (2C) เรียงลำดับ จับคู่ จัดกลุ่ม ตารางตัวเลือก · สลับลำดับฝั่ง server (`presentation_json`) |
 
 ### เหตุผลการออกแบบสำคัญ
 
