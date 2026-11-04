@@ -19,6 +19,11 @@ import {
   traineeOnlyCohorts,
   summarizeResults,
   resultsCsvRows,
+  difficultyLabel,
+  discriminationLabel,
+  reliabilityLabel,
+  choicesText,
+  itemStatsCsvRows,
 } from './logic.js'
 
 const input =
@@ -363,16 +368,77 @@ function resultsTable(rows, canEdit) {
   </div>`
 }
 
-export async function renderAssignmentDetailView(el, { services, session, caps, context }, { id }) {
+const fmt = (x, digits = 2) => (x === null || x === undefined ? '—' : Number(x).toFixed(digits))
+
+/** Item analysis for cohort assessors (aggregates of first attempts; never the key). */
+function itemAnalysis(stats) {
+  if (!stats) return ''
+  if (stats.error)
+    return html`<section class="mt-8" data-item-analysis>${alertBox(`วิเคราะห์ข้อสอบไม่สำเร็จ: ${stats.error}`)}</section>`
+  const head = html`<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <h2 class="text-sm font-semibold text-ink-700">วิเคราะห์ข้อสอบ</h2>
+    ${stats.suppressed ? '' : html`<button type="button" class="${secondary}" data-action="export-items">ดาวน์โหลดผลวิเคราะห์ (CSV)</button>`}
+  </div>`
+  if (stats.suppressed)
+    return html`<section class="mt-8" data-item-analysis>
+      ${head}${emptyState(`ต้องมีผู้ส่งอย่างน้อย ${stats.min_n} คนจึงจะวิเคราะห์ได้ (ตอนนี้ ${stats.n} คน)`)}
+    </section>`
+  const kind = stats.reliability_kind === 'kr20' ? 'KR-20' : 'Cronbach α'
+  return html`<section class="mt-8" data-item-analysis>
+    ${head}
+    <p class="mb-3 text-sm text-ink-600">
+      ผู้สอบ ${stats.n} คน (ใช้ครั้งแรกของแต่ละคน) · คะแนนเฉลี่ย ${fmt(stats.mean_score)} / ${Number(stats.max_score)} · SD ${fmt(stats.sd_score)}
+      · ความเชื่อมั่น (${kind}) <strong data-reliability>${fmt(stats.reliability, 3)}</strong> ${reliabilityLabel(stats.reliability)}
+    </p>
+    <div class="overflow-x-auto rounded-xl border border-ink-200 bg-white">
+      <table class="min-w-full text-sm" data-items>
+        <thead class="bg-ink-50 text-left text-xs text-ink-500">
+          <tr>
+            <th scope="col" class="px-3 py-2 font-medium">ข้อ</th>
+            <th scope="col" class="px-3 py-2 font-medium">โจทย์</th>
+            <th scope="col" class="px-3 py-2 font-medium">ความยาก (p)</th>
+            <th scope="col" class="px-3 py-2 font-medium">อำนาจจำแนก (D)</th>
+            <th scope="col" class="px-3 py-2 font-medium">r</th>
+            <th scope="col" class="px-3 py-2 font-medium">ตัวเลือกที่ถูกเลือก</th>
+            <th scope="col" class="px-3 py-2 font-medium">ไม่ตอบ</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-ink-100">
+          ${stats.items.map(
+            (it, i) => html`<tr data-item-row="${i + 1}">
+              <td class="px-3 py-2 font-semibold text-ink-700">${i + 1}</td>
+              <td class="max-w-xs truncate px-3 py-2 text-ink-700" title="${it.prompt}">${it.prompt}</td>
+              <td class="px-3 py-2">${fmt(it.p)} <span class="block text-xs text-ink-400">${difficultyLabel(it.p)}</span></td>
+              <td class="px-3 py-2">${fmt(it.d)} <span class="block text-xs text-ink-400">${discriminationLabel(it.d)}</span></td>
+              <td class="px-3 py-2 text-ink-600">${fmt(it.r_it)}</td>
+              <td class="px-3 py-2 text-ink-600">${choicesText(it.choices) || '—'}</td>
+              <td class="px-3 py-2 text-ink-600">${it.blank}</td>
+            </tr>`
+          )}
+        </tbody>
+      </table>
+    </div>
+    <p class="mt-2 text-xs text-ink-400">
+      p = สัดส่วนคะแนนที่ได้ (0–1) · D = กลุ่มสูง − กลุ่มต่ำ (27% ละ ${stats.group_size} คน) · r = สหสัมพันธ์ข้อกับคะแนนรวมที่เหลือ ·
+      เกณฑ์แปลผลเป็นแนวทางทั่วไป · ระบบไม่ระบุว่าตัวเลือกใดเป็นคำตอบที่ถูก (เฉลยอ่านกลับไม่ได้)
+    </p>
+  </section>`
+}
+
+export async function renderAssignmentDetailView(el, { services, caps, context }, { id }) {
   render(el, loading)
-  let assignment, attempts, roster, extras
+  let assignment, results, stats
+  let canEdit = false
   const load = async () => {
     assignment = await services.assignments.get(id)
     if (!assignment) return
-    ;[attempts, roster, extras] = await Promise.all([
-      services.assignments.listAttempts(id),
-      services.assignments.listRoster(assignment.cohort_id, session.user.id),
-      services.assignments.listExtraAttempts(id),
+    canEdit = canAssessHint(caps, context, assignment.cohort_id)
+    ;[results, stats] = await Promise.all([
+      services.assignments.results(id),
+      // Item analysis is for cohort assessors; a failure there must not hide the results.
+      canEdit
+        ? services.assignments.itemStatistics(id).catch((err) => ({ error: toUserMessage(err) }))
+        : null,
     ])
   }
   try {
@@ -386,14 +452,13 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
       html`${pageHeader('ไม่พบแบบทดสอบ')}${emptyState('ไม่พบการมอบหมายนี้ หรือท่านไม่มีสิทธิ์เข้าถึง')}`
     )
 
-  const canEdit = canAssessHint(caps, context, assignment.cohort_id)
   let message = null
   let tone = 'success'
   let busy = false
 
   const draw = () => {
-    const { rows, summary } = summarizeResults(roster, attempts, assignment, extras)
-    const locked = attempts.length > 0
+    const { rows, summary } = summarizeResults(results, assignment)
+    const locked = rows.some((r) => r.used > 0)
     const judged = summary.passed !== null
     render(
       el,
@@ -425,6 +490,7 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
           ${resultsTable(rows, canEdit)}
           <p class="mt-2 text-xs text-ink-400">ระบบแสดงคะแนนรวมรายครั้งเท่านั้น ไม่แสดงคะแนนหรือเฉลยรายข้อ</p>
         </section>
+        ${canEdit ? itemAnalysis(stats) : ''}
 
         ${
           canEdit
@@ -479,12 +545,17 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
     if (!b || b.disabled) return undefined
     switch (b.dataset.action) {
       case 'export': {
-        const { rows } = summarizeResults(roster, attempts, assignment, extras)
+        const { rows } = summarizeResults(results, assignment)
         return downloadText(
           `results-${assignment.cohorts?.code ?? 'cohort'}-${assignment.id.slice(0, 8)}.csv`,
           toCsv(resultsCsvRows(rows))
         )
       }
+      case 'export-items':
+        return downloadText(
+          `item-analysis-${assignment.cohorts?.code ?? 'cohort'}-${assignment.id.slice(0, 8)}.csv`,
+          toCsv(itemStatsCsvRows(stats))
+        )
       case 'grant-extra': {
         const reason = window.prompt(
           `ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ${b.dataset.name}\nเหตุผล (ไม่บังคับ เช่น สัญญาณขาด):`,
@@ -544,7 +615,7 @@ export async function renderAssignmentDetailView(el, { services, session, caps, 
     let patch
     try {
       patch = buildAssignmentPayload(Object.fromEntries(new FormData(e.target)), {
-        locked: attempts.length > 0,
+        locked: results.some((r) => r.used > 0),
       })
     } catch (err) {
       message = toUserMessage(err)

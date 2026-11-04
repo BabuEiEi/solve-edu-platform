@@ -74,7 +74,8 @@ Client wrapper (`features/admin/service.js`) บังคับเหตุผ�
 | เตือนก่อนออก (2B.1) | ยังบันทึกไม่เสร็จ: ลิงก์/ออกจากระบบในแอป → `confirm('ยังบันทึกไม่เสร็จ ออกจากหน้านี้หรือไม่')` · ปิดแท็บ/รีเฟรช → `beforeunload` (เบราว์เซอร์แสดงข้อความมาตรฐานของตัวเอง กำหนดข้อความเองไม่ได้) | |
 | ตัวจับเวลา (2B.1) | นับถึง `deadline_at` โดยชดเชยนาฬิกาเครื่องด้วย `server_now` | หมดเวลา → ส่งสิ่งที่อยู่บนจอ (ข้อมูลตัวเลขที่พิมพ์ไม่ครบถูกข้าม); server รับถึงเส้นตาย+ผ่อนผัน |
 | ให้สิทธิ์ทำเพิ่ม (2B.1) | `assessment_extra_attempts.insert({assignment_id, user_id, reason})` · อ่าน `select('id, user_id, reason, created_at')` | ห้ามส่ง `granted_by` |
-| ผลของรุ่น (staff) | `assessment_attempts.select('…, user_id, profiles(full_name, display_name)').eq('assignment_id')` | ไม่มีคะแนนรายข้อ; mentor ได้เฉพาะผู้ที่ดูแล |
+| ผลของรุ่น (staff) | `rpc('assignment_results', { p_assignment })` → `[{user_id, name, on_roster, used, extra, in_progress, submitted, auto_submitted, first_score, first_max, best_score, best_max, best_passed, last_submitted_at}]` (2B.1) | หนึ่งแถวต่อคน คำนวณบน server; RLS ของผู้เรียกกำหนดแถว |
+| วิเคราะห์ข้อสอบ (2B.1) | `rpc('item_statistics', { p_assignment })` → `{n, min_n, suppressed, basis:'first_attempt', group_size, k, max_score, mean_score, sd_score, reliability, reliability_kind:'kr20'\|'alpha', items:[{item_id, display_order, item_type, prompt, max_score, p, d, r_it, blank, choices}]}` | assessor เท่านั้น · `suppressed` เมื่อน้อยกว่า 5 คน (คืนแค่ `n`) |
 | รายชื่อที่ควรทำ | `cohort_memberships.select('user_id, profiles!cohort_memberships_user_id_fkey(…)')` ∪ `mentor_assignments.select('trainee_id, profiles!mentor_assignments_trainee_id_fkey(…)').eq('mentor_id', uid)` | ต้องระบุชื่อ FK (มี 2 เส้นทางไป profiles) |
 
 ## 3. Error mapping (`src/core/errors.js`)

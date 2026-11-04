@@ -47,6 +47,7 @@ test('trainer assigns a posttest, follows the cohort results and exports them; a
   await expect(row).toContainText('ยังไม่ผ่านเกณฑ์')
   await expect(trainer.locator('[data-results] tbody tr')).toHaveCount(3)
   await expect(trainer.locator('form[data-form=assignment] [name=passing_percent]')).toBeDisabled()
+  await expect(trainer.locator('[data-item-analysis]')).toContainText('ต้องมีผู้ส่งอย่างน้อย 5 คน') // 1 submitted
 
   const [download] = await Promise.all([
     trainer.waitForEvent('download'),

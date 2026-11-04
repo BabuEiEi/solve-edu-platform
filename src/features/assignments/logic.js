@@ -119,51 +119,27 @@ export function traineeOnlyCohorts(context) {
   return new Set([...roles].filter(([, r]) => r.every((x) => x === 'trainee')).map(([id]) => id))
 }
 
-export const personName = (p) => p?.display_name || p?.full_name || 'ไม่ทราบชื่อ'
-
-const bySubmitted = (a, b) => new Date(a.submitted_at) - new Date(b.submitted_at)
-
 /**
- * One row per person on the roster (plus anyone with an attempt who has left
- * the roster), and cohort totals. The summary uses each person's best
- * submitted attempt.
- *   roster:   [{ user_id, name }]
- *   attempts: rows of assessment_attempts with user_id (+ profiles)
- *   extras:   rows of assessment_extra_attempts (user_id) — +1 attempt each
+ * Rows of assignment_results (one per person, already scoped by RLS) → the
+ * table rows the page shows, plus cohort totals. The summary uses each
+ * person's best submitted attempt.
  */
-export function summarizeResults(roster, attempts, assignment, extras = []) {
-  const extraOf = new Map()
-  for (const x of extras) extraOf.set(x.user_id, (extraOf.get(x.user_id) ?? 0) + 1)
-  const people = new Map(roster.map((r) => [r.user_id, { ...r, attempts: [] }]))
-  for (const t of attempts) {
-    if (!people.has(t.user_id))
-      people.set(t.user_id, {
-        user_id: t.user_id,
-        name: personName(t.profiles),
-        attempts: [],
-        offRoster: true,
-      })
-    people.get(t.user_id).attempts.push(t)
-  }
-
-  const rows = [...people.values()].map((p) => {
-    const submitted = p.attempts.filter((t) => t.status === 'submitted').sort(bySubmitted)
-    const best = submitted.reduce((b, t) => (!b || attemptPercent(t) > attemptPercent(b) ? t : b), null)
-    return {
-      user_id: p.user_id,
-      name: p.name,
-      offRoster: Boolean(p.offRoster),
-      used: p.attempts.length,
-      extra: extraOf.get(p.user_id) ?? 0,
-      limit: (assignment?.attempt_limit ?? 0) + (extraOf.get(p.user_id) ?? 0),
-      autoSubmitted: submitted.filter((t) => t.auto_submitted).length,
-      status: submitted.length ? 'submitted' : p.attempts.length ? 'in_progress' : 'not_started',
-      inProgress: p.attempts.some((t) => t.status === 'in_progress'),
-      first: submitted[0] ?? null,
-      best,
-      lastSubmittedAt: submitted.at(-1)?.submitted_at ?? null,
-    }
-  })
+export function summarizeResults(results, assignment) {
+  const rows = results.map((r) => ({
+    user_id: r.user_id,
+    name: r.name || 'ไม่ทราบชื่อ',
+    offRoster: !r.on_roster,
+    used: r.used,
+    extra: r.extra,
+    limit: (assignment?.attempt_limit ?? 0) + r.extra,
+    autoSubmitted: r.auto_submitted,
+    status: r.submitted ? 'submitted' : r.used ? 'in_progress' : 'not_started',
+    inProgress: r.in_progress,
+    first: r.first_score === null ? null : { score: r.first_score, max_score: r.first_max },
+    best:
+      r.best_score === null ? null : { score: r.best_score, max_score: r.best_max, passed: r.best_passed },
+    lastSubmittedAt: r.last_submitted_at,
+  }))
   rows.sort((a, b) => a.name.localeCompare(b.name, 'th'))
 
   const done = rows.filter((r) => r.best)
@@ -181,6 +157,71 @@ export function summarizeResults(roster, attempts, assignment, extras = []) {
       passed: judged ? done.filter((r) => r.best.passed === true).length : null,
     },
   }
+}
+
+// ---------------------------------------------------------------------
+// Item analysis (item_statistics). Rough guides for reading the numbers,
+// commonly used thresholds — not hard rules.
+// ---------------------------------------------------------------------
+export function difficultyLabel(p) {
+  if (p === null || p === undefined) return ''
+  if (p < 0.2) return 'ยากมาก'
+  if (p > 0.8) return 'ง่ายมาก'
+  return 'พอเหมาะ'
+}
+
+export function discriminationLabel(d) {
+  if (d === null || d === undefined) return ''
+  if (d < 0) return 'ติดลบ — ตรวจโจทย์/เฉลย'
+  if (d < 0.2) return 'ต่ำ — ควรปรับปรุง'
+  if (d < 0.4) return 'พอใช้'
+  return 'ดี'
+}
+
+export function reliabilityLabel(x) {
+  if (x === null || x === undefined) return 'คำนวณไม่ได้'
+  if (x >= 0.9) return 'สูงมาก'
+  if (x >= 0.7) return 'ยอมรับได้'
+  if (x >= 0.5) return 'ค่อนข้างต่ำ'
+  return 'ต่ำ'
+}
+
+const CHOICE_NAMES = { true: 'ถูก', false: 'ผิด' }
+
+/** {"b":4,"a":1} → "a 1 · b 4"; true/false in Thai. */
+export function choicesText(choices = {}) {
+  return Object.keys(choices)
+    .sort()
+    .map((k) => `${CHOICE_NAMES[k] ?? k} ${choices[k]}`)
+    .join(' · ')
+}
+
+/** item_statistics → CSV rows (header first). */
+export function itemStatsCsvRows(stats) {
+  return [
+    [
+      'ข้อ',
+      'ประเภท',
+      'โจทย์',
+      'คะแนนเต็ม',
+      'ค่าความยาก (p)',
+      'อำนาจจำแนก (D)',
+      'r (item-total)',
+      'ตัวเลือกที่ถูกเลือก',
+      'ไม่ตอบ',
+    ],
+    ...(stats.items ?? []).map((it, i) => [
+      i + 1,
+      it.item_type,
+      it.prompt,
+      Number(it.max_score),
+      it.p,
+      it.d,
+      it.r_it ?? '',
+      choicesText(it.choices),
+      it.blank,
+    ]),
+  ]
 }
 
 const RESULT_TEXT = { true: 'ผ่าน', false: 'ไม่ผ่าน' }
