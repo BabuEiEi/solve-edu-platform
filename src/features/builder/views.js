@@ -188,6 +188,7 @@ export async function renderCourseBuilderView(el, { services }, { id }) {
           <div class="flex flex-wrap items-center gap-2">
             ${statusBadge(course.status)} ${publishToggle('toggle-course', course)}
             <a href="#/courses/${course.id}/preview" class="${secondary}">ดูมุมมองผู้เรียน</a>
+            <a href="#/courses/${course.id}/quizzes" class="${secondary}">แบบทดสอบ</a>
           </div>
         </div>
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''}
@@ -330,7 +331,9 @@ export async function renderCourseBuilderView(el, { services }, { id }) {
 // =====================================================================
 const MEDIA_KIND = { image: 'image', document: 'document', video: 'video' }
 
-function blockForm(type, block, media) {
+const PURPOSE_SHORT = { pretest: 'ก่อนเรียน', posttest: 'หลังเรียน', formative: 'ระหว่างเรียน' }
+
+function blockForm(type, block, media, assignments = []) {
   const c = block?.content_json ?? {}
   const current = c.object_path && media[c.object_path]
   const fileInput = (kind, required) =>
@@ -372,6 +375,28 @@ function blockForm(type, block, media) {
           >ลิงก์ (https://)<input name="url" type="url" required value="${c.url ?? ''}" class="${input}"
         /></label>
         <label class="${label}">ข้อความที่แสดง<input name="label" maxlength="300" value="${c.label ?? ''}" class="${input}" /></label>`,
+    quiz_reference: () =>
+      assignments.length
+        ? html`<label class="${label}"
+              >แบบทดสอบที่มอบหมายในหลักสูตรนี้
+              <select name="assessment_assignment_id" required class="${input}">
+                <option value="">— เลือก —</option>
+                ${assignments.map(
+                  (a) =>
+                    html`<option value="${a.id}" ${a.id === c.assessment_assignment_id ? 'selected' : ''}>
+                      ${a.title} (${PURPOSE_SHORT[a.purpose] ?? a.purpose} · ${a.cohorts?.code ?? ''}${
+                        a.status === 'published' ? '' : ' · ยังไม่เผยแพร่'
+                      })
+                    </option>`
+                )}
+              </select>
+            </label>
+            <label class="${label}"
+              >ข้อความที่แสดง (ไม่บังคับ)<input name="title" maxlength="300" value="${c.title ?? ''}" class="${input}"
+            /></label>`
+        : html`<p class="text-sm text-ink-500">
+            ยังไม่มีแบบทดสอบที่มอบหมายในหลักสูตรนี้ — สร้างและมอบหมายแบบทดสอบก่อน แล้วจึงเพิ่มบล็อกนี้
+          </p>`,
   }
   return html`<form data-form="block" class="space-y-3 rounded-xl border-2 border-brand-200 bg-white p-4">
     <p class="text-sm font-semibold text-brand-700">
@@ -390,6 +415,7 @@ export async function renderLessonEditorView(el, { services }, { id: courseId, l
   render(el, loading)
   let course, lesson
   let media = {}
+  let assignments = [] // for quiz_reference blocks
   let editing = null // { type, blockId|null }
   let editor = null
   let message = null
@@ -402,6 +428,7 @@ export async function renderLessonEditorView(el, { services }, { id: courseId, l
       services.lessons.getLesson(lessonId),
     ])
     media = lesson ? await services.media.signedUrls(mediaPathsOf(lesson.lesson_blocks)) : {}
+    assignments = services.quizzes ? await services.quizzes.listCourseAssignments(courseId) : []
   }
 
   try {
@@ -422,7 +449,7 @@ export async function renderLessonEditorView(el, { services }, { id: courseId, l
   }
 
   const blockCard = (b) => {
-    if (editing?.blockId === b.id) return blockForm(b.block_type, b, media)
+    if (editing?.blockId === b.id) return blockForm(b.block_type, b, media, assignments)
     const canEdit = BLOCK_TYPES[b.block_type]?.authoring
     return html`<li class="rounded-xl border border-ink-200 bg-white">
       <div class="flex flex-wrap items-center gap-2 border-b border-ink-100 px-4 py-2 text-sm">
@@ -485,7 +512,7 @@ export async function renderLessonEditorView(el, { services }, { id: courseId, l
         <div class="mt-4">
           ${
             editing && !editing.blockId
-              ? blockForm(editing.type, null, media)
+              ? blockForm(editing.type, null, media, assignments)
               : html`<div class="flex flex-wrap gap-2 rounded-xl border border-dashed border-ink-200 bg-white p-3">
                 <span class="self-center text-sm text-ink-500">เพิ่มเนื้อหา:</span>
                 ${AUTHORING_TYPES.map(
@@ -549,6 +576,8 @@ export async function renderLessonEditorView(el, { services }, { id: courseId, l
     const hasFile = file && typeof file === 'object' && file.size > 0
     const fields = Object.fromEntries([...f.entries()].filter(([k]) => k !== 'file'))
     if (type === 'rich_text') fields.html = editor ? editor.getHTML() : f.get('html')
+    if (type === 'quiz_reference' && !String(fields.title ?? '').trim())
+      fields.title = assignments.find((a) => a.id === fields.assessment_assignment_id)?.title ?? ''
 
     let uploaded = null
     try {

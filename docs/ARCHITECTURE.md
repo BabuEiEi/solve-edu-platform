@@ -1,6 +1,6 @@
 # Architecture — SolveEdu Platform
 
-> สถานะ: **Phase 0–1 เสร็จ + Phase 2A เสร็จ** (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อล่วงหน้า) · ยังไม่ Deploy · ยังไม่เชื่อม Supabase Remote · Assessment/Scoring อยู่ Phase 2B
+> สถานะ: **Phase 0–1 + 2A + 2B เสร็จ** (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อล่วงหน้า, แบบทดสอบ + ให้คะแนนฝั่ง server + ผลของรุ่น) · ยังไม่ Deploy · ยังไม่เชื่อม Supabase Remote
 
 ## 1. ภาพรวม
 
@@ -12,9 +12,9 @@ Supabase Data API (PostgREST)  ── exposed schemas: public, graphql_public
   │  every request runs as role `authenticated` / `anon`
   ▼
 PostgreSQL
-  ├─ public   tables + RLS + column GRANTs + 2 trusted RPCs
+  ├─ public   tables + RLS + column GRANTs + trusted RPCs (เช่น start/submit_attempt)
   ├─ authz    RLS helper functions (definer, boolean, not exposed)
-  ├─ private  audit_logs (and Phase 2 answer keys) — no client grants
+  ├─ private  audit_logs, instrument_answer_keys, scoring helpers — no client grants
   └─ auth     Supabase Auth (users, identities)
 ```
 
@@ -28,6 +28,8 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Features | `src/features/<domain>/service.js` + `views.js` | service รับ `client` เป็น dependency (ทดสอบด้วย fake/PostgREST ได้), view render ด้วย `html```` |
 | Shared | `src/shared/ui/html.js` | template ที่ escape อัตโนมัติ; ESLint ห้าม `innerHTML =` นอกไฟล์นี้ |
 | Shared | `src/shared/utils/date.js` | แสดงเวลา Asia/Bangkok + พ.ศ. |
+| Shared | `src/shared/utils/csv.js`, `src/shared/ui/download.js` | อ่าน/เขียน CSV (BOM สำหรับ Excel, กัน CSV injection) · ดาวน์โหลดผ่าน blob URL |
+| Features (2B) | `quizzes/` (สร้างข้อสอบ), `assessments/` (ผู้เรียนทำแบบทดสอบ), `assignments/` (มอบหมายให้รุ่น + ผลของรุ่น) | `logic.js` เป็นฟังก์ชันล้วน (unit test); คะแนนไม่เคยคำนวณใน browser |
 
 แนวทาง: query เลือกคอลัมน์ชัดเจนเสมอ (ห้าม `select('*')` กับ `profiles` — จะได้ 42501) · event delegation ด้วย `data-action` (ไม่มี inline handler) · CSP ใน `index.html`
 
@@ -48,6 +50,11 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261103090100_course_builder.sql` | `course_access`, `reorder_course_items`, ตรวจ rich text/path ใน DB |
 | `20261103090110_row_based_select_policies.sql` | แก้บั๊ก `INSERT … RETURNING` (SELECT policy ตัดสินจากคอลัมน์ของแถว) |
 | `20261103090200_preregistrations.sql` | `preregistrations` + `claim_my_preregistrations()` |
+| `20261103090300_assessment_schema.sql` | instruments → versions → items, `private.instrument_answer_keys`, assignments, attempts, responses + guard triggers + authz helpers + RLS |
+| `20261103090310_assessment_authoring.sql` | `set_item_key`, `item_key_status`, `publish_instrument_version`, `clone_instrument_version`, `content_hash` |
+| `20261103090320_assessment_attempts.sql` | `start_attempt` / `submit_attempt` (advisory lock, ให้คะแนนฝั่ง server) |
+| `20261103090330_assessment_media.sql` | bucket `assessment-media` + policy |
+| `20261103090340_assessment_assignment_guard.sql` | หลังมีผู้เริ่มทำ ห้ามแก้เกณฑ์ผ่าน/ประเภท/หลักสูตร หรือย้อนเป็นร่าง (SE004) |
 
 ### เหตุผลการออกแบบสำคัญ
 
@@ -57,6 +64,9 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 4. **Invariant ใน trigger** (mentor ต้องเป็น mentor ของรุ่น, enrollment ต้องเป็น trainee + หลักสูตรอยู่ในโครงการ, progress ต้องเป็นบทเรียน published) — ถูกต้องไม่ว่าใครเขียน (client, service role, migration)
 5. **เวลาที่มีความหมายเชิงหลักฐาน** (`started_at`, `completed_at`, `granted_by`) ประทับโดยฐานข้อมูล ไม่รับจาก client
 6. **Secure-by-default grants** — ตารางใหม่ใน Phase ถัดไปจะเข้าถึงไม่ได้จนกว่าจะเขียน GRANT + policy + test
+7. **เฉลยเขียนได้แต่อ่านไม่ได้** (2B) — เฉลยอยู่ใน `private` ซึ่ง client ไม่มีสิทธิ์; ผู้สร้างเห็นเพียง `has_key/key_valid`; รหัสตัวเลือกไม่ถูกเรียงใหม่เมื่อลบตัวเลือก (เฉลยอ้างรหัส)
+8. **ฉบับที่เผยแพร่แล้วแก้ไม่ได้** (2B) — คะแนนที่บันทึกแล้วยังหมายถึงข้อสอบชุดเดิมเสมอ; แก้ = clone เป็นฉบับใหม่
+9. **การตั้งค่าที่ให้ความหมายกับผล** (เกณฑ์ผ่าน, ประเภท) ถูกตรึงเมื่อมีผู้เริ่มทำ (2B) — ส่วนช่วงเวลา/จำนวนครั้งยังขยายได้
 
 ## 4. ข้อจำกัดที่ทราบ / ควรทบทวน
 
@@ -66,7 +76,10 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Trainer แก้หลักสูตรที่ใช้ร่วมหลายโครงการได้ | การแก้กระทบรุ่นอื่น | Phase 2: content versioning เมื่อ publish หรือ `course_editors` แยก |
 | `auth.users` ON DELETE CASCADE → profiles | ลบบัญชีแล้วโปรไฟล์หาย (แต่ RESTRICT จาก enrollment จะกันไว้) | กำหนด retention / soft-delete ก่อนใช้ข้อมูลจริง |
 | Storage ของ submissions/portfolio | ยังไม่มี bucket | Phase 3 |
-| UI อัปโหลด avatar | bucket + policy พร้อมแล้ว แต่ยังไม่มีหน้าจอ | Phase 2B/3 |
+| UI อัปโหลด avatar | bucket + policy พร้อมแล้ว แต่ยังไม่มีหน้าจอ | Phase 3 |
+| ครั้งที่เริ่มแล้วไม่ส่ง (2B) | ค้างเป็น "กำลังทำ" ตลอดไป และส่งหลังปิดรับไม่ได้ (ไม่มีช่วงผ่อนผัน) | งานปิดอัตโนมัติ/ผ่อนผันหลัง `close_at` |
+| รูปข้อสอบไม่ถูกลบ (2B) | ฉบับเก่า/ฉบับ clone ใช้ไฟล์ร่วมกัน จึงไม่ลบ → มีไฟล์กำพร้าได้ | งานล้างไฟล์ที่ไม่มีข้อใดอ้างถึง (Phase 5) |
+| ผลของรุ่นคำนวณสรุปใน browser (2B) | ดึง attempts ทั้งรุ่นทุกครั้ง; รุ่นหลักพันคนจะช้า | view/RPC สรุปฝั่ง server เมื่อมีข้อมูลจริง |
 | ไฟล์ที่ลบ/แทนที่ใน Builder | ลบไฟล์แบบ best-effort — อาจมีไฟล์กำพร้าถ้าเครือข่ายล้ม | งานล้างไฟล์กำพร้า (Phase 5) |
 | เว็บไซต์ยังไม่ส่งอีเมลเชิญ | ผู้ถูกนำเข้าต้องสมัครเอง (ยืนยันอีเมลแล้วผูกอัตโนมัติ) | ต้องมี SMTP จริงก่อน pilot |
 | `supabase start` ต้อง restart เมื่อแก้ `config.toml` (เช่น email confirmations) | `db reset` ไม่โหลด config Auth ใหม่ | `npx supabase stop && npx supabase start` |

@@ -56,4 +56,6 @@ export const STATUS_LABELS = {
   draft: 'ฉบับร่าง',
   published: 'เผยแพร่',
   archived: 'เก็บถาวร',
+  in_progress: 'กำลังทำ',
+  submitted: 'ส่งแล้ว',
 }

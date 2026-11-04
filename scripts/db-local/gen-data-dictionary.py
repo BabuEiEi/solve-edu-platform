@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Generate docs/DATA_DICTIONARY.md from a LOCAL database built by reset.sh.
-Usage: python3 scripts/db-local/gen-data-dictionary.py [dbname] > docs/DATA_DICTIONARY.md"""
-import json, subprocess, sys
+Usage: python3 scripts/db-local/gen-data-dictionary.py [dbname] > docs/DATA_DICTIONARY.md
+Without a local psql, point PSQL at the Supabase Local container, e.g.
+  PSQL="docker exec -i supabase_db_<project> psql -U postgres -d postgres" python3 scripts/db-local/gen-data-dictionary.py"""
+import json, os, shlex, subprocess, sys
 
 db = sys.argv[1] if len(sys.argv) > 1 else "solveedu_local"
 SQL = r"""
@@ -22,10 +24,11 @@ select json_agg(t order by t.ord) from (
   where n.nspname = 'public' and c.relkind = 'r'
 ) t;
 """
-out = subprocess.run(["psql", "-X", "-At", "-d", db, "-c", SQL], capture_output=True, text=True, check=True).stdout
+psql = shlex.split(os.environ["PSQL"]) if os.environ.get("PSQL") else ["psql", "-d", db]
+out = subprocess.run([*psql, "-X", "-At", "-c", SQL], capture_output=True, text=True, check=True).stdout
 tables = json.loads(out)
 esc = lambda s: (s or "").replace("|", "\\|").replace("\n", " ")
-print("# Data Dictionary — SolveEdu Platform (Phase 1)\n")
+print("# Data Dictionary — SolveEdu Platform (Phase 2B)\n")
 print(f"> สร้างอัตโนมัติจากฐานข้อมูล Local ด้วย `scripts/db-local/gen-data-dictionary.py` — อย่าแก้ไขด้วยมือ  ")
 print("> ทุกตารางใน `public` เปิด RLS; สิทธิ์รายคอลัมน์ดู `PERMISSIONS.md`\n")
 print("## สารบัญ\n")

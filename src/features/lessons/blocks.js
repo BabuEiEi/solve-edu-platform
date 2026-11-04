@@ -3,7 +3,7 @@ import { sanitizeRichText, isBlankRichText } from '../../shared/ui/sanitize.js'
 
 /**
  * Lesson block types. `authoring: false` types exist in the schema but have
- * no editor yet (embed is limited by CSP frame-src; quiz_reference = Phase 2B).
+ * no editor yet (embed is limited by CSP frame-src).
  */
 export const BLOCK_TYPES = {
   rich_text: { label: 'ข้อความ', icon: '¶', authoring: true },
@@ -12,12 +12,13 @@ export const BLOCK_TYPES = {
   document: { label: 'เอกสารแนบ', icon: '⎙', authoring: true },
   link: { label: 'ลิงก์', icon: '↗', authoring: true },
   embed: { label: 'ฝังเนื้อหา', icon: '⧉', authoring: false },
-  quiz_reference: { label: 'แบบทดสอบ', icon: '?', authoring: false },
+  quiz_reference: { label: 'แบบทดสอบ', icon: '✎', authoring: true },
 }
 
 export const AUTHORING_TYPES = Object.keys(BLOCK_TYPES).filter((t) => BLOCK_TYPES[t].authoring)
 
 const VIDEO_ID = /^[A-Za-z0-9_-]{6,64}$/
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const MAX_TEXT = 300
 
 /**
@@ -92,6 +93,11 @@ export function buildBlockContent(type, fields = {}) {
       if (!/^https:\/\/[^\s]+$/i.test(url)) throw new AppError('ลิงก์ต้องขึ้นต้นด้วย https://')
       return { url, label: text(fields.label) }
     }
+    case 'quiz_reference': {
+      const id = String(fields.assessment_assignment_id ?? '').trim()
+      if (!UUID.test(id)) throw new AppError('กรุณาเลือกแบบทดสอบ')
+      return { assessment_assignment_id: id, title: text(fields.title) }
+    }
     default:
       throw new AppError('ยังไม่รองรับการแก้ไขบล็อกประเภทนี้')
   }
@@ -117,6 +123,8 @@ export function blockSummary(block) {
       return c.label || c.file_name || 'เอกสาร'
     case 'link':
       return c.label || c.url
+    case 'quiz_reference':
+      return c.title || 'แบบทดสอบ'
     default:
       return BLOCK_TYPES[block?.block_type]?.label ?? ''
   }

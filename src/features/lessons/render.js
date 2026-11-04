@@ -81,6 +81,16 @@ export function renderBlock(block, media = {}) {
         class="flex items-center gap-3 rounded-xl border border-ink-200 bg-white px-4 py-3 text-sm hover:border-brand-300"
         ><span aria-hidden="true">↗</span><span class="font-medium text-brand-700">${c.label || c.url}</span></a
       >`
+    case 'quiz_reference':
+      // Eligibility, window and attempt limit are checked on the assessment page / by the RPC.
+      return html`<a
+        href="#/assessments/${encodeURIComponent(c.assessment_assignment_id ?? '')}"
+        data-quiz-link
+        class="flex items-center gap-3 rounded-xl border border-brand-200 bg-brand-50/60 px-4 py-3 text-sm hover:border-brand-400"
+        ><span aria-hidden="true" class="text-lg">✎</span>
+        <span class="font-medium text-ink-800">${c.title || 'แบบทดสอบ'}</span>
+        <span class="ml-auto text-xs font-semibold text-brand-700">ไปที่แบบทดสอบ</span></a
+      >`
     default:
       return html`<p class="rounded-lg bg-ink-50 px-4 py-3 text-sm text-ink-500">
         เนื้อหาประเภทนี้จะรองรับในเวอร์ชันถัดไป
