@@ -136,11 +136,9 @@ export function createQuizBuilderService(client) {
       return itemMediaPaths(rows)
     },
 
-    async setKey(itemId, { answer, scoring }) {
-      unwrap(
-        await client.rpc('set_item_key', { p_item: itemId, p_answer: answer, p_scoring: scoring ?? {} }),
-        'quizzes.set_key'
-      )
+    /** Write-only answer key. The scoring mode is an item column (scoring_mode), not part of the key. */
+    async setKey(itemId, { answer }) {
+      unwrap(await client.rpc('set_item_key', { p_item: itemId, p_answer: answer }), 'quizzes.set_key')
     },
 
     async publish(versionId) {

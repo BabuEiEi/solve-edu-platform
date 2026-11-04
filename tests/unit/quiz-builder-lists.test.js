@@ -39,7 +39,8 @@ describe('builder logic for list types', () => {
         { ...base, lists: { options: rows(['p', 'q', 'r', 's']) }, orderIsKey: true },
         { random: seeded(seed) }
       )
-      expect(key).toEqual({ answer: { order: ['p', 'q', 'r', 's'] }, scoring: { mode: 'partial' } })
+      expect(key).toEqual({ answer: { order: ['p', 'q', 'r', 's'] } })
+      expect(item.scoring_mode).toBe('partial') // default for the new types
       const stored = item.options_json.options.map((o) => o.id)
       expect([...stored].sort()).toEqual(['p', 'q', 'r', 's'])
       expect(stored).not.toEqual(['p', 'q', 'r', 's'])
@@ -68,10 +69,8 @@ describe('builder logic for list types', () => {
         },
         { random: seeded(seed) }
       )
-      expect(key).toEqual({
-        answer: { slots: { l1: 'ab12', l2: 'cd34' } },
-        scoring: { mode: 'all_or_nothing' },
-      })
+      expect(key).toEqual({ answer: { slots: { l1: 'ab12', l2: 'cd34' } } })
+      expect(item.scoring_mode).toBe('all_or_nothing')
       const right = item.options_json.right.map((o) => o.id)
       expect(right[0] === 'ab12' && right[1] === 'cd34').toBe(false)
     }
@@ -221,7 +220,8 @@ describe('quiz editor: list-type forms', () => {
     await settle()
     const [, key] = services.quizzes.setKey.mock.calls[0]
     expect(key.answer.slots).toEqual({ l1: rightIds[0], l2: rightIds[1], l3: rightIds[2] })
-    expect(key.scoring).toEqual({ mode: 'partial' })
+    expect(key).not.toHaveProperty('scoring')
+    expect(services.quizzes.addItem.mock.calls.at(-1)[1].scoring_mode).toBe('partial')
   })
 
   it('editing a classification without picking keeps the stored key (no setKey)', async () => {
@@ -231,6 +231,7 @@ describe('quiz editor: list-type forms', () => {
       prompt: 'จัดกลุ่ม',
       max_score: 1,
       display_order: 1,
+      scoring_mode: 'all_or_nothing',
       options_json: { categories: rows(['c1', 'c2'], 'กลุ่ม '), items: rows(['i1', 'i2'], 'รายการ ') },
     }
     const services = makeServices([existing])
@@ -241,12 +242,15 @@ describe('quiz editor: list-type forms', () => {
     el.querySelector('[data-action=edit-item]').click()
     const form = el.querySelector('form[data-form=item]')
     expect([...form.querySelectorAll('select[data-key-select]')].every((s) => s.value === '')).toBe(true) // key not shown
+    expect(form.querySelector('select[name=mode]').value).toBe('all_or_nothing') // the stored mode is shown (2C.1)
+    expect(form.querySelectorAll('select[name=mode]')).toHaveLength(1)
     fill(form, 'items', ['รายการ แก้'])
+    form.querySelector('select[name=mode]').value = 'partial' // change the mode without a new key
     form.requestSubmit()
     await settle()
     expect(services.quizzes.updateItem).toHaveBeenCalledWith(
       'it1',
-      expect.objectContaining({ options_json: expect.any(Object) })
+      expect.objectContaining({ options_json: expect.any(Object), scoring_mode: 'partial' })
     )
     expect(services.quizzes.setKey).not.toHaveBeenCalled()
   })

@@ -130,7 +130,10 @@ export function readAnswers(form, items) {
   const answers = {}
   for (const item of items) {
     const name = fieldName(item.id)
-    if (item.item_type === 'mcq_multiple' || item.item_type === 'ordering') {
+    if (item.item_type === 'ordering') {
+      // the order shown at the start is not an answer: moved, confirmed or restored only
+      answers[item.id] = data.get(partName(item.id, 'set')) === '1' ? data.getAll(name).map(String) : []
+    } else if (item.item_type === 'mcq_multiple') {
       answers[item.id] = data.getAll(name).map(String)
     } else if (isSlotType(item.item_type)) {
       const slots = {}
@@ -182,7 +185,7 @@ export function buildResponses(items, answers = {}, { lenient = false } = {}) {
         break
       }
       case 'ordering':
-        // the list is always complete: the order on screen is the answer
+        // empty until the trainee moved an entry or pressed "ใช้ลำดับนี้" (readAnswers)
         if (Array.isArray(raw) && raw.length) value = { order: raw.map(String) }
         break
       case 'cloze': {

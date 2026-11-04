@@ -39,8 +39,40 @@ function choiceCard(type, name, value, content, checked) {
   </label>`
 }
 
-/** One slot's answer: a select when every choice is text (compact), otherwise picture cards; `chips` = small inline radios. */
-function slotControl(name, choices, selected, media, label, { chips = false } = {}) {
+/** "รูปที่ 2" / "รูปที่ 2 · คำบรรยาย": how a numbered choice is named in the gallery and in each row's select. */
+const galleryName = (c, k) => `รูปที่ ${k + 1}${c.text ? ` · ${c.text}` : ''}`
+
+/**
+ * Choices with pictures, shown once as a numbered gallery; every row then
+ * picks "รูปที่ N" from a select. Keeps the item short on a phone (the
+ * pictures are not repeated under each row).
+ */
+function choiceGallery(choices, media) {
+  return html`<ol class="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-3" data-gallery>
+    ${choices.map(
+      (
+        c,
+        k
+      ) => html`<li class="rounded-lg border border-ink-200 bg-white p-2 text-sm" data-gallery-item="${c.id}">
+        <span class="mb-1 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-brand-600 px-1 text-xs font-bold text-white"
+          >${k + 1}</span
+        >
+        <div class="flex flex-col gap-1">${choiceLabel(c.text ? { ...c, text: '' } : c, media)}${c.text ? html`<span class="text-xs text-ink-600">${c.text}</span>` : ''}</div>
+      </li>`
+    )}
+  </ol>`
+}
+
+/** One slot's answer: a select when every choice is text (compact), otherwise picture cards; `chips` = small inline radios; `gallery` = select of numbered pictures. */
+function slotControl(name, choices, selected, media, label, { chips = false, gallery = false } = {}) {
+  if (gallery)
+    return html`<select name="${name}" aria-label="${label}" class="${field} w-full sm:w-auto">
+      <option value="">— เลือก —</option>
+      ${choices.map(
+        (c, k) =>
+          html`<option value="${c.id}" ${selected === c.id ? html`selected` : ''}>${galleryName(c, k)}</option>`
+      )}
+    </select>`
   if (chips)
     return html`<div role="radiogroup" aria-label="${label}" class="flex flex-wrap gap-2">
       ${choices.map(
@@ -73,14 +105,19 @@ const HINTS = {
   image_labelling: 'เลือกป้ายให้แต่ละหมายเลขบนภาพ',
 }
 
+const ORDER_UNSET =
+  'ยังไม่ได้จัดลำดับ — ย้ายรายการด้วย ↑ ↓ หรือกด “ใช้ลำดับนี้” ถ้าเห็นว่าลำดับที่แสดงถูกแล้ว'
+const ORDER_SET = 'จัดลำดับแล้ว'
+
+// An ordering item counts as answered only once the trainee has moved an
+// entry, pressed "ใช้ลำดับนี้", or has an order saved from before: the order
+// shown at the start is not an answer.
 function orderingBody(item, saved, media) {
   const options = item.options_json?.options ?? []
   const byId = new Map(options.map((o) => [o.id, o]))
-  const order =
-    Array.isArray(saved) && saved.length === options.length && saved.every((id) => byId.has(id))
-      ? saved.map((id) => byId.get(id))
-      : options
-  return html`<ol class="space-y-2" data-ordering>
+  const isSet = Array.isArray(saved) && saved.length === options.length && saved.every((id) => byId.has(id))
+  const order = isSet ? saved.map((id) => byId.get(id)) : options
+  return html`<ol class="space-y-2" data-ordering data-set="${isSet ? '1' : '0'}">
       ${order.map(
         (
           o,
@@ -94,14 +131,36 @@ function orderingBody(item, saved, media) {
         </li>`
       )}
     </ol>
+    <div class="mt-2 flex flex-wrap items-center gap-2 text-xs">
+      <input type="hidden" name="q:${item.id}:set" value="${isSet ? '1' : ''}" />
+      <span class="${isSet ? 'text-ink-500' : 'text-amber-700'}" tabindex="-1" aria-live="polite" data-order-state
+        >${isSet ? ORDER_SET : ORDER_UNSET}</span
+      >
+      <button type="button" class="${moveBtn}" data-action="confirm-order" ${isSet ? html`hidden` : ''}>ใช้ลำดับนี้</button>
+    </div>
     <p class="sr-only" aria-live="polite" data-order-status></p>`
+}
+
+/** Mark an ordering item as answered (moved or confirmed) and let the form autosave. */
+function markOrderSet(fieldset, { notify = true } = {}) {
+  const input = fieldset.querySelector('input[name$=":set"]')
+  if (!input || input.value === '1') return
+  input.value = '1'
+  fieldset.querySelector('[data-ordering]').dataset.set = '1'
+  const state = fieldset.querySelector('[data-order-state]')
+  state.textContent = ORDER_SET
+  state.className = 'text-ink-500'
+  fieldset.querySelector('[data-action=confirm-order]').hidden = true
+  if (notify) input.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
 function slotRows(item, saved, media) {
   const o = item.options_json ?? {}
   const lists = SLOT_LISTS[item.item_type]
   const chips = item.item_type === 'classification' || item.item_type === 'choice_matrix'
-  return html`<div class="space-y-3">
+  const choices = o[lists.choices] ?? []
+  const gallery = !chips && choices.some((c) => c.image_path)
+  return html`${gallery ? choiceGallery(choices, media) : ''}<div class="space-y-3">
     ${(o[lists.slots] ?? []).map((s, k) => {
       const label = item.item_type === 'image_labelling' ? `จุดที่ ${k + 1}` : entryText(s)
       return html`<div class="rounded-lg border border-ink-100 p-3" data-slot="${s.id}">
@@ -112,7 +171,7 @@ function slotRows(item, saved, media) {
               : choiceLabel(s, media)
           }
         </div>
-        ${slotControl(partName(item.id, s.id), o[lists.choices] ?? [], saved?.[s.id], media, `คำตอบของ ${label}`, { chips })}
+        ${slotControl(partName(item.id, s.id), choices, saved?.[s.id], media, `คำตอบของ ${label}`, { chips, gallery })}
       </div>`
     })}
   </div>`
@@ -246,6 +305,13 @@ export function renderItem(item, index, draft, media) {
  * Returns true when the click was a move.
  */
 export function handleOrderingClick(e) {
+  const confirm = e.target.closest?.('button[data-action=confirm-order]')
+  if (confirm && !confirm.disabled) {
+    const fieldset = confirm.closest('[data-item-id]')
+    markOrderSet(fieldset)
+    fieldset.querySelector('[data-order-state]').focus() // the button is gone; keep the reader in place
+    return true
+  }
   const btn = e.target.closest?.('button[data-move]')
   if (!btn || btn.disabled) return false
   const row = btn.closest('li[data-order-id]')
@@ -265,6 +331,7 @@ export function handleOrderingClick(e) {
   target.focus()
   const status = list.parentElement.querySelector('[data-order-status]')
   if (status) status.textContent = `ย้ายไปตำแหน่งที่ ${rows.indexOf(row) + 1}`
+  markOrderSet(row.closest('[data-item-id]'), { notify: false }) // the move below notifies
   row.querySelector('input[type=hidden]').dispatchEvent(new Event('input', { bubbles: true }))
   return true
 }

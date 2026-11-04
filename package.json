@@ -17,7 +17,8 @@
     "db:reset:pg": "scripts/db-local/reset.sh",
     "db:test:pg": "scripts/db-local/test.sh",
     "test:integration": "scripts/supabase-local/test-integration.sh",
-    "test:e2e": "npx supabase db reset --local && playwright test",
+    "test:e2e": "npx supabase db reset --local && playwright test --project=chromium",
+    "test:e2e:webkit": "npx supabase db reset --local && playwright test --project=webkit-iphone",
     "check": "npm run lint && npm run test && npm run build"
   },
   "license": "UNLICENSED",

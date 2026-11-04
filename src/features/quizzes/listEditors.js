@@ -1,7 +1,8 @@
 import { html, render, safeUrl } from '../../shared/ui/html.js'
+import { filePicker } from '../../shared/ui/components.js'
 import { acceptAttr } from '../lessons/media.js'
 import { SLOT_LISTS } from '../assessments/logic.js'
-import { LIST_EDITORS, LABELS_LIST, PART_SCORING_MODES, nextEntryId } from './logic.js'
+import { LIST_EDITORS, LABELS_LIST, nextEntryId } from './logic.js'
 
 /**
  * Editors for the item types made of lists (ordering, matching,
@@ -67,10 +68,12 @@ export function entryRow(type, def, entry, media, { choices = null, index = 0, c
                     >`
                 : ''
             }
-            <label class="text-xs text-ink-500"
-              >${url ? 'เปลี่ยนรูป' : 'รูปภาพ (ไม่บังคับ)'}
-              <input type="file" name="${n}_file" accept="${acceptAttr('image')}" class="text-xs" />
-            </label>
+            ${filePicker({
+              name: `${n}_file`,
+              accept: acceptAttr('image'),
+              button: url ? 'เปลี่ยนรูป…' : 'เลือกรูป…',
+              label: `รูปของรายการ ${entry.id}`,
+            })}
           </div>`
     }
   </div>`
@@ -109,19 +112,11 @@ export function listEditorFields(type, lists, media, { editing = false } = {}) {
           </label>`
         : ''
     }
-    <label class="${label}"
-      >วิธีให้คะแนน
-      <select name="mode" class="${input} mt-1">
-        ${Object.entries(PART_SCORING_MODES).map(([v, l]) => html`<option value="${v}">${l}</option>`)}
-      </select>
-    </label>
-    <p class="text-xs text-ink-500">
-      ${
-        type === 'ordering' || type === 'matching'
-          ? 'ระบบเก็บรายการแบบสลับลำดับเสมอ เพื่อไม่ให้ลำดับที่เก็บบอกเฉลย · '
-          : ''
-      }วิธีให้คะแนนใช้เมื่อกำหนดเฉลยใหม่
-    </p>`
+    ${
+      type === 'ordering' || type === 'matching'
+        ? html`<p class="text-xs text-ink-500">ระบบเก็บรายการแบบสลับลำดับเสมอ เพื่อไม่ให้ลำดับที่เก็บบอกเฉลย</p>`
+        : ''
+    }`
 }
 
 /** Rows of one list read back from the form (in screen order). */

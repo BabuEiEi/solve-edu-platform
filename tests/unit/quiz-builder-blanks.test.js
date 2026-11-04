@@ -34,7 +34,8 @@ describe('builder logic: dropdown, cloze, labelling', () => {
       { id: 'a', text: 'ปลายภาค' },
       { id: 'b', text: 'ระหว่างเรียน' },
     ])
-    expect(key).toEqual({ answer: { slots: { b1: 'a', b2: 'b' } }, scoring: { mode: 'partial' } })
+    expect(key).toEqual({ answer: { slots: { b1: 'a', b2: 'b' } } })
+    expect(item.scoring_mode).toBe('partial')
     expect(() =>
       buildItemDraft('dropdown', {
         ...base,
@@ -89,8 +90,8 @@ describe('builder logic: dropdown, cloze, labelling', () => {
       answer: {
         blanks: { b1: { accept: ['AfL', 'การประเมินเพื่อการเรียนรู้'] }, b2: { value: 75, tolerance: 0.5 } },
       },
-      scoring: { mode: 'all_or_nothing' },
     })
+    expect(item.scoring_mode).toBe('all_or_nothing')
     expect(() =>
       buildItemDraft('cloze', {
         ...base,
@@ -326,9 +327,6 @@ describe('quiz editor: dropdown, cloze, labelling forms', () => {
       { id: 'm1', x: 10, y: 20 },
       { id: 'm2', x: 75, y: 50 },
     ])
-    expect(services.quizzes.setKey).toHaveBeenCalledWith('lb', {
-      answer: { slots: { m1: 'p2', m2: 'p1' } },
-      scoring: { mode: 'partial' },
-    })
+    expect(services.quizzes.setKey).toHaveBeenCalledWith('lb', { answer: { slots: { m1: 'p2', m2: 'p1' } } })
   })
 })

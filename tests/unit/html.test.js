@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { html, escapeHtml, trusted, safeUrl, render, SafeHtml } from '../../src/shared/ui/html.js'
+import { filePicker, bindFilePickers } from '../../src/shared/ui/components.js'
 
 describe('escapeHtml', () => {
   it('escapes all HTML-significant characters', () => {
@@ -57,5 +58,48 @@ describe('render', () => {
     expect(el.querySelector('img')).toBeNull()
     expect(el.textContent).toBe('<img src=x onerror=alert(1)>')
     expect(html`x` instanceof SafeHtml).toBe(true)
+  })
+})
+
+describe('filePicker (Thai text instead of the browser\'s "Choose File")', () => {
+  it('hides the real input inside a Thai label and shows the chosen name, escaped', () => {
+    const root = document.createElement('div')
+    document.body.append(root)
+    render(
+      root,
+      html`<form>${filePicker({ name: 'media_file', accept: 'image/png', button: 'เลือกรูป…', label: 'รูปประกอบโจทย์', required: true })}</form>`
+    )
+    const input = root.querySelector('input[type=file]')
+    expect(input.name).toBe('media_file')
+    expect(input.accept).toBe('image/png')
+    expect(input.required).toBe(true)
+    expect(input.getAttribute('aria-label')).toBe('รูปประกอบโจทย์')
+    expect(input.classList.contains('sr-only')).toBe(true)
+    expect(input.closest('label').textContent.trim()).toBe('เลือกรูป…')
+    const shown = root.querySelector('[data-file-name]')
+    expect(shown.textContent).toBe('ยังไม่ได้เลือกไฟล์')
+
+    bindFilePickers(root)
+    bindFilePickers(root) // binding twice adds no second listener
+    Object.defineProperty(input, 'files', {
+      value: [{ name: '<img src=x onerror=alert(1)>.png' }],
+      configurable: true,
+    })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(shown.textContent).toBe('<img src=x onerror=alert(1)>.png') // text, not markup
+    expect(root.querySelector('img')).toBeNull()
+    Object.defineProperty(input, 'files', { value: [], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    expect(shown.textContent).toBe('ยังไม่ได้เลือกไฟล์')
+    root.remove()
+  })
+
+  it('without a label the button text names the input; not required by default', () => {
+    const root = document.createElement('div')
+    render(root, filePicker({ name: 'file' }))
+    const input = root.querySelector('input')
+    expect(input.hasAttribute('aria-label')).toBe(false)
+    expect(input.required).toBe(false)
+    expect(root.textContent).toContain('เลือกไฟล์…')
   })
 })

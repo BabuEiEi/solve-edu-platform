@@ -207,8 +207,8 @@ select throws_ok($$ insert into private.instrument_answer_keys (item_id, answer_
                    values ((select id from public.instrument_items where prompt = 'ข้อรูปภาพ'), '{"correct":["a"]}', '{"mode":"bonus"}') $$,
   '23514', null, 'Unknown scoring mode is rejected');
 select lives_ok($$ insert into private.instrument_answer_keys (item_id, answer_json, scoring_json)
-                   values ((select id from public.instrument_items where prompt = 'ข้อรูปภาพ'), '{"correct":["a","b"]}', '{"mode":"partial"}') $$,
-  'Valid multi-answer key with partial credit is accepted');
+                   values ((select id from public.instrument_items where prompt = 'ข้อรูปภาพ'), '{"correct":["a","b"]}', '{}') $$,
+  'Valid multi-answer key is accepted (the scoring mode is on the item since 2C.1)');
 select throws_ok($$ update private.instrument_answer_keys set answer_json = '{"correct":["a"]}'
                    where item_id = '82000000-0000-4000-a000-000000000001' $$,
   '23514', null, 'Keys of a published version cannot change');

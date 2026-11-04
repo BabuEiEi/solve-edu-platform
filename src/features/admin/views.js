@@ -100,7 +100,7 @@ export async function renderApprovalsView(el, { services, session }) {
         ${
           rows.length === 0
             ? emptyState('ไม่มีรายการในขอบเขตของท่าน')
-            : html`<div class="overflow-x-auto rounded-xl border border-ink-200 bg-white">
+            : html`<div class="relative overflow-x-auto rounded-xl border border-ink-200 bg-white">
                 <table class="min-w-full divide-y divide-ink-100 text-sm">
                   <thead class="bg-ink-50 text-left text-xs uppercase tracking-wide text-ink-500">
                     <tr>

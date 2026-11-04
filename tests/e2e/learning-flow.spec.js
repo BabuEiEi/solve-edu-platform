@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures.js'
 import { signIn, watchCsp, IDS } from './helpers.js'
 
 const YOUTUBE = 'https://www.youtube.com/watch?v=gxyBiCWiQ_8'

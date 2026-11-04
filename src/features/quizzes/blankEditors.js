@@ -1,5 +1,5 @@
 import { html, render, safeUrl } from '../../shared/ui/html.js'
-import { PART_SCORING_MODES, BLANK_ID, MARKER_ID, LABELS_LIST, nextEntryId, nextOptionId } from './logic.js'
+import { BLANK_ID, MARKER_ID, LABELS_LIST, nextEntryId, nextOptionId } from './logic.js'
 import { entryRow, keyOptions, refreshKeySelects } from './listEditors.js'
 
 /**
@@ -17,13 +17,6 @@ const label = 'block text-sm font-medium text-ink-700'
 const secondary = 'rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-700 hover:bg-ink-50'
 const dangerBtn =
   'rounded-md border border-rose-200 bg-white px-2 py-1 text-xs text-rose-700 hover:bg-rose-50'
-
-const modeSelect = () => html`<label class="${label}"
-  >วิธีให้คะแนน
-  <select name="mode" class="${input} mt-1">
-    ${Object.entries(PART_SCORING_MODES).map(([v, l]) => html`<option value="${v}">${l}</option>`)}
-  </select>
-</label>`
 
 // ---------------------------------------------------------------------
 // Dropdown / cloze
@@ -90,7 +83,6 @@ export function blankEditorFields(type, options, { editing = false } = {}) {
     </label>
     <button type="button" class="${secondary}" data-action="insert-blank">+ แทรกช่อง</button>
     <div class="space-y-2" data-blanks>${blanks.map((b) => blankRow(type, b, { editing }))}</div>
-    ${modeSelect()}
 `
 }
 
@@ -151,7 +143,6 @@ export function labellingEditorFields(options, imageUrl) {
       <div data-entries="labels" class="space-y-2">${labels.map((l) => entryRow('image_labelling', LABELS_LIST, l, {}))}</div>
       <button type="button" class="${secondary}" data-action="add-entry" data-list="labels">+ เพิ่มป้าย</button>
     </fieldset>
-    ${modeSelect()}
 `
 }
 

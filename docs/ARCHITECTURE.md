@@ -1,6 +1,6 @@
 # Architecture — SolveEdu Platform
 
-> สถานะ: **Phase 0–1 + 2A + 2B + 2B.1 + 2C เสร็จ** (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อล่วงหน้า, แบบทดสอบ + ให้คะแนนฝั่ง server + ผลของรุ่น, จำกัดเวลา/บันทึกอัตโนมัติ/วิเคราะห์ข้อสอบ, ข้อสอบแบบใหม่ 7 แบบ) · ยังไม่ Deploy · ยังไม่เชื่อม Supabase Remote
+> สถานะ: **Phase 0–1 + 2A + 2B + 2B.1 + 2C + 2C.1 เสร็จ** (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อล่วงหน้า, แบบทดสอบ + ให้คะแนนฝั่ง server + ผลของรุ่น, จำกัดเวลา/บันทึกอัตโนมัติ/วิเคราะห์ข้อสอบ, ข้อสอบแบบใหม่ 7 แบบ, ปิดความเสี่ยงหลัง 2C) · ยังไม่ Deploy · ยังไม่เชื่อม Supabase Remote
 
 ## 1. ภาพรวม
 
@@ -31,6 +31,8 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | Shared | `src/shared/utils/csv.js`, `src/shared/ui/download.js` | อ่าน/เขียน CSV (BOM สำหรับ Excel, กัน CSV injection) · ดาวน์โหลดผ่าน blob URL |
 | Features (2B) | `quizzes/` (สร้างข้อสอบ), `assessments/` (ผู้เรียนทำแบบทดสอบ), `assignments/` (มอบหมายให้รุ่น + ผลของรุ่น) | `logic.js` เป็นฟังก์ชันล้วน (unit test); คะแนนไม่เคยคำนวณใน browser |
 | Features (2C) | `quizzes/listEditors.js`, `quizzes/blankEditors.js` ฟอร์มสร้างข้อแบบใหม่ · `assessments/items.js` แสดงข้อทุกแบบ | แตะ/ปุ่ม/เมนูเลือกเท่านั้น (ไม่มีลากวาง) · ชื่อช่อง `q:<item>` และ `q:<item>:<slot\|blank>` · ลำดับตาม `presentation` ของ server |
+| UI ร่วม (2C.1) | `shared/ui/components.js` `filePicker` + `bindFilePickers` (ผูกใน `main.js`) | ปุ่มเลือกไฟล์ภาษาไทยแทนข้อความของเบราว์เซอร์ · input จริงซ่อนแบบ sr-only ในป้าย (โฟกัส/แป้นพิมพ์ใช้ได้) · ชื่อไฟล์แสดงด้วย textContent · กล่อง `overflow-x-auto` ต้องมี `relative` เพื่อไม่ให้ sr-only ข้างในดันหน้าให้กว้างเกินจอ |
+| E2E (2C.1) | `tests/e2e/fixtures.js` (ทุก spec import `test` จากที่นี่: ปิด context ที่ test เปิดเองเมื่อจบ) · Playwright project `chromium` (ชุดหลัก) และ `webkit-iphone` (iPhone 15, timeout ยาวกว่า) | สอง project ใช้ฐานข้อมูลเดียวกัน → รันแยก `test:e2e` / `test:e2e:webkit` แต่ละคำสั่ง reset ก่อน · ห้ามเพิ่ม retries (รอบซ้ำจะเจอสถานะที่รอบแรกทิ้งไว้) |
 
 แนวทาง: query เลือกคอลัมน์ชัดเจนเสมอ (ห้าม `select('*')` กับ `profiles` — จะได้ 42501) · event delegation ด้วย `data-action` (ไม่มี inline handler) · CSP ใน `index.html`
 
@@ -65,6 +67,8 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261104090600_item_types_group_b.sql` | (2C) ดรอปดาวน์ เติมคำ (เทียบข้อความไทย) ติดป้ายบนรูป |
 | `20261104090700_key_position_guard.sql` | (2C) เฉลยไม่ถูกต้องถ้าลำดับที่เก็บบอกเฉลย (เรียงลำดับ: เก็บในลำดับที่ถูก · จับคู่: ทุกคู่อยู่ตำแหน่งเดียวกัน) |
 | `20261104090800_item_statistics_slots.sql` | (2C) `private.slot_hits` ถูก/ผิดรายส่วน (ใช้ทั้งให้คะแนนและวิเคราะห์) · `private.slot_labels` · `item_statistics` เพิ่ม `slots` (สัดส่วนถูกรายส่วน ไม่บอกเฉลย) |
+| `20261105090000_thai_mark_order.sql` | (2C.1) `private.thai_mark_order`: เทียบคำตอบไทยได้ทุกลำดับการพิมพ์สระ/วรรณยุกต์ (ไม่ตรวจคำสะกดใกล้เคียง) |
+| `20261105090100_scoring_mode_on_item.sql` | (2C.1) วิธีให้คะแนนย้ายจากเฉลยไป `instrument_items.scoring_mode` (อ่านกลับได้, เฉลยยังอ่านไม่ได้) · ย้ายค่าข้อเดิม · `scoring_json` = `{}` เสมอ · `finalize_attempt` และ `clone_instrument_version` อ่าน/คัดลอกโหมดจากข้อ |
 
 ### เหตุผลการออกแบบสำคัญ
 

@@ -137,6 +137,31 @@ export const SCORING_MODES = {
   partial: 'ให้คะแนนบางส่วน (ถูก − ผิด, ไม่ต่ำกว่า 0)',
 }
 
+/**
+ * Scoring modes an item type offers (null: one part, nothing to choose) and
+ * the mode used when none is set. The mode is stored on the item
+ * (instrument_items.scoring_mode, 2C.1), so the edit form can show it; the
+ * answer key itself stays write-only.
+ */
+export function scoringModesFor(type) {
+  if (type === 'mcq_multiple') return SCORING_MODES
+  return ITEM_TYPES[type] && !['mcq_single', 'true_false', 'numeric'].includes(type)
+    ? PART_SCORING_MODES
+    : null
+}
+
+export function defaultScoringMode(type) {
+  if (!scoringModesFor(type)) return null
+  return type === 'mcq_multiple' ? 'all_or_nothing' : 'partial'
+}
+
+/** The form's choice, or the type's default when the choice is missing or unknown. */
+export function pickScoringMode(type, raw) {
+  const modes = scoringModesFor(type)
+  if (!modes) return null
+  return Object.hasOwn(modes, raw) ? raw : defaultScoringMode(type)
+}
+
 export const isChoiceType = (type) => type === 'mcq_single' || type === 'mcq_multiple'
 
 export const MAX_CHOICES = 10
@@ -171,7 +196,13 @@ export function buildItemDraft(type, fields = {}, { requireKey = false, random =
   const maxScore = Number(fields.max_score ?? 1)
   if (!(maxScore > 0 && maxScore <= 1000)) throw new AppError('คะแนนต่อข้อต้องมากกว่า 0 และไม่เกิน 1,000')
 
-  const item = { item_type: type, prompt, media_path: fields.media_path || null, max_score: maxScore }
+  const item = {
+    item_type: type,
+    prompt,
+    media_path: fields.media_path || null,
+    max_score: maxScore,
+    scoring_mode: pickScoringMode(type, fields.mode),
+  }
   let key = null
 
   if (isListType(type)) {
@@ -200,16 +231,11 @@ export function buildItemDraft(type, fields = {}, { requireKey = false, random =
     if (correct.length) {
       if (type === 'mcq_single' && correct.length !== 1)
         throw new AppError('ข้อแบบคำตอบเดียวต้องมีคำตอบที่ถูก 1 ตัวเลือก')
-      key = {
-        answer: { correct },
-        scoring:
-          type === 'mcq_single' ? {} : { mode: fields.mode === 'partial' ? 'partial' : 'all_or_nothing' },
-      }
+      key = { answer: { correct } }
     }
   } else if (type === 'true_false') {
     item.options_json = {}
-    if (fields.tf === 'true' || fields.tf === 'false')
-      key = { answer: { correct: fields.tf === 'true' }, scoring: {} }
+    if (fields.tf === 'true' || fields.tf === 'false') key = { answer: { correct: fields.tf === 'true' } }
   } else {
     const unit = clean(fields.unit)
     if (unit.length > 32) throw new AppError('หน่วยยาวเกิน 32 ตัวอักษร')
@@ -220,7 +246,7 @@ export function buildItemDraft(type, fields = {}, { requireKey = false, random =
       const tolerance = parseNumericAnswer(fields.tolerance) ?? 0
       if (Number.isNaN(tolerance) || tolerance < 0)
         throw new AppError('ค่าคลาดเคลื่อนที่ยอมรับต้องเป็นตัวเลขไม่ติดลบ')
-      key = { answer: { value, tolerance }, scoring: {} }
+      key = { answer: { value, tolerance } }
     }
   }
 
@@ -238,8 +264,6 @@ function buildListItem(type, item, fields, random) {
       throw new AppError(`${def.label}: ข้อความยาวเกิน 1,000 ตัวอักษร`)
     lists[def.name] = rows
   }
-  const mode = fields.mode === 'all_or_nothing' ? 'all_or_nothing' : 'partial'
-
   if (type === 'ordering') {
     const options = lists.options
     if (!fields.orderIsKey) {
@@ -249,7 +273,7 @@ function buildListItem(type, item, fields, random) {
     const order = options.map((o) => o.id)
     // Stored shuffled: never in the correct order.
     item.options_json = { options: shuffleUntil(options, (s) => s.some((o, i) => o.id !== order[i]), random) }
-    return { answer: { order }, scoring: { mode } }
+    return { answer: { order } }
   }
 
   const { slots: slotList, choices: choiceList } = SLOT_LISTS[type]
@@ -277,7 +301,7 @@ function buildListItem(type, item, fields, random) {
     )
   }
   item.options_json = lists
-  return { answer: { slots: picked }, scoring: { mode } }
+  return { answer: { slots: picked } }
 }
 
 /** Accepted answers typed one per line → distinct, trimmed. */
@@ -344,8 +368,7 @@ function buildBlankItem(type, item, fields) {
   const n = Object.keys(keyParts).length
   if (n === 0) return null
   if (n < blanks.length) throw new AppError('กำหนดเฉลยให้ครบทุกช่อง (หรือเว้นว่างทั้งหมดเพื่อคงเฉลยเดิม)')
-  const mode = fields.mode === 'all_or_nothing' ? 'all_or_nothing' : 'partial'
-  return { answer: type === 'dropdown' ? { slots: keyParts } : { blanks: keyParts }, scoring: { mode } }
+  return { answer: type === 'dropdown' ? { slots: keyParts } : { blanks: keyParts } }
 }
 
 function buildLabelItem(item, fields) {
@@ -374,8 +397,7 @@ function buildLabelItem(item, fields) {
   if (n === 0) return null
   if (n < markers.length)
     throw new AppError('เลือกป้ายที่ถูกให้ครบทุกจุด (หรือเว้นว่างทั้งหมดเพื่อคงเฉลยเดิม)')
-  const mode = fields.mode === 'all_or_nothing' ? 'all_or_nothing' : 'partial'
-  return { answer: { slots: picked }, scoring: { mode } }
+  return { answer: { slots: picked } }
 }
 
 /** item_key_status row → 'ok' | 'missing' | 'invalid' */

@@ -165,9 +165,11 @@ insert into public.instrument_items (id, instrument_version_id, item_type, promp
 
 insert into private.instrument_answer_keys (item_id, answer_json, scoring_json, updated_by) values
   ('a3000000-0000-4000-a000-000000000001', '{"correct":["b"]}', '{}', '00000000-0000-4000-a000-000000000003'),
-  ('a3000000-0000-4000-a000-000000000002', '{"correct":["a","b","d"]}', '{"mode":"all_or_nothing"}', '00000000-0000-4000-a000-000000000003'),
+  ('a3000000-0000-4000-a000-000000000002', '{"correct":["a","b","d"]}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000003', '{"correct":true}', '{}', '00000000-0000-4000-a000-000000000003'),
   ('a3000000-0000-4000-a000-000000000004', '{"value":75,"tolerance":0}', '{}', '00000000-0000-4000-a000-000000000003');
+-- scoring mode is on the item (2C.1), not in the key
+update public.instrument_items set scoring_mode = 'all_or_nothing' where id = 'a3000000-0000-4000-a000-000000000002';
 
 update public.instrument_versions
    set status = 'published', published_at = now(), published_by = '00000000-0000-4000-a000-000000000003',

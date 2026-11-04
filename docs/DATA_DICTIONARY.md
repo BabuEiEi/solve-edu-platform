@@ -1,4 +1,4 @@
-# Data Dictionary — SolveEdu Platform (Phase 2C)
+# Data Dictionary — SolveEdu Platform (Phase 2C.1)
 
 > สร้างอัตโนมัติจากฐานข้อมูล Local ด้วย `scripts/db-local/gen-data-dictionary.py` — อย่าแก้ไขด้วยมือ  
 > ทุกตารางใน `public` เปิด RLS; สิทธิ์รายคอลัมน์ดู `PERMISSIONS.md`
@@ -566,12 +566,15 @@
 | `display_order` | integer | ✓ |  |  |
 | `created_at` | timestamp with time zone | ✓ | `now()` |  |
 | `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+| `scoring_mode` | text |  |  | partial \| all_or_nothing · null = ค่าเริ่มต้นของประเภท (mcq_multiple: all_or_nothing, ข้อแบบใหม่: partial) · ไม่ใช่ความลับ (2C.1) |
 
 **Constraints**
 
 - `instrument_items_item_type_check`: `CHECK ((item_type = ANY (ARRAY['mcq_single'::text, 'mcq_multiple'::text, 'true_false'::text, 'numeric'::text, 'ordering'::text, 'matching'::text, 'classification'::text, 'choice_matrix'::text, 'dropdown'::text, 'cloze'::text, 'image_labelling'::text])))`
 - `instrument_items_max_score_check`: `CHECK (((max_score > (0)::numeric) AND (max_score <= (1000)::numeric)))`
 - `instrument_items_prompt_check`: `CHECK (((char_length(prompt) >= 1) AND (char_length(prompt) <= 5000)))`
+- `instrument_items_scoring_mode_check`: `CHECK ((scoring_mode = ANY (ARRAY['partial'::text, 'all_or_nothing'::text])))`
+- `instrument_items_scoring_mode_type_check`: `CHECK (((scoring_mode IS NULL) OR (item_type <> ALL (ARRAY['mcq_single'::text, 'true_false'::text, 'numeric'::text]))))`
 - `instrument_items_instrument_version_id_fkey`: `FOREIGN KEY (instrument_version_id) REFERENCES instrument_versions(id) ON DELETE CASCADE`
 - `instrument_items_pkey`: `PRIMARY KEY (id)`
 - `instrument_items_order_unique`: `UNIQUE (instrument_version_id, display_order) DEFERRABLE INITIALLY DEFERRED`

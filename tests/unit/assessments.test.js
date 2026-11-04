@@ -203,7 +203,7 @@ describe('assessment service', () => {
     const selects = c.calls.filter(([op]) => op === 'select').map(([, cols]) => cols)
     expect(selects).toHaveLength(3)
     for (const s of selects) expect(s).not.toMatch(/\*/)
-    expect(ITEM_COLUMNS).not.toMatch(/answer|correct|key|scoring/)
+    expect(ITEM_COLUMNS).not.toMatch(/answer|correct|key|scoring_json/) // scoring_mode is not secret (2C.1)
     expect(ATTEMPT_COLUMNS).toContain('correct_count')
     // only the caller's own attempts are embedded
     expect(c.calls).toContainEqual(['eq', 'assessment_attempts.user_id', 'u1'])
