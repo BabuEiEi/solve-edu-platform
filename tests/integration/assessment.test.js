@@ -69,8 +69,11 @@ run('Assessment attempts (Supabase Local)', () => {
       correct_count: 4,
     })
 
-    const { data } = await as('teacher_a1').from('assessment_responses').select('item_id')
-    expect(data).toHaveLength(4) // one row per item, not 4 × 4
+    const { data } = await as('teacher_a1')
+      .from('assessment_responses')
+      .select('item_id')
+      .eq('attempt_id', attemptId)
+    expect(data).toHaveLength(4) // one row per item, not 4 × 4 (other files run in parallel as the same trainee)
   })
 
   it('start racing with submit never yields a second pretest attempt', async () => {

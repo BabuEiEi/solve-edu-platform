@@ -114,6 +114,31 @@ export function createAssignmentService(client) {
       )
     },
 
+    /** Extra attempts granted on this assignment (RLS: assessors all, mentor/trainee their own scope). */
+    async listExtraAttempts(assignmentId) {
+      return (
+        unwrap(
+          await client
+            .from('assessment_extra_attempts')
+            .select('id, user_id, reason, created_at')
+            .eq('assignment_id', assignmentId),
+          'assignments.extras'
+        ) ?? []
+      )
+    },
+
+    /** +1 attempt for one trainee; granted_by and the time are recorded by the server. */
+    async grantExtraAttempt(assignmentId, userId, reason) {
+      unwrap(
+        await client.from('assessment_extra_attempts').insert({
+          assignment_id: assignmentId,
+          user_id: userId,
+          reason: String(reason ?? '').trim() || null,
+        }),
+        'assignments.grant_extra'
+      )
+    },
+
     /** Attempts the caller may see, with the person's name. Never per-item scores. */
     async listAttempts(assignmentId) {
       return (

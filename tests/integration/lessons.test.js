@@ -3,7 +3,7 @@
  * Integration: lesson page services → Supabase Local (Data API + Storage).
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest'
-import { supabaseAs, U, IDS } from './helpers.js'
+import { supabaseAs, serverNow, U, IDS } from './helpers.js'
 import { createLessonService } from '../../src/features/lessons/service.js'
 import { createCourseService } from '../../src/features/courses/service.js'
 import { createMediaService } from '../../src/features/lessons/media.js'
@@ -39,7 +39,7 @@ run('Lesson page services (Supabase Local)', () => {
     expect(enrollment.id).toBe(IDS.enr_a1)
     await svc.markStarted(enrollment.id, IDS.lesson2)
     await svc.markStarted(enrollment.id, IDS.lesson2) // idempotent
-    const before = Date.now()
+    const before = await serverNow(env)
     const row = await svc.markCompleted(enrollment.id, IDS.lesson2)
     expect(row.status).toBe('completed')
     expect(Number(row.progress_percent)).toBe(100)

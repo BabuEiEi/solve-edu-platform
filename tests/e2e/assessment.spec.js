@@ -22,7 +22,8 @@ test('trainee takes the pretest: draft survives reload, totals only, no key on t
   await page.getByLabel('ใช้ข้อมูลปรับการเรียนการสอนระหว่างทาง').check()
   for (const choice of ['ทันเวลา', 'เฉพาะเจาะจง', 'นำไปปฏิบัติได้']) await page.getByLabel(choice).check()
 
-  // Refresh mid-test: the open attempt resumes and the local draft is restored
+  // Refresh mid-test: the open attempt resumes with the answers saved on the server
+  await expect(page.locator('[data-save-status]')).toHaveAttribute('data-state', 'saved')
   await page.reload()
   await expect(page.getByLabel('ใช้ข้อมูลปรับการเรียนการสอนระหว่างทาง')).toBeChecked()
   await expect(page.getByLabel('นำไปปฏิบัติได้')).toBeChecked()

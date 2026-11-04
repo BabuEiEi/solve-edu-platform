@@ -27,13 +27,15 @@ export function assignmentState(assignment, attempts = [], now = new Date()) {
   const window = openAt && now < openAt ? 'upcoming' : closeAt && now >= closeAt ? 'closed' : 'open'
   const inProgress = attempts.find((t) => t.status === 'in_progress') ?? null
   const submitted = attempts.filter((t) => t.status === 'submitted').sort(byAttemptDesc)
-  const remaining = Math.max(0, assignment.attempt_limit - attempts.length)
+  const limit = assignment.attempt_limit + (assignment.assessment_extra_attempts?.length ?? 0)
+  const remaining = Math.max(0, limit - attempts.length)
   return {
     window,
     inProgress,
     latest: submitted[0] ?? null,
     submitted,
     used: attempts.length,
+    limit,
     remaining,
     canStart: window === 'open' && (Boolean(inProgress) || remaining > 0),
   }
@@ -71,9 +73,10 @@ export function readAnswers(form, items) {
 
 /**
  * Raw answers → the payload submit_attempt expects, plus the numbers
- * (1-based) of unanswered items. Throws AppError for a non-numeric entry.
+ * (1-based) of unanswered items. Throws AppError for a non-numeric entry,
+ * unless `lenient` (autosave, time-up submit): then that entry is left out.
  */
-export function buildResponses(items, answers = {}) {
+export function buildResponses(items, answers = {}, { lenient = false } = {}) {
   const responses = {}
   const unanswered = []
   items.forEach((item, index) => {
@@ -91,8 +94,8 @@ export function buildResponses(items, answers = {}) {
         break
       case 'numeric': {
         const n = parseNumericAnswer(raw)
-        if (Number.isNaN(n)) throw new AppError(`ข้อ ${index + 1}: กรุณากรอกเป็นตัวเลข`)
-        if (n !== null) value = { value: n }
+        if (Number.isNaN(n) && !lenient) throw new AppError(`ข้อ ${index + 1}: กรุณากรอกเป็นตัวเลข`)
+        if (n !== null && !Number.isNaN(n)) value = { value: n }
         break
       }
     }
@@ -111,33 +114,35 @@ export function itemMediaPaths(items = []) {
   return [...new Set(paths.filter(Boolean))]
 }
 
-// ---------------------------------------------------------------------
-// Local draft: the trainee's own answers survive a refresh on this device.
-// Storage may be unavailable (private mode); the exam still works without it.
-// ---------------------------------------------------------------------
-const draftKey = (attemptId) => `solveedu:attempt:${attemptId}`
-
-export function loadDraft(storage, attemptId) {
-  try {
-    const parsed = JSON.parse(storage?.getItem(draftKey(attemptId)) ?? 'null')
-    return parsed && typeof parsed === 'object' ? parsed : {}
-  } catch {
-    return {}
+/** Saved responses (server draft) → raw answers the exam form shows. */
+export function answersFromResponses(items, responses) {
+  const answers = {}
+  for (const item of items) {
+    const r = responses?.[item.id]
+    if (!r) continue
+    if (item.item_type === 'mcq_single') answers[item.id] = r.choice
+    else if (item.item_type === 'mcq_multiple') answers[item.id] = r.choices ?? []
+    else if (item.item_type === 'true_false') answers[item.id] = String(r.value)
+    else if (item.item_type === 'numeric') answers[item.id] = String(r.value)
   }
+  return answers
 }
 
-export function saveDraft(storage, attemptId, answers) {
-  try {
-    storage?.setItem(draftKey(attemptId), JSON.stringify(answers))
-  } catch {
-    /* quota / disabled storage: keep going */
-  }
-}
+// ---------------------------------------------------------------------
+// Countdown. The server decides when time is up; the page only shows it,
+// using the server clock (start_attempt.server_now) so a wrong device
+// clock does not shift the deadline.
+// ---------------------------------------------------------------------
+export const clockOffset = (serverNow, localNow = Date.now()) => new Date(serverNow).getTime() - localNow
 
-export function clearDraft(storage, attemptId) {
-  try {
-    storage?.removeItem(draftKey(attemptId))
-  } catch {
-    /* ignore */
-  }
+export const remainingMs = (deadlineAt, offset, localNow = Date.now()) =>
+  new Date(deadlineAt).getTime() - (localNow + offset)
+
+/** 754000 → "12:34"; 3723000 → "1:02:03"; never negative. */
+export function formatRemaining(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const sec = String(total % 60).padStart(2, '0')
+  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`
 }

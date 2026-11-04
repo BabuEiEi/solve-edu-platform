@@ -8,6 +8,9 @@ import { PURPOSE_LABELS, attemptPercent } from '../assessments/logic.js'
  * submit_attempt; this only arranges them for display and export.
  */
 export const ATTEMPT_LIMIT_MAX = 20
+export const TIME_LIMIT_MAX = 600
+export const GRACE_MAX = 60
+export const GRACE_DEFAULT = 5
 
 // The platform shows Asia/Bangkok time (UTC+7, no DST); <input type="datetime-local">
 // values are read and written in that zone regardless of the device's zone.
@@ -44,8 +47,8 @@ export function bangkokInputLabel(value) {
 
 /**
  * Form fields → columns for assessment_assignments (insert or update).
- * `locked` (an attempt exists) leaves out passing_percent and purpose, which
- * the server freezes (SE004), so an unrelated edit still saves.
+ * `locked` (an attempt exists) leaves out passing_percent, purpose and the
+ * time limit, which the server freezes (SE004), so an unrelated edit still saves.
  */
 export function buildAssignmentPayload(fields, { locked = false } = {}) {
   const title = String(fields.title ?? '').trim()
@@ -63,14 +66,25 @@ export function buildAssignmentPayload(fields, { locked = false } = {}) {
   if (openAt && closeAt && new Date(closeAt) <= new Date(openAt))
     throw new AppError('เวลาปิดต้องอยู่หลังเวลาเปิด')
 
+  const graceRaw = String(fields.grace_minutes ?? '').trim()
+  const grace = graceRaw === '' ? GRACE_DEFAULT : Number(graceRaw)
+  if (!Number.isInteger(grace) || grace < 0 || grace > GRACE_MAX)
+    throw new AppError(`ช่วงผ่อนผันต้องเป็นจำนวนเต็ม 0–${GRACE_MAX} นาที`)
+
   const payload = {
     title,
     instructions: instructions || null,
     open_at: openAt,
     close_at: closeAt,
     attempt_limit: limit,
+    grace_minutes: grace,
   }
   if (locked) return payload
+
+  const timeRaw = String(fields.time_limit_minutes ?? '').trim()
+  const timeLimit = timeRaw === '' ? null : Number(timeRaw)
+  if (timeLimit !== null && (!Number.isInteger(timeLimit) || timeLimit < 1 || timeLimit > TIME_LIMIT_MAX))
+    throw new AppError(`เวลาทำต้องเป็นจำนวนเต็ม 1–${TIME_LIMIT_MAX} นาที หรือเว้นว่าง`)
 
   if (!Object.hasOwn(PURPOSE_LABELS, fields.purpose)) throw new AppError('กรุณาเลือกประเภทแบบทดสอบ')
   const passRaw = String(fields.passing_percent ?? '').trim()
@@ -80,7 +94,7 @@ export function buildAssignmentPayload(fields, { locked = false } = {}) {
     if (!Number.isFinite(passing) || passing < 0 || passing > 100)
       throw new AppError('เกณฑ์ผ่านต้องเป็นตัวเลข 0–100 หรือเว้นว่าง')
   }
-  return { ...payload, purpose: fields.purpose, passing_percent: passing }
+  return { ...payload, purpose: fields.purpose, passing_percent: passing, time_limit_minutes: timeLimit }
 }
 
 /**
@@ -113,8 +127,11 @@ const bySubmitted = (a, b) => new Date(a.submitted_at) - new Date(b.submitted_at
  * submitted attempt.
  *   roster:   [{ user_id, name }]
  *   attempts: rows of assessment_attempts with user_id (+ profiles)
+ *   extras:   rows of assessment_extra_attempts (user_id) — +1 attempt each
  */
-export function summarizeResults(roster, attempts, assignment) {
+export function summarizeResults(roster, attempts, assignment, extras = []) {
+  const extraOf = new Map()
+  for (const x of extras) extraOf.set(x.user_id, (extraOf.get(x.user_id) ?? 0) + 1)
   const people = new Map(roster.map((r) => [r.user_id, { ...r, attempts: [] }]))
   for (const t of attempts) {
     if (!people.has(t.user_id))
@@ -135,6 +152,9 @@ export function summarizeResults(roster, attempts, assignment) {
       name: p.name,
       offRoster: Boolean(p.offRoster),
       used: p.attempts.length,
+      extra: extraOf.get(p.user_id) ?? 0,
+      limit: (assignment?.attempt_limit ?? 0) + (extraOf.get(p.user_id) ?? 0),
+      autoSubmitted: submitted.filter((t) => t.auto_submitted).length,
       status: submitted.length ? 'submitted' : p.attempts.length ? 'in_progress' : 'not_started',
       inProgress: p.attempts.some((t) => t.status === 'in_progress'),
       first: submitted[0] ?? null,
@@ -171,6 +191,8 @@ export function resultsCsvRows(rows) {
       'ชื่อ',
       'สถานะ',
       'จำนวนครั้งที่ใช้',
+      'สิทธิ์ทำเพิ่ม',
+      'ส่งอัตโนมัติ (ครั้ง)',
       'ครั้งแรก (%)',
       'สูงสุด (%)',
       'คะแนนสูงสุด',
@@ -182,6 +204,8 @@ export function resultsCsvRows(rows) {
       r.name,
       STATUS_TEXT[r.status],
       r.used,
+      r.extra,
+      r.autoSubmitted,
       r.first ? attemptPercent(r.first) : '',
       r.best ? attemptPercent(r.best) : '',
       r.best ? Number(r.best.score) : '',

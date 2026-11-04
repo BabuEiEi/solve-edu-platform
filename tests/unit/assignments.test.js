@@ -62,9 +62,18 @@ describe('assignment logic', () => {
       open_at: null,
       close_at: null,
       attempt_limit: 2,
+      grace_minutes: 5,
       purpose: 'posttest',
       passing_percent: null,
+      time_limit_minutes: null,
     })
+    expect(buildAssignmentPayload({ ...base, time_limit_minutes: '30', grace_minutes: '0' })).toMatchObject({
+      time_limit_minutes: 30,
+      grace_minutes: 0,
+    })
+    expect(() => buildAssignmentPayload({ ...base, time_limit_minutes: '0' })).toThrow(/1–600/)
+    expect(() => buildAssignmentPayload({ ...base, time_limit_minutes: '15.5' })).toThrow(/1–600/)
+    expect(() => buildAssignmentPayload({ ...base, grace_minutes: '61' })).toThrow(/0–60/)
     expect(buildAssignmentPayload({ ...base, passing_percent: '60.5' }).passing_percent).toBe(60.5)
     expect(() => buildAssignmentPayload({ ...base, title: ' ' })).toThrow(AppError)
     expect(() => buildAssignmentPayload({ ...base, attempt_limit: '0' })).toThrow(/1–20/)
@@ -87,8 +96,10 @@ describe('assignment logic', () => {
       open_at: null,
       close_at: '2026-12-01T16:00:00+07:00',
       attempt_limit: 3,
+      grace_minutes: 5,
     })
     expect(p).not.toHaveProperty('passing_percent')
+    expect(p).not.toHaveProperty('time_limit_minutes')
     expect(p).not.toHaveProperty('purpose')
   })
 
@@ -136,10 +147,21 @@ describe('assignment logic', () => {
     expect(rows.find((r) => r.user_id === 'gone')).toMatchObject({ offRoster: true, name: 'ออกจากรุ่นแล้ว' })
     expect(rows.map((r) => r.name)).toEqual(['ก', 'ข', 'ค', 'ออกจากรุ่นแล้ว'])
     expect(summary).toEqual({ total: 4, started: 3, submitted: 2, average: 90, passed: 2 })
+    expect(u1).toMatchObject({ extra: 0, limit: 0 }) // assignment without attempt_limit in this fixture
     expect(summarizeResults(roster, [], { passing_percent: null }).summary).toMatchObject({
       average: null,
       passed: null,
     })
+  })
+
+  it("extra attempts raise the person's limit; auto-submitted attempts are counted", () => {
+    const { rows } = summarizeResults(
+      [{ user_id: 'u1', name: 'ก' }],
+      [attempt({ auto_submitted: true }), attempt({ id: 't2', attempt_no: 2 })],
+      { attempt_limit: 1 },
+      [{ user_id: 'u1' }, { user_id: 'other' }]
+    )
+    expect(rows[0]).toMatchObject({ used: 2, extra: 1, limit: 2, autoSubmitted: 1 })
   })
 
   it('CSV: header + one row per person; formula-like names are neutralised', () => {
@@ -154,6 +176,8 @@ describe('assignment logic', () => {
       `'=HYPERLINK("x")`,
       'ส่งแล้ว',
       '1',
+      '0',
+      '0',
       '60',
       '60',
       '3',
@@ -282,6 +306,8 @@ describe('assignment views', () => {
         { user_id: 'u2', name: 'ครู ข' },
       ]),
       update: vi.fn(async () => ({ id: 'A1' })),
+      listExtraAttempts: vi.fn(async () => []),
+      grantExtraAttempt: vi.fn(async () => {}),
       listVisible: vi.fn(async () => [assignment, { ...assignment, id: 'A2', cohort_id: 'C2' }]),
       getVersion: vi.fn(async () => ({
         id: 'V1',
@@ -325,10 +351,27 @@ describe('assignment views', () => {
     expect(el.textContent).toContain('บันทึกการตั้งค่าแล้ว')
   })
 
+  it('detail (trainer): +1 attempt asks for a reason and grants it to that person', async () => {
+    const el = document.createElement('div')
+    const services = makeServices()
+    await renderAssignmentDetailView(el, ctx(services, trainer), { id: 'A1' })
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce(null).mockReturnValueOnce('สัญญาณขาด')
+    const button = el.querySelector('tr[data-user-id=u2] [data-action=grant-extra]')
+    button.click() // cancelled
+    expect(services.assignments.grantExtraAttempt).not.toHaveBeenCalled()
+    el.querySelector('tr[data-user-id=u2] [data-action=grant-extra]').click()
+    await settle()
+    expect(services.assignments.grantExtraAttempt).toHaveBeenCalledWith('A1', 'u2', 'สัญญาณขาด')
+    expect(el.textContent).toContain('ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ครู ข แล้ว')
+    expect(el.querySelector('input[name=time_limit_minutes]').disabled).toBe(true) // frozen with attempts
+    prompt.mockRestore()
+  })
+
   it('detail (mentor): results only, no settings form', async () => {
     const el = document.createElement('div')
     await renderAssignmentDetailView(el, ctx(makeServices(), mentor), { id: 'A1' })
     expect(el.querySelector('form[data-form=assignment]')).toBeNull()
+    expect(el.querySelector('[data-action=grant-extra]')).toBeNull()
     expect(el.textContent).toContain('แสดงเฉพาะผู้เรียนที่ท่านมีสิทธิ์ดูผล')
   })
 
