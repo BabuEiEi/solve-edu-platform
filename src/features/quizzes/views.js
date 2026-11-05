@@ -13,6 +13,15 @@ import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { PURPOSE_LABELS } from '../assessments/logic.js'
 import { moveId, nextOrder } from '../builder/service.js'
 import { acceptAttr } from '../lessons/media.js'
+import { downloadText } from '../../shared/ui/download.js'
+import {
+  analyzeQuizImport,
+  decodeCsvBytes,
+  importTemplateCsv,
+  IMPORT_TEMPLATE_FILENAME,
+  MAX_IMPORT_ROWS,
+  MAX_IMPORT_BYTES,
+} from './importFile.js'
 import { itemMediaPaths } from '../assessments/logic.js'
 import {
   ITEM_TYPES,
@@ -289,6 +298,7 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
   let assignments = []
   let selectedVersionId = null
   let editing = null // { type, itemId|null }
+  let importing = null // { fileName, analysis } while the import panel is open
   let message = null
   let tone = 'success'
   let busy = false
@@ -469,6 +479,96 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     </section>`
   }
 
+  const TYPE_LABELS = {
+    mcq_single: 'เลือกตอบ',
+    mcq_multiple: 'เลือกหลายคำตอบ',
+    true_false: 'ถูกผิด',
+    numeric: 'ตัวเลข',
+  }
+  const SHOWN_ERRORS = 50
+
+  /** Import from a CSV file: template, choose, preview every row (or every problem), confirm. */
+  const importPanel = () => {
+    const a = importing.analysis
+    const ok = a && a.errors.length === 0
+    return html`<section class="space-y-3 rounded-xl border-2 border-brand-200 bg-white p-5 text-sm" data-import-panel>
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 class="font-semibold text-brand-700">นำเข้าข้อสอบจากไฟล์ CSV</h2>
+        <button type="button" class="${secondary}" data-action="close-import">ปิด</button>
+      </div>
+      <ol class="list-decimal space-y-1 pl-5 text-ink-600">
+        <li>ดาวน์โหลดแม่แบบ แล้วกรอกใน Excel หรือ Google Sheets (บันทึกเป็น CSV)</li>
+        <li>เลือกไฟล์ — ระบบแสดงตัวอย่างทุกข้อให้ตรวจก่อน ยังไม่มีอะไรถูกบันทึก</li>
+        <li>กด “นำเข้า” เมื่อไม่มีแถวที่ผิด — ข้อจะถูกเพิ่มต่อท้ายฉบับร่างนี้ทั้งหมด หรือไม่เพิ่มเลย</li>
+      </ol>
+      <p class="text-xs text-ink-500">
+        รองรับ: เลือกตอบ · เลือกหลายคำตอบ · ถูกผิด · ตัวเลข (ไม่มีรูป — เพิ่มรูปในหน้าแก้ข้อหลังนำเข้า) ·
+        ครั้งละไม่เกิน ${MAX_IMPORT_ROWS} ข้อ · ทุกข้อต้องมีเฉลย
+      </p>
+      <div class="flex flex-wrap items-center gap-3">
+        <button type="button" class="${secondary}" data-action="download-import-template">ดาวน์โหลดแม่แบบ (CSV)</button>
+        ${filePicker({
+          name: 'import_file',
+          accept: '.csv,text/csv',
+          button: a ? 'เลือกไฟล์อื่น…' : 'เลือกไฟล์ CSV…',
+          label: 'ไฟล์ CSV ข้อสอบ',
+          none: a ? '' : undefined, // the file name is shown below once one is read
+        })}
+      </div>
+      ${a ? html`<p class="text-ink-700" data-import-file>ไฟล์: <strong>${importing.fileName}</strong> · ${a.total} แถว</p>` : ''}
+      ${
+        a && !ok
+          ? html`<div class="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-800" role="alert" data-import-errors>
+              <p class="font-medium">
+                ยังนำเข้าไม่ได้ — พบปัญหา ${a.errors.length} จุด แก้ในไฟล์แล้วเลือกไฟล์ใหม่ (ยังไม่มีข้อใดถูกบันทึก)
+              </p>
+              <ul class="mt-2 list-disc space-y-0.5 pl-5">
+                ${a.errors
+                  .slice(0, SHOWN_ERRORS)
+                  .map(
+                    (e) => html`<li>${e.row ? html`<strong>แถว ${e.row}:</strong> ` : ''}${e.message}</li>`
+                  )}
+              </ul>
+              ${a.errors.length > SHOWN_ERRORS ? html`<p class="mt-1 text-xs">… และอีก ${a.errors.length - SHOWN_ERRORS} จุด</p>` : ''}
+            </div>`
+          : ''
+      }
+      ${
+        ok
+          ? html`<div data-import-preview>
+              <p class="mb-2 font-medium text-emerald-700">พร้อมนำเข้า ${a.items.length} ข้อ — ตรวจให้ครบก่อนกดนำเข้า</p>
+              <div class="relative overflow-x-auto rounded-lg border border-ink-200">
+                <table class="min-w-full text-left text-xs">
+                  <thead class="bg-ink-50 text-ink-500">
+                    <tr>
+                      <th scope="col" class="px-3 py-2 font-medium">ข้อ</th>
+                      <th scope="col" class="px-3 py-2 font-medium">ประเภท</th>
+                      <th scope="col" class="px-3 py-2 font-medium">โจทย์</th>
+                      <th scope="col" class="px-3 py-2 font-medium">คะแนน</th>
+                      <th scope="col" class="px-3 py-2 font-medium">ตัวเลือก</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-ink-100">
+                    ${a.items.map(
+                      (it, i) => html`<tr data-import-row="${i + 1}">
+                        <td class="px-3 py-2 font-semibold text-ink-700">${items.length + i + 1}</td>
+                        <td class="px-3 py-2">${TYPE_LABELS[it.item_type]}</td>
+                        <td class="max-w-xs truncate px-3 py-2" title="${it.prompt}">${it.prompt}</td>
+                        <td class="px-3 py-2">${Number(it.max_score)}</td>
+                        <td class="px-3 py-2 text-ink-500">${it.options_json?.options ? `${it.options_json.options.length} ตัว` : '—'}</td>
+                      </tr>`
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p class="mt-2 text-xs text-ink-500">เฉลยจะถูกบันทึกพร้อมข้อ แต่ระบบไม่แสดงเฉลยกลับมา</p>
+              <button type="button" class="${primary} mt-3" data-action="confirm-import">นำเข้า ${a.items.length} ข้อ</button>
+            </div>`
+          : ''
+      }
+    </section>`
+  }
+
   const draw = () =>
     render(
       el,
@@ -486,7 +586,9 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
             isDraft()
               ? editing && !editing.itemId
                 ? itemForm(editing.type, null, media)
-                : html`<div class="flex flex-wrap gap-2 rounded-xl border border-dashed border-ink-200 bg-white p-3">
+                : importing
+                  ? importPanel()
+                  : html`<div class="flex flex-wrap gap-2 rounded-xl border border-dashed border-ink-200 bg-white p-3">
                     <span class="self-center text-sm text-ink-500">เพิ่มข้อ:</span>
                     ${Object.entries(ITEM_TYPES).map(
                       ([t, meta]) =>
@@ -494,6 +596,8 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
                           ${meta.icon} ${meta.label}
                         </button>`
                     )}
+                    <span class="flex-1"></span>
+                    <button type="button" class="${secondary}" data-action="open-import">นำเข้าจากไฟล์ (CSV)</button>
                   </div>`
               : ''
           }
@@ -506,6 +610,7 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     try {
       const result = await fn()
       editing = null
+      importing = null
       await load()
       message = typeof okMessage === 'function' ? okMessage(result) : okMessage
       tone = 'success'
@@ -633,11 +738,31 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         editing = null
         message = null
         return run(async () => {}, null)
+      case 'open-import':
+        editing = null
+        importing = { fileName: '', analysis: null }
+        message = null
+        return draw()
+      case 'close-import':
+        importing = null
+        return draw()
+      case 'download-import-template':
+        return downloadText(IMPORT_TEMPLATE_FILENAME, importTemplateCsv())
+      case 'confirm-import': {
+        const toImport = importing?.analysis
+        if (!toImport || toImport.errors.length) return undefined
+        return run(
+          () => services.quizzes.importItems(version.id, toImport.items),
+          (n) => `นำเข้า ${n} ข้อแล้ว — ตรวจแต่ละข้อในรายการด้านบน แล้วเผยแพร่เมื่อพร้อม`
+        )
+      }
       case 'new-item':
         editing = { type, itemId: null }
+        importing = null
         message = null
         return draw()
       case 'edit-item':
+        importing = null
         editing = { type: items.find((i) => i.id === targetId).item_type, itemId: targetId }
         message = null
         return draw()
@@ -723,7 +848,34 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
 
   // Labelling: preview a newly chosen picture so markers can be placed before saving.
   let previewUrl = null
-  el.onchange = (e) => {
+  el.onchange = async (e) => {
+    if (e.target?.name === 'import_file' && importing) {
+      const file = e.target.files?.[0]
+      if (!file) return
+      if (file.size > MAX_IMPORT_BYTES) {
+        importing = {
+          fileName: file.name,
+          analysis: {
+            items: [],
+            total: 0,
+            errors: [{ row: 0, message: 'ไฟล์ใหญ่เกิน 5 MB — ไม่ใช่ไฟล์ข้อสอบ CSV หรือแบ่งเป็นหลายไฟล์' }],
+          },
+        }
+        return draw()
+      }
+      try {
+        importing = {
+          fileName: file.name,
+          analysis: analyzeQuizImport(decodeCsvBytes(await file.arrayBuffer())),
+        }
+      } catch {
+        importing = {
+          fileName: file.name,
+          analysis: { items: [], total: 0, errors: [{ row: 0, message: 'อ่านไฟล์นี้ไม่ได้' }] },
+        }
+      }
+      return draw()
+    }
     const form = e.target.closest?.('form[data-form=item]')
     if (!form || form.dataset.type !== 'image_labelling' || e.target.name !== 'media_file') return
     const file = e.target.files?.[0]

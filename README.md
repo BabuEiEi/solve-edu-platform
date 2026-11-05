@@ -3,7 +3,7 @@
 แพลตฟอร์มเดียวสำหรับอบรมพัฒนาครู ประเมินสมรรถนะ นิเทศ 6Es ติดตาม Coaching/PLC และวิเคราะห์ข้อมูลวิจัย
 สร้างใหม่จากการศึกษา `solve-edu-lms` และ `LMS` ตาม [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md)
 
-**สถานะ:** Phase 0–1 + Phase 2A (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อ CSV) + Phase 2B/2B.1 (แบบทดสอบ, ให้คะแนนฝั่ง server, มอบหมาย, จำกัดเวลา/บันทึกอัตโนมัติ, ผลของรุ่นและวิเคราะห์ข้อสอบ) + Phase 2C (ข้อสอบแบบใหม่ 7 แบบ: เรียงลำดับ จับคู่ จัดกลุ่ม ตารางตัวเลือก ดรอปดาวน์ เติมคำ ติดป้ายบนรูป) + Phase 2C.1 (เทียบข้อความไทยทุกลำดับการพิมพ์, วิธีให้คะแนนอ่านกลับได้, ใช้บนมือถือ/Safari ได้ดีขึ้น) เสร็จ · ระบบทดลอง · **ยังไม่ Deploy**
+**สถานะ:** Phase 0–1 + Phase 2A (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อ CSV) + Phase 2B/2B.1 (แบบทดสอบ, ให้คะแนนฝั่ง server, มอบหมาย, จำกัดเวลา/บันทึกอัตโนมัติ, ผลของรุ่นและวิเคราะห์ข้อสอบ) + Phase 2C (ข้อสอบแบบใหม่ 7 แบบ: เรียงลำดับ จับคู่ จัดกลุ่ม ตารางตัวเลือก ดรอปดาวน์ เติมคำ ติดป้ายบนรูป) + Phase 2C.1 (เทียบข้อความไทยทุกลำดับการพิมพ์, วิธีให้คะแนนอ่านกลับได้, ใช้บนมือถือ/Safari ได้ดีขึ้น) + Phase 2D (นำเข้าข้อสอบจากไฟล์ CSV) เสร็จ · ระบบทดลอง · **ยังไม่ Deploy**
 
 ## Stack
 
@@ -66,7 +66,7 @@ supabase/          config.toml, migrations/, seed.sql, tests/ (pgTAP)
 tests/unit/        Vitest · tests/integration/ Supabase Local จริง · tests/e2e/ Playwright
 scripts/db-local/  shim + reset/test scripts เมื่อไม่มี Docker
 docs/              BLUEPRINT, ARCHITECTURE, ERD, DATA_DICTIONARY, PERMISSIONS, API_CONTRACTS,
-                   MIGRATION_FROM_LEGACY, TEST_REPORT_PHASE1/2A/2B/2B1/2C/2C1
+                   MIGRATION_FROM_LEGACY, TEST_REPORT_PHASE1/2A/2B/2B1/2C/2C1/2D
 ```
 
 ## หลักความปลอดภัยที่บังคับในโค้ด
