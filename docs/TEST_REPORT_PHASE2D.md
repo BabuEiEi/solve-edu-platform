@@ -15,3 +15,18 @@ migration `20261105090200_import_instrument_items.sql`: `import_instrument_items
 | Mutation: ตัดเลขแถวออกจาก error | `250` **FAIL** 7 ข้อ |
 | Mutation: เปลี่ยนเป็น SECURITY DEFINER | `250` **FAIL** (ข้อ "สิทธิ์ของผู้เรียก") |
 | `scripts/db-local/test.sh` | SKIP — ไม่มี psql |
+
+## ขั้น 2 — ตัวอ่านไฟล์และแม่แบบ
+
+`src/features/quizzes/importFile.js` (ฝั่งเบราว์เซอร์ ไม่มี DOM): `decodeCsvBytes` (UTF-8 ถ้าถูกต้อง ไม่เช่นนั้น Windows-874 ซึ่งเป็นค่าเริ่มต้นของ Excel ภาษาไทย) · `importTemplateCsv` (หัวตาราง + ตัวอย่างสมมติ 4 ประเภท นำเข้าได้ทันที) · `analyzeQuizImport(text)` → `{items, errors, total}` — สร้างแต่ละแถวด้วย `buildItemDraft` ตัวเดียวกับหน้าสร้างข้อสอบ (กฎและข้อความไทยชุดเดียวกัน) · คอลัมน์สลับลำดับ/ใช้ชื่อเรียกอื่น/มีคอลัมน์เกินได้ · รับเลขไทย · ไม่ throw (ปัญหาระดับไฟล์ = error แถว 0) · ได้ `items` เฉพาะเมื่อไม่มี error · ≤ 200 ข้อ · เลขแถวใน error ตรงกับสเปรดชีต (หัวตาราง = 1)
+
+| ชุดทดสอบ | ผล |
+|---|---|
+| `npm run check` | ✅ PASS — unit 246 (+28: แม่แบบนำเข้าได้ทันที, 4 ประเภท, เลขไทย, หัวตารางสลับ/ชื่ออื่น, ข้อความมีจุลภาค/ขึ้นบรรทัดใหม่, error 16 แบบพร้อมเลขแถว, ปัญหาระดับไฟล์ 5 แบบ, ถอดรหัส UTF-8/BOM/Windows-874 และนำเข้าไฟล์ Windows-874 ทั้งไฟล์) |
+| Mutation: เลขแถวเลื่อนไป 1 | **FAIL** 17 ข้อ |
+| Mutation: ไม่ถอดรหัส Windows-874 | **FAIL** 2 ข้อ |
+| Mutation: คืน `items` ทั้งที่มี error | **FAIL** 1 ข้อ |
+| pgTAP / Integration | ไม่ได้รัน — ขั้นนี้ไม่แตะฐานข้อมูล (ผลล่าสุด 642/642 · 70/70) |
+| `scripts/db-local/test.sh` | SKIP — ไม่มี psql |
+
+หมายเหตุ: ไฟล์ Excel ภาษาไทยที่บันทึกเป็น "CSV (Comma delimited)" ได้ Windows-874 · "CSV UTF-8" ได้ UTF-8 — ระบบรองรับทั้งสองแบบ · ถ้า Excel ในเครื่องผู้ใช้ใช้ `;` คั่นคอลัมน์ (ตั้งค่าภูมิภาคบางแบบ) ตัวอ่านยังไม่รองรับ (ดูความเสี่ยง)
