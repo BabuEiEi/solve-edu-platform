@@ -259,3 +259,29 @@ insert into public.assessment_assignments (id, instrument_version_id, cohort_id,
   ('a4000000-0000-4000-a000-000000000003', 'a2000000-0000-4000-a000-000000000002', '30000000-0000-4000-a000-000000000001',
    '40000000-0000-4000-a000-000000000001', 'formative', 'แบบฝึกข้อสอบหลายรูปแบบ', 'ลองข้อสอบแบบใหม่ ทำได้ 3 ครั้ง',
    null, '2027-03-31 23:59+07', 3, 60, 'published', '00000000-0000-4000-a000-000000000006');
+
+-- ---------------------------------------------------------------------
+-- Tasks (ภาระงาน): a rubric (2 criteria) and a task opened to the demo cohort
+-- ---------------------------------------------------------------------
+insert into public.instruments (id, owner_org_id, course_id, code, title, description, instrument_type, created_by) values
+  ('a1000000-0000-4000-a000-000000000003', '10000000-0000-4000-a000-000000000001', '40000000-0000-4000-a000-000000000001',
+   'RUB-LESSONPLAN', 'เกณฑ์ตรวจแผนการสอน (ทดลอง)', 'ข้อมูลสาธิตสำหรับทดสอบระบบเท่านั้น', 'rubric', '00000000-0000-4000-a000-000000000003');
+insert into public.instrument_versions (id, instrument_id, created_by) values
+  ('a2000000-0000-4000-a000-000000000003', 'a1000000-0000-4000-a000-000000000003', '00000000-0000-4000-a000-000000000003');
+insert into public.instrument_items (id, instrument_version_id, item_type, prompt, options_json, display_order) values
+  ('a3000000-0000-4000-a000-000000000021', 'a2000000-0000-4000-a000-000000000003', 'rubric_criterion', 'การกำหนดเป้าหมายการเรียนรู้',
+   '{"levels":[{"id":"a","label":"ปรับปรุง","score":1,"description":"เป้าหมายไม่ชัดเจนหรือวัดไม่ได้"},{"id":"b","label":"พอใช้","score":2},{"id":"c","label":"ดี","score":3},{"id":"d","label":"ดีมาก","score":4,"description":"เป้าหมายชัด วัดได้ ครอบคลุม"}]}', 1),
+  ('a3000000-0000-4000-a000-000000000022', 'a2000000-0000-4000-a000-000000000003', 'rubric_criterion', 'การใช้หลักฐานเพื่อปรับการสอน',
+   '{"levels":[{"id":"x","label":"ไม่มีหลักฐาน","score":0},{"id":"y","label":"มีหลักฐานและนำไปใช้","score":2}]}', 2);
+update public.instrument_versions
+   set status = 'published', published_at = now(), published_by = '00000000-0000-4000-a000-000000000003',
+       content_hash = private.version_content_hash(id)
+ where id = 'a2000000-0000-4000-a000-000000000003';
+
+insert into public.tasks (id, course_id, title, instructions, rubric_version_id, max_attempts, status, created_by) values
+  ('b1000000-0000-4000-a000-000000000001', '40000000-0000-4000-a000-000000000001', 'ส่งแผนการสอน AfL 1 คาบ (ทดลอง)',
+   'แนบแผนการสอน 1 คาบที่ใช้การประเมินเพื่อพัฒนาการเรียนรู้ และเขียนสะท้อนคิดสั้น ๆ ส่งได้สูงสุด 3 รอบ',
+   'a2000000-0000-4000-a000-000000000003', 3, 'published', '00000000-0000-4000-a000-000000000006');
+insert into public.task_allocations (id, task_id, cohort_id, due_at, created_by) values
+  ('b2000000-0000-4000-a000-000000000001', 'b1000000-0000-4000-a000-000000000001', '30000000-0000-4000-a000-000000000001',
+   '2027-03-31 23:59+07', '00000000-0000-4000-a000-000000000006');

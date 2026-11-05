@@ -153,6 +153,8 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | ดูผล | `from('task_reviews')`, `task_review_scores` | เจ้าของงานและผู้ตรวจที่เห็นงานนั้นเห็นผลที่ส่งแล้วทั้งหมด (ประวัติ) · ผลปัจจุบัน = `released_at` ล่าสุดของรอบนั้น |
 | ส่งรอบใหม่ | `rpc('start_task_submission')` | ได้เมื่อผลปัจจุบันของรอบล่าสุดเป็น `revise` และยังไม่ครบรอบ |
 
+**ฝั่งผู้เรียน (ขั้น 6)** — `createSubmissionService` ใช้ call ข้างบนทั้งหมด และอ่าน: `task_allocations` (ฝัง `tasks`, `cohorts`) · `task_submissions` (`user_id` = ตนเอง) · `task_submission_files` · `task_reviews` / `task_review_scores` (เฉพาะที่ส่งผลแล้ว) · `instrument_items` ของ Rubric ที่ภาระงานใช้ · ไฟล์ผ่าน `storage.from('task-files').createSignedUrls` · ไฟล์ที่อัปโหลดแต่ไม่ได้บันทึกแถว (ปิดหน้าไประหว่างทาง) ถูกลบเมื่อเปิดร่างอีกครั้ง หากเก่ากว่า 10 นาที
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

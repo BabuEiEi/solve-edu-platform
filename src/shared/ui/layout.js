@@ -7,6 +7,7 @@ export const NAV_ITEMS = [
   { path: '/programs', label: 'โครงการและรุ่น', icon: '▤', show: (c) => c.isActive },
   { path: '/courses', label: 'หลักสูตร', icon: '❏', show: (c) => c.isActive },
   { path: '/assessments', label: 'แบบทดสอบ', icon: '✎', show: (c) => c.isTrainee },
+  { path: '/tasks', label: 'ภาระงาน', icon: '✉', show: (c) => c.isTrainee },
   {
     path: '/staff/assessments',
     label: 'ผลแบบทดสอบ',

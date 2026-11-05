@@ -21,6 +21,8 @@ import { createQuizBuilderService } from './features/quizzes/service.js'
 import { renderCourseQuizzesView, renderQuizEditorView } from './features/quizzes/views.js'
 import { renderCourseRubricsView, renderRubricEditorView } from './features/rubrics/views.js'
 import { createTaskService } from './features/tasks/service.js'
+import { createSubmissionService } from './features/submissions/service.js'
+import { renderMyTasksView, renderTaskPageView } from './features/submissions/views.js'
 import { renderCourseTasksView, renderTaskDetailView } from './features/tasks/views.js'
 import { createAssignmentService } from './features/assignments/service.js'
 import {
@@ -72,6 +74,8 @@ const routes = compileRoutes([
   { path: '/courses/:id/tasks/:taskId', view: renderTaskDetailView, allow: (c) => c.isActive },
   { path: '/learn/:courseId/:lessonId', view: renderLessonView, allow: (c) => c.isActive },
   // start_attempt / submit_attempt + RLS decide eligibility; the guard only needs an active account.
+  { path: '/tasks', view: renderMyTasksView, allow: (c) => c.isActive },
+  { path: '/tasks/:allocationId', view: renderTaskPageView, allow: (c) => c.isActive },
   { path: '/assessments', view: renderMyAssessmentsView, allow: (c) => c.isActive },
   { path: '/assessments/attempts/:attemptId', view: renderAttemptResultView, allow: (c) => c.isActive },
   { path: '/assessments/:id', view: renderAssessmentView, allow: (c) => c.isActive },
@@ -114,6 +118,7 @@ async function boot() {
     assessments: createAssessmentService(supabase, restConfig),
     quizzes: createQuizBuilderService(supabase),
     tasks: createTaskService(supabase),
+    submissions: createSubmissionService(supabase),
     assignments: createAssignmentService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),
     editor: { mount: mountRichTextEditor },
