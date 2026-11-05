@@ -19,6 +19,13 @@ import { createPreregistrationService } from './features/preregistration/service
 import { createAssessmentService } from './features/assessments/service.js'
 import { createQuizBuilderService } from './features/quizzes/service.js'
 import { renderCourseQuizzesView, renderQuizEditorView } from './features/quizzes/views.js'
+import { renderCourseRubricsView, renderRubricEditorView } from './features/rubrics/views.js'
+import { createTaskService } from './features/tasks/service.js'
+import { createSubmissionService } from './features/submissions/service.js'
+import { createReviewService } from './features/reviews/service.js'
+import { renderReviewQueueView, renderTaskPeopleView, renderReviewView } from './features/reviews/views.js'
+import { renderMyTasksView, renderTaskPageView } from './features/submissions/views.js'
+import { renderCourseTasksView, renderTaskDetailView } from './features/tasks/views.js'
 import { createAssignmentService } from './features/assignments/service.js'
 import {
   renderStaffAssessmentsView,
@@ -63,12 +70,21 @@ const routes = compileRoutes([
   { path: '/courses/:id/builder/lessons/:lessonId', view: renderLessonEditorView, allow: (c) => c.isActive },
   { path: '/courses/:id/quizzes', view: renderCourseQuizzesView, allow: (c) => c.isActive },
   { path: '/courses/:id/quizzes/:quizId', view: renderQuizEditorView, allow: (c) => c.isActive },
+  { path: '/courses/:id/rubrics', view: renderCourseRubricsView, allow: (c) => c.isActive },
+  { path: '/courses/:id/rubrics/:rubricId', view: renderRubricEditorView, allow: (c) => c.isActive },
+  { path: '/courses/:id/tasks', view: renderCourseTasksView, allow: (c) => c.isActive },
+  { path: '/courses/:id/tasks/:taskId', view: renderTaskDetailView, allow: (c) => c.isActive },
   { path: '/learn/:courseId/:lessonId', view: renderLessonView, allow: (c) => c.isActive },
   // start_attempt / submit_attempt + RLS decide eligibility; the guard only needs an active account.
+  { path: '/tasks', view: renderMyTasksView, allow: (c) => c.isActive },
+  { path: '/tasks/:allocationId', view: renderTaskPageView, allow: (c) => c.isActive },
   { path: '/assessments', view: renderMyAssessmentsView, allow: (c) => c.isActive },
   { path: '/assessments/attempts/:attemptId', view: renderAttemptResultView, allow: (c) => c.isActive },
   { path: '/assessments/:id', view: renderAssessmentView, allow: (c) => c.isActive },
   // Staff side: RLS shows each person only the cohorts they assess (or their mentees).
+  { path: '/staff/tasks', view: renderReviewQueueView, allow: (c) => c.isActive },
+  { path: '/staff/tasks/review/:submissionId', view: renderReviewView, allow: (c) => c.isActive },
+  { path: '/staff/tasks/:allocationId', view: renderTaskPeopleView, allow: (c) => c.isActive },
   { path: '/staff/assessments', view: renderStaffAssessmentsView, allow: (c) => c.isActive },
   { path: '/staff/assessments/new/:versionId', view: renderNewAssignmentView, allow: (c) => c.isActive },
   { path: '/staff/assessments/:id', view: renderAssignmentDetailView, allow: (c) => c.isActive },
@@ -106,6 +122,9 @@ async function boot() {
     preregistration: createPreregistrationService(supabase),
     assessments: createAssessmentService(supabase, restConfig),
     quizzes: createQuizBuilderService(supabase),
+    tasks: createTaskService(supabase),
+    submissions: createSubmissionService(supabase),
+    reviews: createReviewService(supabase),
     assignments: createAssignmentService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),
     editor: { mount: mountRichTextEditor },

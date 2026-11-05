@@ -123,6 +123,40 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 
 ลำดับคอลัมน์สลับได้ ใช้ชื่อเรียกอื่นได้บางชื่อ (เช่น `เฉลย`, `คำถาม`) คอลัมน์เกินถูกข้าม · รับเลขไทย · อ่านรหัส UTF-8 และ Windows-874 อัตโนมัติ · ≤ 200 ข้อ · error บอกเลขแถวตามที่เห็นในสเปรดชีต (หัวตาราง = แถว 1)
 
+## 2.5 Phase 3 — Rubric
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| สร้าง Rubric | `from('instruments').insert({..., instrument_type: 'rubric'})` + ฉบับร่างแรก (เหมือนแบบทดสอบ) | `instrument_type` ตั้งได้ตอนสร้างเท่านั้น |
+| เพิ่ม/แก้เกณฑ์ | `from('instrument_items')` `item_type: 'rubric_criterion'`, `prompt` = ชื่อเกณฑ์, `options_json` = `{description?, levels:[{id, label, score, description?}]}` | 2–6 ระดับ, id `[a-z0-9]{1,8}` ไม่ซ้ำ, คะแนน 0–1000 ไม่ซ้ำ (สูงสุด > 0) · `max_score` ที่ส่งมาถูกแทนด้วยคะแนนระดับสูงสุด · ไม่มีรูป ไม่มีโหมด ไม่มีเฉลย |
+| เผยแพร่ / ฉบับใหม่ | `publish_instrument_version` / `clone_instrument_version` | Rubric เผยแพร่ได้โดยไม่ต้องมีเฉลย · มอบหมายเป็นแบบทดสอบไม่ได้ (23514) — ภาระงานใช้ Rubric (ขั้น 2–3) |
+
+## 2.6 Phase 3 — ภาระงานและการส่งงาน
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| สร้าง/แก้ภาระงาน | `from('tasks')` insert `{course_id, unit_id?, title, instructions?, rubric_version_id?, max_attempts?, status}` · update (ยกเว้น `course_id`) | ผู้จัดการหลักสูตร · Rubric ต้องเป็นฉบับเผยแพร่ที่ตนจัดการได้ · มีผู้ส่งงานแล้วเปลี่ยน Rubric ไม่ได้ (**SE006**) · ลบได้เฉพาะร่าง |
+| เปิดให้รุ่น | `from('task_allocations')` insert `{task_id, cohort_id, available_at?, due_at?}` · update วันที่ | ผู้ดูแลรุ่น · ภาระงานต้องเผยแพร่แล้ว และหลักสูตรอยู่ในโปรแกรมของรุ่น · รุ่นละครั้ง |
+| เริ่ม/เปิดร่าง | `rpc('start_task_submission', { p_allocation })` → submission id | ผู้เรียนของรุ่น · คืนร่างเดิมถ้ามี · **SE001** ยังไม่ถึงวันเปิด · **SE002** ครบรอบ · **SE007** รอบล่าสุดรอตรวจหรือผ่านแล้ว |
+| แก้ร่าง | `from('task_submissions').update({ text_response, links })` | เจ้าของ + ร่างเท่านั้น · ข้อความ ≤ 20,000 · ลิงก์ ≤ 5 `{url: https://…, label?}` |
+| แนบไฟล์ | `storage.from('task-files').upload('<submission_id>/<ชื่อสุ่ม>', file)` แล้ว `from('task_submission_files').insert({ submission_id, object_path, file_name })` | ร่างของตนเท่านั้น · ≤ 5 ไฟล์ · ≤ 20 MB · PDF/Word/Excel/PowerPoint/รูป · ขนาดและชนิดระบบอ่านจาก storage · ลบได้ขณะเป็นร่าง |
+| ส่ง | `rpc('submit_task_submission', { p_submission })` → แถวที่ส่ง | ต้องมีข้อความ ลิงก์ หรือไฟล์ · `submitted_at`, `is_late` จาก server · ส่งแล้วแก้ไม่ได้ (**SE003** ถ้าส่งซ้ำ) |
+| ดูงาน | `from('task_submissions')`, `task_submission_files`, `storage.createSignedUrl` | เจ้าของเห็นทุกรอบรวมร่าง · ผู้ดูแลรุ่นเห็นงานที่**ส่งแล้ว**ทั้งรุ่น · ครูพี่เลี้ยงเห็นเฉพาะครูที่ดูแล · คนอื่นไม่เห็น |
+
+**การตรวจงาน (ขั้น 3)**
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| บันทึกร่างการตรวจ | `rpc('save_task_review', { p_submission, p_scores, p_feedback, p_outcome, p_reason? })` → review id | ผู้ดูแลรุ่น หรือครูพี่เลี้ยงของครูคนนั้น — ไม่ใช่เจ้าของงาน · `p_scores` = `{criterion id: {level, comment?}}` (บางเกณฑ์ได้ขณะร่าง; `{}` ถ้าไม่มี Rubric) · `p_outcome` = `passed` / `revise` / null · ส่งคะแนนเองไม่ได้ (ระบบอ่านจากระดับ) · ร่างเห็นเฉพาะผู้ตรวจคนนั้น |
+| ส่งผล | `rpc('release_task_review', { p_review })` → แถวผลการตรวจ | ต้องมีผลและครบทุกเกณฑ์ · รอบที่มีผลแล้ว = ตรวจใหม่ ต้องมี `p_reason` · `released_at` จาก server · ส่งแล้วแก้/ลบไม่ได้ · audit `RELEASE_TASK_REVIEW` / `REGRADE_TASK_REVIEW` (คะแนน/ผลเดิม/ใหม่/เหตุผล ไม่เก็บข้อเสนอแนะ) |
+| ทิ้งร่าง | `from('task_reviews').delete().eq('id', …)` | ร่างของตนเท่านั้น |
+| ดูผล | `from('task_reviews')`, `task_review_scores` | เจ้าของงานและผู้ตรวจที่เห็นงานนั้นเห็นผลที่ส่งแล้วทั้งหมด (ประวัติ) · ผลปัจจุบัน = `released_at` ล่าสุดของรอบนั้น |
+| ส่งรอบใหม่ | `rpc('start_task_submission')` | ได้เมื่อผลปัจจุบันของรอบล่าสุดเป็น `revise` และยังไม่ครบรอบ |
+
+**ฝั่งผู้เรียน (ขั้น 6)** — `createSubmissionService` ใช้ call ข้างบนทั้งหมด และอ่าน: `task_allocations` (ฝัง `tasks`, `cohorts`) · `task_submissions` (`user_id` = ตนเอง) · `task_submission_files` · `task_reviews` / `task_review_scores` (เฉพาะที่ส่งผลแล้ว) · `instrument_items` ของ Rubric ที่ภาระงานใช้ · ไฟล์ผ่าน `storage.from('task-files').createSignedUrls` · ไฟล์ที่อัปโหลดแต่ไม่ได้บันทึกแถว (ปิดหน้าไประหว่างทาง) ถูกลบเมื่อเปิดร่างอีกครั้ง หากเก่ากว่า 10 นาที
+
+**ฝั่งผู้ตรวจ (ขั้น 7)** — `createReviewService`: อ่าน `task_allocations`, `task_submissions` (เฉพาะ `status = 'submitted'` ที่ RLS อนุญาต พร้อม `profiles ( id, full_name, display_name )`), `task_reviews` (`released` ทั้งหมด + ร่างของตน), `task_review_scores`, `instrument_items` ของ Rubric, `cohort_memberships` (รายชื่อ — เฉพาะผู้ดูแลรุ่น) · เขียนผ่าน `save_task_review` / `release_task_review` / ลบร่างของตน (ไม่มีทางเขียนตารางตรงๆ) · CSV (`ชื่อ, สถานะ, จำนวนรอบที่ส่ง, ส่งล่าสุด (ISO), ส่งช้า, [คะแนน, คะแนนเต็ม], ผลการตรวจล่าสุด`) สร้างในเบราว์เซอร์จากข้อมูลที่ RLS ให้ผู้ใช้เห็น จึงไม่รั่วข้ามขอบเขต
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

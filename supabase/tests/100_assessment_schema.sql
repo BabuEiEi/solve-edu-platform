@@ -75,7 +75,7 @@ select results_eq($$ select id from public.assessment_assignments where id::text
   'Trainee sees the published assignment of own cohort, not the draft');
 select is_empty($$ select 1 from public.instrument_items where instrument_version_id = '81000000-0000-4000-a000-000000000001' $$,
   'Trainee cannot preview items before starting an attempt');
-select is_empty($$ select 1 from public.instruments $$, 'Trainee without an attempt sees no instruments');
+select is_empty($$ select 1 from public.instruments where instrument_type = 'quiz' $$, 'Trainee without an attempt sees no quizzes (a rubric used by a task of their cohort is visible: Phase 3)');
 select is_empty($$ select 1 from public.assessment_attempts $$, 'Trainee sees no one else''s attempts');
 reset role;
 
