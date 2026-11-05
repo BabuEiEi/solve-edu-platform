@@ -14,6 +14,9 @@ import { AppError } from '../../core/errors.js'
  */
 export const MAX_IMPORT_ROWS = 200
 export const MAX_IMPORT_OPTIONS = 6
+// 200 rows of at most 5,000-character prompts stay far below this; anything
+// bigger is the wrong file, and reading it whole would freeze the tab.
+export const MAX_IMPORT_BYTES = 5 * 1024 * 1024
 export const IMPORT_TEMPLATE_FILENAME = 'quiz-import-template.csv'
 
 const OPTION_COLUMNS = Array.from({ length: MAX_IMPORT_OPTIONS }, (_, i) => `ตัวเลือก${i + 1}`)

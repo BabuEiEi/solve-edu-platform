@@ -20,6 +20,7 @@ import {
   importTemplateCsv,
   IMPORT_TEMPLATE_FILENAME,
   MAX_IMPORT_ROWS,
+  MAX_IMPORT_BYTES,
 } from './importFile.js'
 import { itemMediaPaths } from '../assessments/logic.js'
 import {
@@ -761,6 +762,7 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         message = null
         return draw()
       case 'edit-item':
+        importing = null
         editing = { type: items.find((i) => i.id === targetId).item_type, itemId: targetId }
         message = null
         return draw()
@@ -850,6 +852,17 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     if (e.target?.name === 'import_file' && importing) {
       const file = e.target.files?.[0]
       if (!file) return
+      if (file.size > MAX_IMPORT_BYTES) {
+        importing = {
+          fileName: file.name,
+          analysis: {
+            items: [],
+            total: 0,
+            errors: [{ row: 0, message: 'ไฟล์ใหญ่เกิน 5 MB — ไม่ใช่ไฟล์ข้อสอบ CSV หรือแบ่งเป็นหลายไฟล์' }],
+          },
+        }
+        return draw()
+      }
       try {
         importing = {
           fileName: file.name,

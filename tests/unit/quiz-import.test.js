@@ -321,6 +321,20 @@ describe('import panel', () => {
     expect(el.textContent).toContain('ยังไม่มีข้อใดถูกนำเข้า')
   })
 
+  it('a file over 5 MB is refused before it is read', async () => {
+    const services = makeServices()
+    const el = await open(services)
+    el.querySelector('[data-action=open-import]').click()
+    const input = el.querySelector('input[name=import_file]')
+    const big = { name: 'video.mp4', size: 6 * 1024 * 1024, arrayBuffer: vi.fn() }
+    Object.defineProperty(input, 'files', { value: [big], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await settle()
+    expect(big.arrayBuffer).not.toHaveBeenCalled()
+    expect(el.querySelector('[data-import-errors]').textContent).toContain('ใหญ่เกิน 5 MB')
+    expect(el.querySelector('[data-action=confirm-import]')).toBeNull()
+  })
+
   it('the template button downloads the template; close returns to the add-item buttons', async () => {
     const created = []
     const spy = vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => (created.push(b), 'blob:x'))
