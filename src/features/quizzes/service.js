@@ -116,6 +116,28 @@ export function createQuizBuilderService(client) {
       )
     },
 
+    /**
+     * Import rows (importFile.analyzeQuizImport → items) into a draft: all or
+     * none. The server names a failing row as DETAIL "แถวที่ n" (n-th item of
+     * the batch); the message adds the spreadsheet row (header = row 1).
+     */
+    async importItems(versionId, items) {
+      const res = await client.rpc('import_instrument_items', { p_version: versionId, p_items: items })
+      const n = /^แถวที่ (\d+)$/.exec(res.error?.details ?? '')?.[1]
+      try {
+        return unwrap(res, 'quizzes.import')
+      } catch (err) {
+        if (!n) throw err
+        throw new AppError(
+          `ระบบไม่รับข้อที่ ${n} ในไฟล์ (แถว ${Number(n) + 1}) — ${err.message} · ยังไม่มีข้อใดถูกนำเข้า`,
+          {
+            code: err.code,
+            cause: err.cause,
+          }
+        )
+      }
+    },
+
     async reorderItems(versionId, ids) {
       unwrap(
         await client.rpc('reorder_course_items', { p_kind: 'item', p_parent: versionId, p_ids: ids }),

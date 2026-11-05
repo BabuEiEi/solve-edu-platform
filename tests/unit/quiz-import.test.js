@@ -205,3 +205,160 @@ describe('decoding (Thai Excel writes Windows-874 by default)', () => {
     })
   })
 })
+
+// ---------------------------------------------------------------------
+// The import panel in the quiz editor, and the service call
+// ---------------------------------------------------------------------
+import { vi, afterEach } from 'vitest'
+import { renderQuizEditorView } from '../../src/features/quizzes/views.js'
+import { createQuizBuilderService } from '../../src/features/quizzes/service.js'
+import { AppError } from '../../src/core/errors.js'
+
+const settle = async () => {
+  for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0))
+}
+const course = { id: 'K', title: 'หลักสูตรทดสอบ', course_units: [] }
+
+describe('import panel', () => {
+  afterEach(() => document.body.replaceChildren())
+
+  const makeServices = ({
+    status = 'draft',
+    importItems = vi.fn(async (_v, items) => items.length),
+  } = {}) => ({
+    courses: { getAccess: async () => 'manage' },
+    builder: { getCourseTree: async () => course },
+    assessmentMedia: {
+      signedUrls: async () => ({}),
+      upload: vi.fn(),
+      list: vi.fn(async () => []),
+      remove: vi.fn(),
+    },
+    quizzes: {
+      getInstrument: vi.fn(async () => ({
+        id: 'I1',
+        course_id: 'K',
+        code: 'Q',
+        title: 'แบบทดสอบ',
+        instrument_versions: [{ id: 'V1', version_no: 1, status, published_at: null }],
+      })),
+      getItems: vi.fn(async () => []),
+      keyStatus: vi.fn(async () => ({})),
+      usedMediaPaths: vi.fn(async () => []),
+      importItems,
+    },
+  })
+  const open = async (services) => {
+    const el = document.createElement('div')
+    document.body.append(el)
+    await renderQuizEditorView(el, { services }, { id: 'K', quizId: 'I1' })
+    return el
+  }
+  const choose = async (el, text) => {
+    el.querySelector('[data-action=open-import]').click()
+    const input = el.querySelector('input[name=import_file]')
+    const file = new File([text], 'ข้อสอบ.csv', { type: 'text/csv' })
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await settle()
+  }
+
+  it('only a draft offers the import', async () => {
+    expect((await open(makeServices())).querySelector('[data-action=open-import]')).not.toBeNull()
+    expect(
+      (await open(makeServices({ status: 'published' }))).querySelector('[data-action=open-import]')
+    ).toBeNull()
+  })
+
+  it('a good file: preview of every row, no key shown, confirm sends the rows once', async () => {
+    const services = makeServices()
+    const el = await open(services)
+    await choose(el, importTemplateCsv())
+    expect(el.querySelector('[data-import-errors]')).toBeNull()
+    expect(el.querySelectorAll('[data-import-row]')).toHaveLength(4)
+    expect(el.querySelector('[data-import-file]').textContent).toContain('ข้อสอบ.csv')
+    expect(el.querySelector('[data-import-preview]').textContent).not.toMatch(/เฉลย:|correct|answer/)
+    el.querySelector('[data-action=confirm-import]').click()
+    await settle()
+    expect(services.quizzes.importItems).toHaveBeenCalledTimes(1)
+    const [versionId, sent] = services.quizzes.importItems.mock.calls[0]
+    expect(versionId).toBe('V1')
+    expect(sent.map((i) => i.item_type)).toEqual(['mcq_single', 'mcq_multiple', 'true_false', 'numeric'])
+    expect(el.textContent).toContain('นำเข้า 4 ข้อแล้ว')
+    expect(el.querySelector('[data-import-panel]')).toBeNull() // panel closed after success
+  })
+
+  it('a file with errors: every problem listed by row, nothing to confirm, nothing sent', async () => {
+    const services = makeServices()
+    const el = await open(services)
+    await choose(
+      el,
+      csv(
+        row(),
+        row({ คำตอบ: '9' }),
+        row({ ประเภท: 'อัตนัย' }),
+        row({ โจทย์: '<img src=x onerror=alert(1)>', คำตอบ: '' })
+      )
+    )
+    const errors = [...el.querySelectorAll('[data-import-errors] li')].map((li) => li.textContent.trim())
+    expect(errors).toHaveLength(3)
+    expect(errors[0]).toContain('แถว 3:')
+    expect(errors[1]).toContain('แถว 4:')
+    expect(errors[2]).toContain('แถว 5:')
+    expect(el.querySelector('[data-action=confirm-import]')).toBeNull()
+    expect(el.querySelector('img')).toBeNull() // text from the file is escaped
+    expect(services.quizzes.importItems).not.toHaveBeenCalled()
+  })
+
+  it('a server refusal keeps the panel and says nothing was imported', async () => {
+    const importItems = vi.fn(async () => {
+      throw new AppError('ระบบไม่รับข้อที่ 2 ในไฟล์ (แถว 3) — x · ยังไม่มีข้อใดถูกนำเข้า')
+    })
+    const el = await open(makeServices({ importItems }))
+    await choose(el, importTemplateCsv())
+    el.querySelector('[data-action=confirm-import]').click()
+    await settle()
+    expect(el.textContent).toContain('ยังไม่มีข้อใดถูกนำเข้า')
+  })
+
+  it('the template button downloads the template; close returns to the add-item buttons', async () => {
+    const created = []
+    const spy = vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => (created.push(b), 'blob:x'))
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const el = await open(makeServices())
+    el.querySelector('[data-action=open-import]').click()
+    el.querySelector('[data-action=download-import-template]').click()
+    expect(created).toHaveLength(1)
+    expect(await created[0].text()).toContain('ประเภท,โจทย์,คะแนน')
+    el.querySelector('[data-action=close-import]').click()
+    expect(el.querySelector('[data-action=new-item]')).not.toBeNull()
+    spy.mockRestore()
+  })
+})
+
+describe('service.importItems', () => {
+  const client = (res) => ({ rpc: vi.fn(async () => res) })
+
+  it('calls the RPC and returns the count', async () => {
+    const c = client({ data: 3, error: null })
+    expect(await createQuizBuilderService(c).importItems('V1', [{ a: 1 }])).toBe(3)
+    expect(c.rpc).toHaveBeenCalledWith('import_instrument_items', { p_version: 'V1', p_items: [{ a: 1 }] })
+  })
+
+  it('a refused row: Thai message with the item and spreadsheet row, nothing imported', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const c = client({
+      data: null,
+      error: { code: '23514', message: 'invalid answer key', details: 'แถวที่ 2' },
+    })
+    const err = await createQuizBuilderService(c)
+      .importItems('V1', [])
+      .catch((e) => e)
+    expect(err.message).toContain('ข้อที่ 2 ในไฟล์ (แถว 3)')
+    expect(err.message).toContain('ยังไม่มีข้อใดถูกนำเข้า')
+    expect(err.code).toBe('23514')
+    const other = client({ data: null, error: { code: '42501', message: 'not allowed', details: null } })
+    await expect(createQuizBuilderService(other).importItems('V1', [])).rejects.toThrow('ไม่มีสิทธิ์')
+    console.error.mockRestore?.()
+  })
+})

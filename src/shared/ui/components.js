@@ -74,10 +74,18 @@ const NO_FILE = 'ยังไม่ได้เลือกไฟล์'
  * visually hidden inside a styled label and the chosen name is shown next
  * to it (bindFilePickers). Keyboard focus stays on the real input; the
  * label shows the focus ring.
- *   { name, accept, button = 'เลือกไฟล์…', label = '', required = false }
+ *   { name, accept, button = 'เลือกไฟล์…', label = '', required = false, none = 'ยังไม่ได้เลือกไฟล์' }
+ * `none` is the text shown while no file is chosen (empty when the page already shows the last file).
  * `label` becomes the input's accessible name (what the file is for).
  */
-export function filePicker({ name, accept = '', button = 'เลือกไฟล์…', label = '', required = false }) {
+export function filePicker({
+  name,
+  accept = '',
+  button = 'เลือกไฟล์…',
+  label = '',
+  required = false,
+  none = NO_FILE,
+}) {
   return html`<span class="inline-flex max-w-full flex-wrap items-center gap-2" data-file-picker>
     <label
       class="inline-flex cursor-pointer items-center rounded-lg border border-ink-200 bg-white px-3 py-1.5 text-sm text-ink-700 shadow-sm hover:bg-ink-50 focus-within:ring-2 focus-within:ring-brand-500/40"
@@ -92,7 +100,7 @@ export function filePicker({ name, accept = '', button = 'เลือกไฟ�
       />
       <span>${button}</span>
     </label>
-    <span class="max-w-56 truncate text-xs text-ink-500" data-file-name>${NO_FILE}</span>
+    <span class="max-w-56 truncate text-xs text-ink-500" data-file-name>${none}</span>
   </span>`
 }
 
