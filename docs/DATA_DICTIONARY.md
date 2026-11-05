@@ -32,6 +32,8 @@
 - [`task_allocations`](#task-allocations) — เปิดภาระงานให้รุ่น: วันเปิด/กำหนดส่ง (ส่งช้าได้ แต่ติดป้าย)
 - [`task_submissions`](#task-submissions) — การส่งงานรายรอบ: ผู้ส่งแก้ได้เฉพาะร่าง · ส่งแล้วแก้ไม่ได้ · submitted_at/is_late จาก server
 - [`task_submission_files`](#task-submission-files) — ไฟล์ของการส่งงาน (bucket task-files ส่วนตัว) · ขนาด/ชนิดอ่านจาก storage ฝั่ง server
+- [`task_reviews`](#task-reviews) — ผลการตรวจงานรายรอบ: ร่าง (เฉพาะผู้ตรวจ) → ส่งผล (ผู้เรียนเห็น, แก้ไม่ได้) · คะแนนรวมจาก server · ตรวจใหม่ = แถวใหม่ + เหตุผล + supersedes_id
+- [`task_review_scores`](#task-review-scores) — ระดับที่เลือกรายเกณฑ์ของ Rubric + ความเห็น · score = คะแนนของระดับ (server)
 
 ## profiles
 
@@ -850,3 +852,63 @@
 **Indexes**
 
 - `CREATE INDEX task_submission_files_submission_idx ON public.task_submission_files USING btree (submission_id)`
+
+## task_reviews
+
+ผลการตรวจงานรายรอบ: ร่าง (เฉพาะผู้ตรวจ) → ส่งผล (ผู้เรียนเห็น, แก้ไม่ได้) · คะแนนรวมจาก server · ตรวจใหม่ = แถวใหม่ + เหตุผล + supersedes_id
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `submission_id` | uuid | ✓ |  |  |
+| `reviewer_id` | uuid | ✓ |  |  |
+| `rubric_version_id` | uuid |  |  |  |
+| `status` | text | ✓ | `'draft'::text` |  |
+| `outcome` | text |  |  |  |
+| `feedback` | text |  |  |  |
+| `score` | numeric(9,2) |  |  |  |
+| `max_score` | numeric(9,2) |  |  |  |
+| `supersedes_id` | uuid |  |  |  |
+| `regrade_reason` | text |  |  |  |
+| `released_at` | timestamp with time zone |  |  |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `task_reviews_feedback_check`: `CHECK (((feedback IS NULL) OR (char_length(feedback) <= 10000)))`
+- `task_reviews_outcome_check`: `CHECK ((outcome = ANY (ARRAY['passed'::text, 'revise'::text])))`
+- `task_reviews_regrade_reason_check`: `CHECK (((regrade_reason IS NULL) OR (char_length(regrade_reason) <= 1000)))`
+- `task_reviews_released`: `CHECK (((status = 'released'::text) = ((released_at IS NOT NULL) AND (outcome IS NOT NULL))))`
+- `task_reviews_status_check`: `CHECK ((status = ANY (ARRAY['draft'::text, 'released'::text])))`
+- `task_reviews_reviewer_id_fkey`: `FOREIGN KEY (reviewer_id) REFERENCES profiles(id) ON DELETE RESTRICT`
+- `task_reviews_rubric_version_id_fkey`: `FOREIGN KEY (rubric_version_id) REFERENCES instrument_versions(id) ON DELETE RESTRICT`
+- `task_reviews_submission_id_fkey`: `FOREIGN KEY (submission_id) REFERENCES task_submissions(id) ON DELETE RESTRICT`
+- `task_reviews_supersedes_id_fkey`: `FOREIGN KEY (supersedes_id) REFERENCES task_reviews(id) ON DELETE RESTRICT`
+- `task_reviews_pkey`: `PRIMARY KEY (id)`
+
+**Indexes**
+
+- `CREATE UNIQUE INDEX task_reviews_one_draft ON public.task_reviews USING btree (submission_id, reviewer_id) WHERE (status = 'draft'::text)`
+- `CREATE INDEX task_reviews_submission_idx ON public.task_reviews USING btree (submission_id, released_at DESC)`
+
+## task_review_scores
+
+ระดับที่เลือกรายเกณฑ์ของ Rubric + ความเห็น · score = คะแนนของระดับ (server)
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `review_id` | uuid | ✓ |  |  |
+| `criterion_id` | uuid | ✓ |  |  |
+| `level_id` | text | ✓ |  |  |
+| `score` | numeric(9,2) | ✓ |  |  |
+| `comment` | text |  |  |  |
+
+**Constraints**
+
+- `task_review_scores_comment_check`: `CHECK (((comment IS NULL) OR (char_length(comment) <= 2000)))`
+- `task_review_scores_criterion_id_fkey`: `FOREIGN KEY (criterion_id) REFERENCES instrument_items(id) ON DELETE RESTRICT`
+- `task_review_scores_review_id_fkey`: `FOREIGN KEY (review_id) REFERENCES task_reviews(id) ON DELETE CASCADE`
+- `task_review_scores_pkey`: `PRIMARY KEY (id)`
+- `task_review_scores_once`: `UNIQUE (review_id, criterion_id)`

@@ -96,4 +96,37 @@ run('Tasks: submit work with a file (Supabase Local)', () => {
       expect(error, who).toBeTruthy()
     }
   })
+
+  it('trainer reviews (feedback only, no rubric): draft hidden, released result visible, revise opens attempt 2', async () => {
+    const trainer = supabaseAs(env, 'trainer')
+    const draft = await trainer.rpc('save_task_review', {
+      p_submission: submissionId,
+      p_scores: {},
+      p_feedback: 'เพิ่มหลักฐานการประเมิน',
+      p_outcome: 'revise',
+    })
+    expect(draft.error).toBeNull()
+    const learner = supabaseAs(env, 'teacher_a1')
+    const hidden = await learner.from('task_reviews').select('id').eq('submission_id', submissionId)
+    expect(hidden.data).toEqual([])
+    const direct = await learner
+      .from('task_reviews')
+      .update({ outcome: 'passed' })
+      .eq('id', draft.data)
+      .select('id')
+    expect(direct.error?.code).toBe('42501')
+    const released = await trainer.rpc('release_task_review', { p_review: draft.data })
+    expect(released.error).toBeNull()
+    expect(released.data).toMatchObject({ status: 'released', outcome: 'revise', score: null })
+    const seen = await learner
+      .from('task_reviews')
+      .select('outcome, feedback, released_at')
+      .eq('submission_id', submissionId)
+    expect(seen.data).toEqual([
+      expect.objectContaining({ outcome: 'revise', feedback: 'เพิ่มหลักฐานการประเมิน' }),
+    ])
+    const next = await learner.rpc('start_task_submission', { p_allocation: allocationId })
+    expect(next.error).toBeNull()
+    expect(next.data).not.toBe(submissionId)
+  })
 })

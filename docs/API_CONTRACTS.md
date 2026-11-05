@@ -143,6 +143,16 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | ส่ง | `rpc('submit_task_submission', { p_submission })` → แถวที่ส่ง | ต้องมีข้อความ ลิงก์ หรือไฟล์ · `submitted_at`, `is_late` จาก server · ส่งแล้วแก้ไม่ได้ (**SE003** ถ้าส่งซ้ำ) |
 | ดูงาน | `from('task_submissions')`, `task_submission_files`, `storage.createSignedUrl` | เจ้าของเห็นทุกรอบรวมร่าง · ผู้ดูแลรุ่นเห็นงานที่**ส่งแล้ว**ทั้งรุ่น · ครูพี่เลี้ยงเห็นเฉพาะครูที่ดูแล · คนอื่นไม่เห็น |
 
+**การตรวจงาน (ขั้น 3)**
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| บันทึกร่างการตรวจ | `rpc('save_task_review', { p_submission, p_scores, p_feedback, p_outcome, p_reason? })` → review id | ผู้ดูแลรุ่น หรือครูพี่เลี้ยงของครูคนนั้น — ไม่ใช่เจ้าของงาน · `p_scores` = `{criterion id: {level, comment?}}` (บางเกณฑ์ได้ขณะร่าง; `{}` ถ้าไม่มี Rubric) · `p_outcome` = `passed` / `revise` / null · ส่งคะแนนเองไม่ได้ (ระบบอ่านจากระดับ) · ร่างเห็นเฉพาะผู้ตรวจคนนั้น |
+| ส่งผล | `rpc('release_task_review', { p_review })` → แถวผลการตรวจ | ต้องมีผลและครบทุกเกณฑ์ · รอบที่มีผลแล้ว = ตรวจใหม่ ต้องมี `p_reason` · `released_at` จาก server · ส่งแล้วแก้/ลบไม่ได้ · audit `RELEASE_TASK_REVIEW` / `REGRADE_TASK_REVIEW` (คะแนน/ผลเดิม/ใหม่/เหตุผล ไม่เก็บข้อเสนอแนะ) |
+| ทิ้งร่าง | `from('task_reviews').delete().eq('id', …)` | ร่างของตนเท่านั้น |
+| ดูผล | `from('task_reviews')`, `task_review_scores` | เจ้าของงานและผู้ตรวจที่เห็นงานนั้นเห็นผลที่ส่งแล้วทั้งหมด (ประวัติ) · ผลปัจจุบัน = `released_at` ล่าสุดของรอบนั้น |
+| ส่งรอบใหม่ | `rpc('start_task_submission')` | ได้เมื่อผลปัจจุบันของรอบล่าสุดเป็น `revise` และยังไม่ครบรอบ |
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |
