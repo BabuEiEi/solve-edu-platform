@@ -449,4 +449,38 @@ describe('pages', () => {
     await renderTaskPageView(el, { services, session: { user: { id: 'u1' } } }, { allocationId: 'X' })
     expect(el.textContent).toContain('ไม่พบภาระงาน')
   })
+
+  it('autosave: typing saves the draft a moment later (no button), a half-typed bad link waits, leaving is guarded', async () => {
+    vi.useFakeTimers()
+    const draft = sub(1, { status: 'draft', submitted_at: null, is_late: null, text_response: null })
+    const { el, services } = await open(base({ submissions: [draft] }))
+    const form = el.querySelector('form[data-form=draft]')
+    const status = form.querySelector('[data-save-status]')
+    const type = (name, value) => {
+      form.querySelector(`[name=${name}]`).value = value
+      form.querySelector(`[name=${name}]`).dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    type('text', 'ร่างที่พิมพ์ค้างไว้')
+    expect(status.dataset.state).toBe('dirty')
+    const leave = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(leave)
+    expect(leave.defaultPrevented).toBe(true) // unsaved: the browser asks
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(services.submissions.saveDraft).toHaveBeenCalledWith('s1', {
+      text_response: 'ร่างที่พิมพ์ค้างไว้',
+      links: [],
+    })
+    expect(status.dataset.state).toBe('saved')
+    type('link_url', 'http://half-typed')
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(services.submissions.saveDraft).toHaveBeenCalledTimes(1) // an invalid link is not sent
+    expect(status.textContent).toContain('ตรวจข้อมูลที่กรอกก่อน')
+    type('link_url', 'https://ok.example.test')
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(services.submissions.saveDraft).toHaveBeenLastCalledWith('s1', {
+      text_response: 'ร่างที่พิมพ์ค้างไว้',
+      links: [{ url: 'https://ok.example.test' }],
+    })
+    vi.useRealTimers()
+  })
 })

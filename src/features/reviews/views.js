@@ -1,5 +1,6 @@
 import { html, render, safeUrl } from '../../shared/ui/html.js'
 import { pageHeader, emptyState, alertBox, loading } from '../../shared/ui/components.js'
+import { createAutosave } from '../../shared/ui/autosave.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { toCsv } from '../../shared/utils/csv.js'
@@ -299,7 +300,8 @@ export async function renderReviewView(el, { services, session }, { submissionId
       <div class="flex flex-wrap gap-2">
         <button class="${secondary}" type="submit" data-intent="save">บันทึกร่างการตรวจ</button>
         <button class="${primary}" type="submit" data-intent="release">ส่งผลให้ผู้เรียน</button>
-        ${myDraft() ? html`<button class="${dangerBtn}" type="button" data-action="discard">ทิ้งร่าง</button>` : ''}
+        <button class="${dangerBtn}" type="button" data-action="discard" ${myDraft() ? '' : html`hidden`}>ทิ้งร่าง</button>
+        <span class="self-center text-xs text-ink-500" data-save-status data-state="saved" aria-live="polite"></span>
       </div>
       <p class="text-xs text-ink-500">ร่างการตรวจเห็นเฉพาะท่าน — ผู้เรียนเห็นผลเมื่อกด “ส่งผลให้ผู้เรียน” เท่านั้น ส่งแล้วแก้ไม่ได้ (ตรวจใหม่ได้โดยระบุเหตุผล)</p>
     </form>`
@@ -336,6 +338,33 @@ export async function renderReviewView(el, { services, session }, { submissionId
       <h2 class="text-sm font-semibold text-ink-700">ผลการตรวจที่ส่งแล้ว</h2>
       ${block(current, true)} ${earlier.map((r) => block(r, false))}
     </section>`
+  }
+
+  let autosave = null
+  let autoDraftId = null // the draft created by autosave on this page (before the page reloads its data)
+  /** Typing in the review form keeps a private draft (the trainee sees nothing until release). */
+  const startAutosave = () => {
+    autosave?.dispose()
+    autosave = null
+    const form = el.querySelector('form[data-form=review]')
+    if (!form) return
+    const payloadOf = () => buildReviewPayload(readForm(form), d.criteria, { release: false })
+    autosave = createAutosave({
+      form,
+      status: form.querySelector('[data-save-status]'),
+      canSave: () => {
+        try {
+          payloadOf()
+          return true
+        } catch {
+          return false
+        }
+      },
+      save: async () => {
+        autoDraftId = await services.reviews.saveReview(submissionId, payloadOf())
+        form.querySelector('[data-action=discard]').hidden = false
+      },
+    })
   }
 
   const draw = () => {
@@ -386,6 +415,7 @@ export async function renderReviewView(el, { services, session }, { submissionId
           ${isOwn() ? html`${alertBox('งานนี้เป็นของท่านเอง — ตรวจงานของตนเองไม่ได้', 'info')}` : reviewForm()}
         </div>`
     )
+    startAutosave()
   }
 
   const run = async (fn, okMessage) => {
@@ -443,8 +473,12 @@ export async function renderReviewView(el, { services, session }, { submissionId
     busy = true
     ;(async () => {
       try {
+        await autosave?.flush() // never two saves at once
         const reviewId = await services.reviews.saveReview(submissionId, payload)
-        if (intent === 'release') await services.reviews.release(reviewId)
+        if (intent === 'release') {
+          await services.reviews.release(reviewId)
+          autoDraftId = null
+        }
         await load()
         message = intent === 'release' ? 'ส่งผลให้ผู้เรียนแล้ว' : 'บันทึกร่างการตรวจแล้ว (ผู้เรียนยังไม่เห็น)'
         tone = 'success'
@@ -461,9 +495,11 @@ export async function renderReviewView(el, { services, session }, { submissionId
 
   el.onclick = (e) => {
     const b = e.target.closest('button[data-action=discard]')
-    if (!b || !myDraft()) return undefined
+    const draftId = myDraft()?.id ?? autoDraftId
+    if (!b || !draftId) return undefined
     if (!window.confirm('ทิ้งร่างการตรวจนี้?')) return undefined
-    return run(() => services.reviews.discard(myDraft().id), 'ทิ้งร่างการตรวจแล้ว')
+    autoDraftId = null
+    return run(() => services.reviews.discard(draftId), 'ทิ้งร่างการตรวจแล้ว')
   }
 
   draw()

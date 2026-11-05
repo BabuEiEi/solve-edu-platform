@@ -7,6 +7,7 @@ import {
   filePicker,
   bindFilePickers,
 } from '../../shared/ui/components.js'
+import { createAutosave } from '../../shared/ui/autosave.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { sortedLevels } from '../rubrics/logic.js'
@@ -289,6 +290,7 @@ export async function renderTaskPageView(el, { services, session }, { allocation
       <div class="flex flex-wrap gap-2">
         <button class="${secondary}" type="submit" data-intent="save">บันทึกร่าง</button>
         <button class="${primary}" type="submit" data-intent="submit">ส่งงาน</button>
+        <span class="self-center text-xs text-ink-500" data-save-status data-state="saved" aria-live="polite"></span>
       </div>
       <p class="text-xs text-ink-500">ส่งแล้วแก้ไขไม่ได้ ถ้าผู้ตรวจ “ส่งกลับแก้ไข” จึงส่งรอบใหม่ได้</p>
     </form>`
@@ -348,6 +350,28 @@ export async function renderTaskPageView(el, { services, session }, { allocation
         </details>`
       : ''
 
+  let autosave = null
+  /** Typing in the draft saves itself a moment later (text and links; files are saved as they are attached). */
+  const startAutosave = () => {
+    autosave?.dispose()
+    autosave = null
+    const form = el.querySelector('form[data-form=draft]')
+    if (!form) return
+    autosave = createAutosave({
+      form,
+      status: form.querySelector('[data-save-status]'),
+      canSave: () => {
+        try {
+          readDraft(form)
+          return true
+        } catch {
+          return false
+        }
+      },
+      save: () => services.submissions.saveDraft(form.dataset.draft, readDraft(form)),
+    })
+  }
+
   const draw = () => {
     const { allocation, submissions } = detail
     const task = allocation.tasks
@@ -379,6 +403,7 @@ export async function renderTaskPageView(el, { services, session }, { allocation
           }
         </div>`
     )
+    startAutosave()
   }
 
   const run = async (fn, okMessage) => {
@@ -431,6 +456,7 @@ export async function renderTaskPageView(el, { services, session }, { allocation
     busy = true
     ;(async () => {
       try {
+        await autosave?.flush() // never two saves at once
         await services.submissions.saveDraft(submissionId, draft)
         if (intent === 'submit') await services.submissions.submit(submissionId)
         await load()
