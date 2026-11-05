@@ -2,7 +2,8 @@ import { unwrap, AppError } from '../../core/errors.js'
 import { ITEM_COLUMNS } from '../assessments/service.js'
 import { itemMediaPaths } from '../assessments/logic.js'
 
-export const INSTRUMENT_COLUMNS = 'id, owner_org_id, course_id, code, title, description, status, created_at'
+export const INSTRUMENT_COLUMNS =
+  'id, owner_org_id, course_id, code, title, description, status, instrument_type, created_at'
 export const VERSION_COLUMNS = 'id, instrument_id, version_no, status, published_at, content_hash, created_at'
 
 const byVersion = (a, b) => a.version_no - b.version_no
@@ -24,12 +25,14 @@ export function createQuizBuilderService(client) {
     i ? { ...i, instrument_versions: [...(i.instrument_versions ?? [])].sort(byVersion) } : i
 
   return {
-    async listForCourse(courseId) {
+    /** Quizzes by default; pass 'rubric' for the course's rubrics. */
+    async listForCourse(courseId, type = 'quiz') {
       const rows = unwrap(
         await client
           .from('instruments')
           .select(withVersions)
           .eq('course_id', courseId)
+          .eq('instrument_type', type)
           .order('created_at', { ascending: true }),
         'quizzes.list'
       )
@@ -46,16 +49,18 @@ export function createQuizBuilderService(client) {
     },
 
     /** New instrument under the course's owner org + its first (draft) version. */
-    async createInstrument(course, { code, title, description }) {
+    async createInstrument(course, { code, title, description }, type = 'quiz') {
+      const noun = type === 'rubric' ? ' Rubric' : 'แบบทดสอบ'
       const row = {
         owner_org_id: course.owner_org_id,
         course_id: course.id,
         code: String(code ?? '').trim(),
         title: String(title ?? '').trim(),
         description: String(description ?? '').trim() || null,
+        ...(type === 'quiz' ? {} : { instrument_type: type }),
       }
-      if (!row.code) throw new AppError('กรุณาระบุรหัสแบบทดสอบ')
-      if (!row.title) throw new AppError('กรุณาระบุชื่อแบบทดสอบ')
+      if (!row.code) throw new AppError(`กรุณาระบุรหัส${noun}`)
+      if (!row.title) throw new AppError(`กรุณาระบุชื่อ${noun}`)
       const instrument = unwrap(
         await client.from('instruments').insert(row).select(INSTRUMENT_COLUMNS).single(),
         'quizzes.create'

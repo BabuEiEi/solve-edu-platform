@@ -196,6 +196,7 @@ export async function renderCourseBuilderView(el, { services }, { id }) {
             ${statusBadge(course.status)} ${publishToggle('toggle-course', course)}
             <a href="#/courses/${course.id}/preview" class="${secondary}">ดูมุมมองผู้เรียน</a>
             <a href="#/courses/${course.id}/quizzes" class="${secondary}">แบบทดสอบ</a>
+            <a href="#/courses/${course.id}/rubrics" class="${secondary}">Rubric</a>
           </div>
         </div>
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''}
