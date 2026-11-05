@@ -7,7 +7,14 @@ export const NAV_ITEMS = [
   { path: '/programs', label: 'โครงการและรุ่น', icon: '▤', show: (c) => c.isActive },
   { path: '/courses', label: 'หลักสูตร', icon: '❏', show: (c) => c.isActive },
   { path: '/assessments', label: 'แบบทดสอบ', icon: '✎', show: (c) => c.isTrainee },
-  { path: '/tasks', label: 'ภาระงาน', icon: '✉', show: (c) => c.isTrainee },
+  {
+    path: '/tasks',
+    label: 'ภาระงาน',
+    icon: '✉',
+    show: (c) => c.isTrainee,
+    badge: (n) => n.unread_results + n.revise,
+    badgeLabel: 'มีผลตรวจใหม่หรืองานที่ต้องแก้ไข',
+  },
   {
     path: '/staff/assessments',
     label: 'ผลแบบทดสอบ',
@@ -19,13 +26,43 @@ export const NAV_ITEMS = [
     label: 'ตรวจงาน',
     icon: '✔',
     show: (c) => c.isTrainer || c.isMentor || c.isCoordinator || c.canManagePrograms,
+    badge: (n) => n.waiting,
+    badgeLabel: 'งานรอตรวจ',
   },
   { path: '/admin/approvals', label: 'อนุมัติผู้ใช้', icon: '✓', show: (c) => c.canApproveUsers },
   { path: '/admin/import', label: 'นำเข้ารายชื่อ', icon: '⇪', show: (c) => c.canApproveUsers },
   { path: '/profile', label: 'โปรไฟล์ของฉัน', icon: '◉', show: () => true },
 ]
 
-export function appShell({ profile, caps, currentPath, context }) {
+const NO_NOTICES = { unread_results: 0, revise: 0, waiting: 0 }
+
+/** A small count next to a menu entry; hidden at 0. `data-nav-badge` lets updateNavBadges find it. */
+const badgeOf = (item, notices) => {
+  if (!item.badge) return ''
+  const n = item.badge(notices)
+  return html`<span
+    data-nav-badge="${item.path}"
+    class="ml-auto min-w-5 rounded-full bg-rose-600 px-1.5 text-center text-xs font-semibold text-white"
+    title="${item.badgeLabel}"
+    aria-label="${item.badgeLabel}: ${n}"
+    ${n > 0 ? '' : trusted('hidden')}
+    >${n}</span
+  >`
+}
+
+/** Refresh the badges already on screen (e.g. after a result was opened). */
+export function updateNavBadges(notices, root = document) {
+  for (const item of NAV_ITEMS.filter((i) => i.badge)) {
+    const n = item.badge({ ...NO_NOTICES, ...notices })
+    for (const el of root.querySelectorAll(`[data-nav-badge="${item.path}"]`)) {
+      el.textContent = String(n)
+      el.hidden = n <= 0
+      el.setAttribute('aria-label', `${item.badgeLabel}: ${n}`)
+    }
+  }
+}
+
+export function appShell({ profile, caps, currentPath, context, notices = NO_NOTICES }) {
   const roles = [...context.platformRoles.map((r) => r.role), ...caps.orgRoles, ...caps.cohortRoles].filter(
     (v, i, a) => a.indexOf(v) === i
   )
@@ -38,7 +75,7 @@ export function appShell({ profile, caps, currentPath, context }) {
         active ? 'bg-brand-600 text-white shadow-sm' : 'text-ink-600 hover:bg-ink-100 hover:text-ink-900'
       }"
       ${active ? trusted('aria-current="page"') : ''}
-      ><span aria-hidden="true" class="w-4 text-center">${i.icon}</span>${i.label}</a
+      ><span aria-hidden="true" class="w-4 text-center">${i.icon}</span>${i.label}${badgeOf(i, notices)}</a
     >`
   }
 

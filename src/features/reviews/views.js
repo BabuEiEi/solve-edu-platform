@@ -79,7 +79,7 @@ export async function renderReviewQueueView(el, { services, context }) {
                     href="#/staff/tasks/${a.id}"
                     class="flex flex-wrap items-center gap-3 rounded-xl border border-ink-200 bg-white px-5 py-4 hover:border-brand-300"
                   >
-                    <span class="min-w-0 flex-1">
+                    <span class="min-w-0 flex-1 basis-56">
                       <span class="block font-semibold text-ink-900">${a.tasks.title}</span>
                       <span class="text-xs text-ink-500">${cohortLabel(a.cohorts)} · ${a.tasks.courses?.title ?? ''} · ส่งแล้ว ${people(a)} คน</span>
                     </span>

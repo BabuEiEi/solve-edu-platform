@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import {
+  allocationNotice,
   attemptState,
   buildDraft,
   buildLinks,
@@ -266,6 +267,7 @@ describe('pages', () => {
       getDetail: vi.fn(async () => detail),
       signedUrls: vi.fn(async () => ({ 'S/f.pdf': 'https://files.example.test/f.pdf?token=1' })),
       cleanOrphans: vi.fn(async () => []),
+      markSeen: vi.fn(async () => 1),
       start: vi.fn(async () => 's1'),
       saveDraft: vi.fn(async () => {}),
       submit: vi.fn(async () => ({})),
@@ -482,5 +484,112 @@ describe('pages', () => {
       links: [{ url: 'https://ok.example.test' }],
     })
     vi.useRealTimers()
+  })
+
+  it('opening a task with released results marks them seen and refreshes the menu badge; none to mark otherwise', async () => {
+    const refreshNotices = vi.fn()
+    const detail = base({
+      submissions: [sub(1)],
+      reviews: [
+        {
+          id: 'r1',
+          submission_id: 's1',
+          outcome: 'revise',
+          score: '1',
+          max_score: '4',
+          released_at: '2026-11-06T00:00:00Z',
+        },
+      ],
+    })
+    const services = makeServices(detail)
+    const el = document.createElement('div')
+    document.body.append(el)
+    await renderTaskPageView(
+      el,
+      { services, session: { user: { id: 'u1' } }, refreshNotices },
+      { allocationId: 'A1' }
+    )
+    await settle()
+    expect(services.submissions.markSeen).toHaveBeenCalledWith('A1')
+    expect(refreshNotices).toHaveBeenCalledTimes(1)
+    const none = await open(base())
+    expect(none.services.submissions.markSeen).not.toHaveBeenCalled()
+  })
+
+  it('the list shows "มีผลตรวจใหม่" for unopened results and "ต้องแก้ไข" for returned work, and clears them once seen', async () => {
+    const reviews = [
+      { id: 'r1', submission_id: 's1', outcome: 'revise', released_at: '2026-11-06T00:00:00Z' },
+    ]
+    const render = async (readIds) => {
+      const services = makeServices(base({ submissions: [sub(1)] }))
+      services.submissions.listMine = vi.fn(async () => ({
+        allocations: [allocation],
+        submissions: [sub(1)],
+        reviews,
+        readIds,
+      }))
+      const el = document.createElement('div')
+      await renderMyTasksView(el, { services, session: { user: { id: 'u1' } } })
+      return el
+    }
+    const fresh = await render(new Set())
+    expect(fresh.querySelector('[data-notice=unread]')).not.toBeNull()
+    expect(fresh.querySelector('[data-notice=revise]')).not.toBeNull()
+    const seen = await render(new Set(['r1']))
+    expect(seen.querySelector('[data-notice=unread]')).toBeNull()
+    expect(seen.querySelector('[data-notice=revise]')).not.toBeNull() // still needs revising
+  })
+
+  it('allocationNotice: unread count; revise only with attempts left and no draft open', () => {
+    const task = { max_attempts: 2 }
+    const r = (id, submission, outcome, at = '2026-11-05T00:00:00Z') => ({
+      id,
+      submission_id: submission,
+      outcome,
+      released_at: at,
+    })
+    expect(
+      allocationNotice({ submissions: [sub(1)], reviews: [r('a', 's1', 'revise')], readIds: new Set(), task })
+    ).toEqual({ unread: 1, revise: true })
+    expect(
+      allocationNotice({
+        submissions: [sub(1)],
+        reviews: [r('a', 's1', 'revise')],
+        readIds: new Set(['a']),
+        task,
+      })
+    ).toEqual({ unread: 0, revise: true })
+    expect(
+      allocationNotice({
+        submissions: [sub(2), sub(1)],
+        reviews: [r('a', 's1', 'revise')],
+        readIds: new Set(['a']),
+        task,
+      }).revise
+    ).toBe(false) // attempt 2 waits for review
+    expect(
+      allocationNotice({
+        submissions: [sub(2), sub(1)],
+        reviews: [r('a', 's2', 'revise')],
+        readIds: new Set(['a']),
+        task,
+      }).revise
+    ).toBe(false) // both attempts used
+    expect(
+      allocationNotice({
+        submissions: [sub(2, { status: 'draft' }), sub(1)],
+        reviews: [r('a', 's1', 'revise')],
+        readIds: new Set(),
+        task,
+      }).revise
+    ).toBe(false) // a draft is open
+    expect(
+      allocationNotice({ submissions: [sub(1)], reviews: [r('a', 's1', 'passed')], readIds: new Set(), task })
+        .revise
+    ).toBe(false)
+    expect(allocationNotice({ submissions: [], reviews: [], readIds: new Set(), task })).toEqual({
+      unread: 0,
+      revise: false,
+    })
   })
 })

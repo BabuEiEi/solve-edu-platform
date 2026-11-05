@@ -157,6 +157,13 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 
 **ฝั่งผู้ตรวจ (ขั้น 7)** — `createReviewService`: อ่าน `task_allocations`, `task_submissions` (เฉพาะ `status = 'submitted'` ที่ RLS อนุญาต พร้อม `profiles ( id, full_name, display_name )`), `task_reviews` (`released` ทั้งหมด + ร่างของตน), `task_review_scores`, `instrument_items` ของ Rubric, `cohort_memberships` (รายชื่อ — เฉพาะผู้ดูแลรุ่น) · เขียนผ่าน `save_task_review` / `release_task_review` / ลบร่างของตน (ไม่มีทางเขียนตารางตรงๆ) · CSV (`ชื่อ, สถานะ, จำนวนรอบที่ส่ง, ส่งล่าสุด (ISO), ส่งช้า, [คะแนน, คะแนนเต็ม], ผลการตรวจล่าสุด`) สร้างในเบราว์เซอร์จากข้อมูลที่ RLS ให้ผู้ใช้เห็น จึงไม่รั่วข้ามขอบเขต
 
+**แจ้งเตือนในระบบ (3b)**
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| ตัวเลขป้ายเมนู | `rpc('task_notice_counts')` → `{unread_results, revise, waiting}` | `unread_results` = ผลตรวจที่ส่งแล้วบนงานของตนที่ยังไม่เปิดดู · `revise` = ภาระงานที่ผลล่าสุดของรอบล่าสุดเป็น "ส่งกลับแก้ไข" ยังเหลือรอบ และไม่มีร่างเปิดอยู่ · `waiting` = จำนวนคน (ในงานที่ตนมีสิทธิ์ตรวจ ไม่นับตนเอง) ที่รอบล่าสุดยังไม่มีผลตรวจ |
+| ทำเครื่องหมายว่าเปิดดูผลแล้ว | `rpc('mark_task_results_seen', { p_allocation })` → จำนวนที่เพิ่งทำเครื่องหมาย | ผลตรวจของงานตนเองเท่านั้น · ซ้ำได้ (ครั้งต่อไปได้ 0) · ลบ/แก้แถวไม่ได้ |
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

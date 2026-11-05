@@ -34,6 +34,7 @@
 - [`task_submission_files`](#task-submission-files) — ไฟล์ของการส่งงาน (bucket task-files ส่วนตัว) · ขนาด/ชนิดอ่านจาก storage ฝั่ง server
 - [`task_reviews`](#task-reviews) — ผลการตรวจงานรายรอบ: ร่าง (เฉพาะผู้ตรวจ) → ส่งผล (ผู้เรียนเห็น, แก้ไม่ได้) · คะแนนรวมจาก server · ตรวจใหม่ = แถวใหม่ + เหตุผล + supersedes_id
 - [`task_review_scores`](#task-review-scores) — ระดับที่เลือกรายเกณฑ์ของ Rubric + ความเห็น · score = คะแนนของระดับ (server)
+- [`task_review_reads`](#task-review-reads) — ผู้เรียนเปิดดูผลตรวจที่ส่งแล้วหรือยัง (ป้ายแจ้งเตือนในเมนู) · เจ้าของงานเท่านั้นที่เพิ่มแถวของตนได้
 
 ## profiles
 
@@ -912,3 +913,19 @@
 - `task_review_scores_review_id_fkey`: `FOREIGN KEY (review_id) REFERENCES task_reviews(id) ON DELETE CASCADE`
 - `task_review_scores_pkey`: `PRIMARY KEY (id)`
 - `task_review_scores_once`: `UNIQUE (review_id, criterion_id)`
+
+## task_review_reads
+
+ผู้เรียนเปิดดูผลตรวจที่ส่งแล้วหรือยัง (ป้ายแจ้งเตือนในเมนู) · เจ้าของงานเท่านั้นที่เพิ่มแถวของตนได้
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `review_id` | uuid | ✓ |  |  |
+| `user_id` | uuid | ✓ | `auth.uid()` |  |
+| `read_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `task_review_reads_review_id_fkey`: `FOREIGN KEY (review_id) REFERENCES task_reviews(id) ON DELETE CASCADE`
+- `task_review_reads_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE`
+- `task_review_reads_pkey`: `PRIMARY KEY (review_id, user_id)`

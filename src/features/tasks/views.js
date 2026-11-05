@@ -103,7 +103,7 @@ export async function renderCourseTasksView(el, { services }, { id }) {
                       href="#/courses/${course.id}/tasks/${t.id}"
                       class="flex flex-wrap items-center gap-3 rounded-xl border border-ink-200 bg-white px-5 py-4 hover:border-brand-300"
                     >
-                      <span class="min-w-0 flex-1">
+                      <span class="min-w-0 flex-1 basis-56">
                         <span class="block font-semibold text-ink-900">${t.title}</span>
                         <span class="text-xs text-ink-500"
                           >${

@@ -19,7 +19,7 @@ test('trainer reviews with the rubric: queue, draft hidden from the trainee, rel
   submitAs(PEOPLE.a1.id, 'งานของ ก1')
   submitAs(PEOPLE.a2.id, 'งานของ ก2 <img src=x onerror=alert(1)>')
   await signIn(page, 'trainer@example.test')
-  await page.getByRole('link', { name: 'ตรวจงาน', exact: true }).first().click()
+  await page.locator('a[href="#/staff/tasks"]:visible').click()
   await expect(page.locator('[data-review-queue]')).toContainText('ส่งแผนการสอน AfL 1 คาบ')
   await expect(page.locator('[data-waiting]')).toContainText('รอตรวจ 2')
 
@@ -106,7 +106,7 @@ test('a trainee has no review pages (this runs after the first test, so work exi
   page,
 }) => {
   await signIn(page, 'teacher.a1@example.test')
-  await expect(page.getByRole('link', { name: 'ตรวจงาน', exact: true })).toHaveCount(0)
+  await expect(page.locator('a[href="#/staff/tasks"]:visible')).toHaveCount(0)
   await page.goto(`/#/staff/tasks/${DEMO.allocation}`)
   await expect(page.locator('[data-people]')).toHaveCount(0) // RLS: a trainee sees no one else's work
 })
