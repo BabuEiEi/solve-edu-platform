@@ -155,6 +155,8 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 
 **ฝั่งผู้เรียน (ขั้น 6)** — `createSubmissionService` ใช้ call ข้างบนทั้งหมด และอ่าน: `task_allocations` (ฝัง `tasks`, `cohorts`) · `task_submissions` (`user_id` = ตนเอง) · `task_submission_files` · `task_reviews` / `task_review_scores` (เฉพาะที่ส่งผลแล้ว) · `instrument_items` ของ Rubric ที่ภาระงานใช้ · ไฟล์ผ่าน `storage.from('task-files').createSignedUrls` · ไฟล์ที่อัปโหลดแต่ไม่ได้บันทึกแถว (ปิดหน้าไประหว่างทาง) ถูกลบเมื่อเปิดร่างอีกครั้ง หากเก่ากว่า 10 นาที
 
+**ฝั่งผู้ตรวจ (ขั้น 7)** — `createReviewService`: อ่าน `task_allocations`, `task_submissions` (เฉพาะ `status = 'submitted'` ที่ RLS อนุญาต พร้อม `profiles ( id, full_name, display_name )`), `task_reviews` (`released` ทั้งหมด + ร่างของตน), `task_review_scores`, `instrument_items` ของ Rubric, `cohort_memberships` (รายชื่อ — เฉพาะผู้ดูแลรุ่น) · เขียนผ่าน `save_task_review` / `release_task_review` / ลบร่างของตน (ไม่มีทางเขียนตารางตรงๆ) · CSV (`ชื่อ, สถานะ, จำนวนรอบที่ส่ง, ส่งล่าสุด (ISO), ส่งช้า, [คะแนน, คะแนนเต็ม], ผลการตรวจล่าสุด`) สร้างในเบราว์เซอร์จากข้อมูลที่ RLS ให้ผู้ใช้เห็น จึงไม่รั่วข้ามขอบเขต
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

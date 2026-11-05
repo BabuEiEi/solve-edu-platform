@@ -1,17 +1,20 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, sqlAs, USERS } from './helpers.js'
+import { signIn, watchCsp, reviewInUi, resetTaskWork, PEOPLE, DEMO } from './helpers.js'
 
-const ALLOCATION = 'b2000000-0000-4000-a000-000000000001' // demo task opened to the demo cohort
 const PDF = {
   name: 'แผนการสอน.pdf',
   mimeType: 'application/pdf',
   buffer: Buffer.from('%PDF-1.4\n% fictitious test file\n'),
 }
 
-test('trainee submits work (text, link, file), is sent back, resubmits and passes; history keeps every attempt', async ({
+test('trainee submits work (text, link, file); the trainer reviews on the reviewer page: sent back, resubmit, pass, re-grade; history keeps every attempt', async ({
   page,
+  browser,
 }) => {
   const csp = watchCsp(page)
+  resetTaskWork()
+  const trainer = await (await browser.newContext()).newPage()
+  await signIn(trainer, 'trainer@example.test')
   await signIn(page, 'teacher.a1@example.test')
   await page.getByRole('link', { name: 'ภาระงาน', exact: true }).first().click()
   await expect(page.getByRole('heading', { name: 'ภาระงานของฉัน' })).toBeVisible()
@@ -53,19 +56,15 @@ test('trainee submits work (text, link, file), is sent back, resubmits and passe
   )
   await expect(page.locator('[data-actions]')).toContainText('รอผู้ตรวจ')
 
-  // The trainer returns it for revision (the reviewer page comes in the next step: SQL as the trainer)
-  const review = (outcome, feedback, levels) =>
-    sqlAs(
-      USERS.trainer,
-      `select public.release_task_review(public.save_task_review(
-         (select id from public.task_submissions order by submitted_at desc limit 1),
-         '${JSON.stringify(levels)}'::jsonb, '${feedback}', '${outcome}', ${outcome === 'passed' ? "'ตรวจใหม่หลังแก้'" : 'null'}));`
-    )
-  const C1 = 'a3000000-0000-4000-a000-000000000021'
-  const C2 = 'a3000000-0000-4000-a000-000000000022'
-  review('revise', 'เป้าหมายยังกว้าง ช่วยเพิ่มหลักฐาน', {
-    [C1]: { level: 'b', comment: 'เป้าหมายยังกว้าง' },
-    [C2]: { level: 'x' },
+  // The trainer returns it for revision, on the reviewer's page
+  const C1 = DEMO.c1
+  const C2 = DEMO.c2
+  await reviewInUi(trainer, PEOPLE.a1.name, {
+    levels: { [C1]: 'พอใช้', [C2]: 'ไม่มีหลักฐาน' },
+    comments: { [C1]: 'เป้าหมายยังกว้าง' },
+    feedback: 'เป้าหมายยังกว้าง ช่วยเพิ่มหลักฐาน',
+    outcome: 'revise',
+    release: true,
   })
   await page.reload()
   await expect(page.locator('[data-attempt="1"] [data-review]')).toContainText('ส่งกลับแก้ไข')
@@ -80,7 +79,12 @@ test('trainee submits work (text, link, file), is sent back, resubmits and passe
   page.once('dialog', (d) => d.accept())
   await page.locator('form[data-form=draft]').getByRole('button', { name: 'ส่งงาน' }).click()
   await expect(page.locator('[data-attempt="2"]')).toContainText('รอตรวจ')
-  review('passed', 'ผ่าน ดีมาก', { [C1]: { level: 'd' }, [C2]: { level: 'y' } })
+  await reviewInUi(trainer, PEOPLE.a1.name, {
+    levels: { [C1]: 'ดีมาก', [C2]: 'มีหลักฐานและนำไปใช้' },
+    feedback: 'ผ่าน ดีมาก',
+    outcome: 'passed',
+    release: true,
+  })
   await page.reload()
   await expect(page.locator('[data-attempt="2"] [data-review]')).toContainText('คะแนน 6 / 6')
   await expect(page.locator('[data-actions]')).toContainText('ผ่านแล้ว')
@@ -88,12 +92,14 @@ test('trainee submits work (text, link, file), is sent back, resubmits and passe
   await expect(page.locator('[data-attempt="1"]')).toContainText('แผนการสอนเรื่องเศษส่วน')
 
   // Re-grade of attempt 1: the old review moves to "earlier reviews" with the reason
-  sqlAs(
-    USERS.trainer,
-    `select public.release_task_review(public.save_task_review(
-       (select id from public.task_submissions where attempt_no = 1 limit 1),
-       '${JSON.stringify({ [C1]: { level: 'a' }, [C2]: { level: 'x' } })}'::jsonb, 'ให้คะแนนใหม่', 'revise', 'ตรวจทานตามเกณฑ์'));`
-  )
+  await reviewInUi(trainer, PEOPLE.a1.name, {
+    attempt: 1,
+    levels: { [C1]: 'ปรับปรุง', [C2]: 'ไม่มีหลักฐาน' },
+    feedback: 'ให้คะแนนใหม่',
+    outcome: 'revise',
+    reason: 'ตรวจทานตามเกณฑ์',
+    release: true,
+  })
   await page.reload()
   await expect(page.locator('[data-attempt="1"] [data-review]')).toContainText('คะแนน 1 / 6')
   await page.locator('[data-attempt="1"] [data-earlier-reviews] summary').click()
@@ -111,7 +117,7 @@ test("another trainee does not see the first one's work; the menu item is for tr
   browser,
 }) => {
   await signIn(page, 'teacher.a2@example.test')
-  await page.goto(`/#/tasks/${ALLOCATION}`)
+  await page.goto(`/#/tasks/${DEMO.allocation}`)
   await expect(page.getByRole('button', { name: /เริ่มทำงาน/ })).toBeVisible() // nothing of A1's work is shown
   await expect(page.locator('[data-history]')).toHaveCount(0)
   const trainer = await (await browser.newContext()).newPage()

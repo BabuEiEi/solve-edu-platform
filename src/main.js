@@ -22,6 +22,8 @@ import { renderCourseQuizzesView, renderQuizEditorView } from './features/quizze
 import { renderCourseRubricsView, renderRubricEditorView } from './features/rubrics/views.js'
 import { createTaskService } from './features/tasks/service.js'
 import { createSubmissionService } from './features/submissions/service.js'
+import { createReviewService } from './features/reviews/service.js'
+import { renderReviewQueueView, renderTaskPeopleView, renderReviewView } from './features/reviews/views.js'
 import { renderMyTasksView, renderTaskPageView } from './features/submissions/views.js'
 import { renderCourseTasksView, renderTaskDetailView } from './features/tasks/views.js'
 import { createAssignmentService } from './features/assignments/service.js'
@@ -80,6 +82,9 @@ const routes = compileRoutes([
   { path: '/assessments/attempts/:attemptId', view: renderAttemptResultView, allow: (c) => c.isActive },
   { path: '/assessments/:id', view: renderAssessmentView, allow: (c) => c.isActive },
   // Staff side: RLS shows each person only the cohorts they assess (or their mentees).
+  { path: '/staff/tasks', view: renderReviewQueueView, allow: (c) => c.isActive },
+  { path: '/staff/tasks/review/:submissionId', view: renderReviewView, allow: (c) => c.isActive },
+  { path: '/staff/tasks/:allocationId', view: renderTaskPeopleView, allow: (c) => c.isActive },
   { path: '/staff/assessments', view: renderStaffAssessmentsView, allow: (c) => c.isActive },
   { path: '/staff/assessments/new/:versionId', view: renderNewAssignmentView, allow: (c) => c.isActive },
   { path: '/staff/assessments/:id', view: renderAssignmentDetailView, allow: (c) => c.isActive },
@@ -119,6 +124,7 @@ async function boot() {
     quizzes: createQuizBuilderService(supabase),
     tasks: createTaskService(supabase),
     submissions: createSubmissionService(supabase),
+    reviews: createReviewService(supabase),
     assignments: createAssignmentService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),
     editor: { mount: mountRichTextEditor },
