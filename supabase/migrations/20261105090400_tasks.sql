@@ -325,14 +325,21 @@ set search_path = ''
 as $$
 declare
   v_meta jsonb;
+  v_status text;
 begin
+  -- Lock the attempt first: a file added while the same attempt is being
+  -- submitted waits for the submit, then sees "submitted" and is refused
+  -- (and two uploads at once cannot both pass the 5-file count).
+  select s.status into v_status from public.task_submissions s
+   where s.id = case when tg_op = 'DELETE' then old.submission_id else new.submission_id end
+     for update;
   if tg_op = 'DELETE' then
-    if exists (select 1 from public.task_submissions s where s.id = old.submission_id and s.status <> 'draft') then
+    if v_status is distinct from 'draft' and v_status is not null then
       raise exception 'files of submitted work cannot change' using errcode = 'check_violation';
     end if;
     return old;
   end if;
-  if not exists (select 1 from public.task_submissions s where s.id = new.submission_id and s.status = 'draft') then
+  if v_status is distinct from 'draft' then
     raise exception 'files are added to a draft only' using errcode = 'check_violation';
   end if;
   if not starts_with(new.object_path, new.submission_id::text || '/') or new.object_path ~ '(^|/)\.\.(/|$)' then
