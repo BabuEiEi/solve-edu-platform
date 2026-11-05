@@ -97,6 +97,7 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | RPC | ใครเรียกได้ | การตรวจภายใน |
 |---|---|---|
 | `set_item_key(p_item, p_answer, p_scoring = '{}')` | ผู้สร้างข้อสอบ | ฉบับ draft เท่านั้น · ตรวจว่าเฉลยอ้าง id ตัวเลือกที่มีจริง · audit `SET_ANSWER_KEY` **ไม่เก็บเนื้อหาเฉลย** · ไม่คืนเฉลย · `p_scoring` ต้องเป็น `{}` (2C.1: วิธีให้คะแนนย้ายไป `instrument_items.scoring_mode` ซึ่งผู้สร้างแก้ได้เฉพาะฉบับ draft ตาม RLS/trigger เดิม) |
+| `import_instrument_items(p_version, p_items)` → int (2D) | ผู้สร้างข้อสอบ | **SECURITY INVOKER**: แต่ละแถวผ่าน RLS ของ `instrument_items`, trigger ฉบับร่าง/ตรวจโครง และ `set_item_key` (ตรวจเฉลย + audit ไม่เก็บเฉลย) เหมือนพิมพ์ทีละข้อ · ทั้งหมดหรือไม่เลย · 4 ประเภทพื้นฐาน · ≤ 200 แถว · ห้ามมีรูป/field อื่น |
 | `item_key_status(p_version)` → `(item_id, has_key, key_valid)` | ผู้สร้างข้อสอบ | คืนเพียงสถานะ ไม่คืนเนื้อหาเฉลย |
 | `publish_instrument_version(p_version)` → `content_hash` | ผู้สร้างข้อสอบ | draft + มีอย่างน้อย 1 ข้อ + ทุกข้อมีเฉลยที่ถูกต้อง · ล็อก `FOR UPDATE` · hash ครอบเฉพาะเนื้อหาข้อ (ไม่รวมเฉลย — กันการเดาเฉลยจาก hash) |
 | `clone_instrument_version(p_version)` → uuid ฉบับร่างใหม่ | ผู้สร้างข้อสอบ | ร่างได้ทีละ 1 ฉบับ (`23505`) · คัดลอกข้อ+เฉลยฝั่ง server · audit `CLONE_VERSION` |
@@ -163,6 +164,7 @@ Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (ส�
 | ผู้เรียนอ่าน `options_json` แล้วรู้เฉลยจากลำดับที่เก็บ (เรียงลำดับ/จับคู่) | DENY (เฉลยไม่ถูกต้อง → เผยแพร่ไม่ได้) | `210` (mutation test ยืนยัน) · หน้าสร้างข้อสอบเก็บแบบสลับ + รหัสสุ่ม |
 | ผลวิเคราะห์รายส่วนเปิดเผยเฉลย/คำตอบที่พิมพ์ · mentor/trainee ดูผลวิเคราะห์รายส่วน (2C) | DENY | `220` (mutation test ยืนยันกฎถูก/ผิดรายส่วน) |
 | ผู้เรียนแก้วิธีให้คะแนน · แก้วิธีให้คะแนนของข้อที่เผยแพร่แล้ว · ใส่วิธีให้คะแนนในเฉลย (2C.1) | DENY | `240` (mutation test ยืนยัน: ให้คะแนนตามโหมดของข้อ, ฉบับใหม่คัดลอกโหมด) + integration |
+| mentor/trainee/คนนอก นำเข้าข้อสอบ · นำเข้าลงฉบับที่เผยแพร่แล้ว · นำเข้าครึ่งเดียวเมื่อบางแถวผิด · นำเข้าประเภทที่ยังไม่รองรับ/แนบรูป (2D) | DENY | `250` (mutation test ยืนยัน: เลขแถว, สิทธิ์ของผู้เรียก) + `tests/integration/import.test.js` |
 | Trainee อ่าน/อัปโหลดไฟล์ของบทเรียน draft หรือที่ตนไม่มีสิทธิ์ | DENY | `070` + `tests/integration/storage.test.js` |
 | ผู้เรียนเห็นหน่วย/บทเรียน draft; ผู้แก้เรียงลำดับข้ามหลักสูตร | DENY | `050`, `080` |
 | ฝัง `<script>`/`onerror`/`javascript:` ในบล็อกข้อความ | DENY (DB CHECK) | `080` |

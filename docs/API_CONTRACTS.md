@@ -104,6 +104,12 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 
 `start_attempt` คืน `presentation` = `{items:[item ids ตามลำดับที่เห็น], lists:{item id:{list:[ids]}}}` — ข้อเรียงลำดับสลับเสมอ (ไม่เริ่มในลำดับที่ถูก) · ฝั่งขวาของข้อจับคู่สลับเสมอ · อื่น ๆ ตาม `assessment_assignments.shuffle_items / shuffle_choices` (ค่าเริ่มต้นปิด) · เก็บไว้ที่ `assessment_attempts.presentation_json`
 
+## 2.4 Phase 2D — นำเข้าข้อสอบจากไฟล์
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| นำเข้าข้อพร้อมเฉลย | `rpc('import_instrument_items', { p_version, p_items })` → จำนวนข้อ | `p_items` = `[{item_type, prompt, max_score?, options_json, scoring_mode?, answer}]` · ประเภท `mcq_single`/`mcq_multiple`/`true_false`/`numeric` · ทุกแถวต้องมี `answer` (รูปแบบเดียวกับ `set_item_key`) · ไม่มีรูป · ≤ 200 แถว · ต่อท้ายฉบับร่าง · **ทั้งหมดหรือไม่เลย** · แถวผิด → error มี `details: 'แถวที่ n'` (n นับจาก 1 ตามลำดับใน array) · ฉบับที่ไม่ใช่ draft → 23514 · ไม่ใช่ผู้สร้างข้อสอบ → 42501 |
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |
