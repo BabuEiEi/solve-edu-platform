@@ -197,6 +197,7 @@ export async function renderCourseBuilderView(el, { services }, { id }) {
             <a href="#/courses/${course.id}/preview" class="${secondary}">ดูมุมมองผู้เรียน</a>
             <a href="#/courses/${course.id}/quizzes" class="${secondary}">แบบทดสอบ</a>
             <a href="#/courses/${course.id}/rubrics" class="${secondary}">Rubric</a>
+            <a href="#/courses/${course.id}/tasks" class="${secondary}">ภาระงาน</a>
           </div>
         </div>
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''}

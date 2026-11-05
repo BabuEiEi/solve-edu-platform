@@ -44,7 +44,7 @@ const versionText = (v) =>
   v ? `${v.instruments?.title ?? 'แบบทดสอบ'} · ฉบับที่ ${v.version_no}` : 'แบบทดสอบ'
 
 /** datetime-local + its value echoed as พ.ศ. (kept current by watchDateLabels). */
-function dateField(name, text, value, { required = false } = {}) {
+export function dateField(name, text, value, { required = false } = {}) {
   const v = toBangkokInput(value)
   return html`<label class="${label}"
     >${text}<input
@@ -60,7 +60,7 @@ function dateField(name, text, value, { required = false } = {}) {
   </label>`
 }
 
-function watchDateLabels(el) {
+export function watchDateLabels(el) {
   el.oninput = (e) => {
     const name = e.target.matches?.('input[type=datetime-local]') ? e.target.name : null
     const out = name && e.target.form?.querySelector(`[data-date-label="${name}"]`)
