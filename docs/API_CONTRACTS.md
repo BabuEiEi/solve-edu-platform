@@ -131,6 +131,18 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | เพิ่ม/แก้เกณฑ์ | `from('instrument_items')` `item_type: 'rubric_criterion'`, `prompt` = ชื่อเกณฑ์, `options_json` = `{description?, levels:[{id, label, score, description?}]}` | 2–6 ระดับ, id `[a-z0-9]{1,8}` ไม่ซ้ำ, คะแนน 0–1000 ไม่ซ้ำ (สูงสุด > 0) · `max_score` ที่ส่งมาถูกแทนด้วยคะแนนระดับสูงสุด · ไม่มีรูป ไม่มีโหมด ไม่มีเฉลย |
 | เผยแพร่ / ฉบับใหม่ | `publish_instrument_version` / `clone_instrument_version` | Rubric เผยแพร่ได้โดยไม่ต้องมีเฉลย · มอบหมายเป็นแบบทดสอบไม่ได้ (23514) — ภาระงานใช้ Rubric (ขั้น 2–3) |
 
+## 2.6 Phase 3 — ภาระงานและการส่งงาน
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| สร้าง/แก้ภาระงาน | `from('tasks')` insert `{course_id, unit_id?, title, instructions?, rubric_version_id?, max_attempts?, status}` · update (ยกเว้น `course_id`) | ผู้จัดการหลักสูตร · Rubric ต้องเป็นฉบับเผยแพร่ที่ตนจัดการได้ · มีผู้ส่งงานแล้วเปลี่ยน Rubric ไม่ได้ (**SE006**) · ลบได้เฉพาะร่าง |
+| เปิดให้รุ่น | `from('task_allocations')` insert `{task_id, cohort_id, available_at?, due_at?}` · update วันที่ | ผู้ดูแลรุ่น · ภาระงานต้องเผยแพร่แล้ว และหลักสูตรอยู่ในโปรแกรมของรุ่น · รุ่นละครั้ง |
+| เริ่ม/เปิดร่าง | `rpc('start_task_submission', { p_allocation })` → submission id | ผู้เรียนของรุ่น · คืนร่างเดิมถ้ามี · **SE001** ยังไม่ถึงวันเปิด · **SE002** ครบรอบ · **SE007** รอบล่าสุดรอตรวจหรือผ่านแล้ว |
+| แก้ร่าง | `from('task_submissions').update({ text_response, links })` | เจ้าของ + ร่างเท่านั้น · ข้อความ ≤ 20,000 · ลิงก์ ≤ 5 `{url: https://…, label?}` |
+| แนบไฟล์ | `storage.from('task-files').upload('<submission_id>/<ชื่อสุ่ม>', file)` แล้ว `from('task_submission_files').insert({ submission_id, object_path, file_name })` | ร่างของตนเท่านั้น · ≤ 5 ไฟล์ · ≤ 20 MB · PDF/Word/Excel/PowerPoint/รูป · ขนาดและชนิดระบบอ่านจาก storage · ลบได้ขณะเป็นร่าง |
+| ส่ง | `rpc('submit_task_submission', { p_submission })` → แถวที่ส่ง | ต้องมีข้อความ ลิงก์ หรือไฟล์ · `submitted_at`, `is_late` จาก server · ส่งแล้วแก้ไม่ได้ (**SE003** ถ้าส่งซ้ำ) |
+| ดูงาน | `from('task_submissions')`, `task_submission_files`, `storage.createSignedUrl` | เจ้าของเห็นทุกรอบรวมร่าง · ผู้ดูแลรุ่นเห็นงานที่**ส่งแล้ว**ทั้งรุ่น · ครูพี่เลี้ยงเห็นเฉพาะครูที่ดูแล · คนอื่นไม่เห็น |
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

@@ -1,4 +1,4 @@
-# Data Dictionary — SolveEdu Platform (Phase 2C.1)
+# Data Dictionary — SolveEdu Platform (Phase 3)
 
 > สร้างอัตโนมัติจากฐานข้อมูล Local ด้วย `scripts/db-local/gen-data-dictionary.py` — อย่าแก้ไขด้วยมือ  
 > ทุกตารางใน `public` เปิด RLS; สิทธิ์รายคอลัมน์ดู `PERMISSIONS.md`
@@ -28,6 +28,10 @@
 - [`assessment_attempts`](#assessment-attempts) — ครั้งที่ทำแบบทดสอบ — เขียนโดย RPC ฝั่ง server เท่านั้น (คะแนน เวลาเริ่ม/ส่ง ไม่มาจาก browser)
 - [`assessment_responses`](#assessment-responses) — คำตอบรายข้อ — client อ่านได้เฉพาะคำตอบ ไม่ได้รับ awarded_score รายข้อ
 - [`assessment_extra_attempts`](#assessment-extra-attempts) — สิทธิ์ทำเพิ่มรายบุคคล (+1 ครั้งต่อแถว) — แก้/ลบไม่ได้; ผู้มอบและเวลาบันทึกโดย server
+- [`tasks`](#tasks) — ภาระงานของหลักสูตร (Phase 3) · rubric_version_id = Rubric ฉบับเผยแพร่ (ไม่บังคับ) · draft/published/archived
+- [`task_allocations`](#task-allocations) — เปิดภาระงานให้รุ่น: วันเปิด/กำหนดส่ง (ส่งช้าได้ แต่ติดป้าย)
+- [`task_submissions`](#task-submissions) — การส่งงานรายรอบ: ผู้ส่งแก้ได้เฉพาะร่าง · ส่งแล้วแก้ไม่ได้ · submitted_at/is_late จาก server
+- [`task_submission_files`](#task-submission-files) — ไฟล์ของการส่งงาน (bucket task-files ส่วนตัว) · ขนาด/ชนิดอ่านจาก storage ฝั่ง server
 
 ## profiles
 
@@ -495,7 +499,7 @@
 | `code` | text | ✓ |  |  |
 | `title` | text | ✓ |  |  |
 | `description` | text |  |  |  |
-| `instrument_type` | text | ✓ | `'quiz'::text` |  |
+| `instrument_type` | text | ✓ | `'quiz'::text` | quiz \| rubric (Phase 3) — ตั้งได้ตอนสร้างเท่านั้น (ไม่มี grant update) |
 | `status` | text | ✓ | `'active'::text` |  |
 | `created_by` | uuid |  | `auth.uid()` |  |
 | `created_at` | timestamp with time zone | ✓ | `now()` |  |
@@ -505,7 +509,7 @@
 
 - `instruments_code_check`: `CHECK (((char_length(code) >= 1) AND (char_length(code) <= 50)))`
 - `instruments_description_check`: `CHECK (((description IS NULL) OR (char_length(description) <= 5000)))`
-- `instruments_instrument_type_check`: `CHECK ((instrument_type = 'quiz'::text))`
+- `instruments_instrument_type_check`: `CHECK ((instrument_type = ANY (ARRAY['quiz'::text, 'rubric'::text])))`
 - `instruments_status_check`: `CHECK ((status = ANY (ARRAY['active'::text, 'archived'::text])))`
 - `instruments_title_check`: `CHECK (((char_length(title) >= 1) AND (char_length(title) <= 300)))`
 - `instruments_course_id_fkey`: `FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE RESTRICT`
@@ -558,7 +562,7 @@
 |---|---|:-:|---|---|
 | `id` | uuid | ✓ | `gen_random_uuid()` |  |
 | `instrument_version_id` | uuid | ✓ |  |  |
-| `item_type` | text | ✓ |  | mcq_single\|mcq_multiple\|true_false\|numeric (2B) · ordering\|matching\|classification\|choice_matrix\|dropdown\|cloze\|image_labelling (2C) |
+| `item_type` | text | ✓ |  | mcq_single\|mcq_multiple\|true_false\|numeric (2B) · ordering\|matching\|classification\|choice_matrix\|dropdown\|cloze\|image_labelling (2C) · rubric_criterion (3) |
 | `prompt` | text | ✓ |  |  |
 | `media_path` | text |  |  |  |
 | `options_json` | jsonb | ✓ | `'{}'::jsonb` |  |
@@ -570,7 +574,7 @@
 
 **Constraints**
 
-- `instrument_items_item_type_check`: `CHECK ((item_type = ANY (ARRAY['mcq_single'::text, 'mcq_multiple'::text, 'true_false'::text, 'numeric'::text, 'ordering'::text, 'matching'::text, 'classification'::text, 'choice_matrix'::text, 'dropdown'::text, 'cloze'::text, 'image_labelling'::text])))`
+- `instrument_items_item_type_check`: `CHECK ((item_type = ANY (ARRAY['mcq_single'::text, 'mcq_multiple'::text, 'true_false'::text, 'numeric'::text, 'ordering'::text, 'matching'::text, 'classification'::text, 'choice_matrix'::text, 'dropdown'::text, 'cloze'::text, 'image_labelling'::text, 'rubric_criterion'::text])))`
 - `instrument_items_max_score_check`: `CHECK (((max_score > (0)::numeric) AND (max_score <= (1000)::numeric)))`
 - `instrument_items_prompt_check`: `CHECK (((char_length(prompt) >= 1) AND (char_length(prompt) <= 5000)))`
 - `instrument_items_scoring_mode_check`: `CHECK ((scoring_mode = ANY (ARRAY['partial'::text, 'all_or_nothing'::text])))`
@@ -725,3 +729,124 @@
 **Indexes**
 
 - `CREATE INDEX assessment_extra_attempts_idx ON public.assessment_extra_attempts USING btree (assignment_id, user_id)`
+
+## tasks
+
+ภาระงานของหลักสูตร (Phase 3) · rubric_version_id = Rubric ฉบับเผยแพร่ (ไม่บังคับ) · draft/published/archived
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `course_id` | uuid | ✓ |  |  |
+| `unit_id` | uuid |  |  |  |
+| `title` | text | ✓ |  |  |
+| `instructions` | text |  |  |  |
+| `rubric_version_id` | uuid |  |  |  |
+| `max_attempts` | integer | ✓ | `3` |  |
+| `status` | text | ✓ | `'draft'::text` |  |
+| `created_by` | uuid |  | `auth.uid()` |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `tasks_instructions_check`: `CHECK (((instructions IS NULL) OR (char_length(instructions) <= 10000)))`
+- `tasks_max_attempts_check`: `CHECK (((max_attempts >= 1) AND (max_attempts <= 10)))`
+- `tasks_status_check`: `CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'archived'::text])))`
+- `tasks_title_check`: `CHECK (((char_length(btrim(title)) >= 1) AND (char_length(btrim(title)) <= 300)))`
+- `tasks_course_id_fkey`: `FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE RESTRICT`
+- `tasks_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `tasks_rubric_version_id_fkey`: `FOREIGN KEY (rubric_version_id) REFERENCES instrument_versions(id) ON DELETE RESTRICT`
+- `tasks_unit_id_fkey`: `FOREIGN KEY (unit_id) REFERENCES course_units(id) ON DELETE SET NULL`
+- `tasks_pkey`: `PRIMARY KEY (id)`
+
+**Indexes**
+
+- `CREATE INDEX tasks_course_idx ON public.tasks USING btree (course_id)`
+
+## task_allocations
+
+เปิดภาระงานให้รุ่น: วันเปิด/กำหนดส่ง (ส่งช้าได้ แต่ติดป้าย)
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `task_id` | uuid | ✓ |  |  |
+| `cohort_id` | uuid | ✓ |  |  |
+| `available_at` | timestamp with time zone |  |  |  |
+| `due_at` | timestamp with time zone |  |  |  |
+| `created_by` | uuid |  | `auth.uid()` |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `task_allocations_window`: `CHECK (((due_at IS NULL) OR (available_at IS NULL) OR (due_at > available_at)))`
+- `task_allocations_cohort_id_fkey`: `FOREIGN KEY (cohort_id) REFERENCES cohorts(id) ON DELETE RESTRICT`
+- `task_allocations_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES profiles(id) ON DELETE SET NULL`
+- `task_allocations_task_id_fkey`: `FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE RESTRICT`
+- `task_allocations_pkey`: `PRIMARY KEY (id)`
+- `task_allocations_once`: `UNIQUE (task_id, cohort_id)`
+
+**Indexes**
+
+- `CREATE INDEX task_allocations_cohort_idx ON public.task_allocations USING btree (cohort_id)`
+
+## task_submissions
+
+การส่งงานรายรอบ: ผู้ส่งแก้ได้เฉพาะร่าง · ส่งแล้วแก้ไม่ได้ · submitted_at/is_late จาก server
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `allocation_id` | uuid | ✓ |  |  |
+| `user_id` | uuid | ✓ |  |  |
+| `attempt_no` | integer | ✓ |  |  |
+| `status` | text | ✓ | `'draft'::text` |  |
+| `text_response` | text |  |  |  |
+| `links` | jsonb | ✓ | `'[]'::jsonb` |  |
+| `submitted_at` | timestamp with time zone |  |  |  |
+| `is_late` | boolean |  |  |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+| `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `task_submissions_attempt_no_check`: `CHECK (((attempt_no >= 1) AND (attempt_no <= 10)))`
+- `task_submissions_evidence`: `CHECK (((status = 'submitted'::text) = ((submitted_at IS NOT NULL) AND (is_late IS NOT NULL))))`
+- `task_submissions_status_check`: `CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text])))`
+- `task_submissions_text_response_check`: `CHECK (((text_response IS NULL) OR (char_length(text_response) <= 20000)))`
+- `task_submissions_allocation_id_fkey`: `FOREIGN KEY (allocation_id) REFERENCES task_allocations(id) ON DELETE RESTRICT`
+- `task_submissions_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE RESTRICT`
+- `task_submissions_pkey`: `PRIMARY KEY (id)`
+- `task_submissions_attempt`: `UNIQUE (allocation_id, user_id, attempt_no)`
+
+**Indexes**
+
+- `CREATE UNIQUE INDEX task_submissions_one_draft ON public.task_submissions USING btree (allocation_id, user_id) WHERE (status = 'draft'::text)`
+- `CREATE INDEX task_submissions_user_idx ON public.task_submissions USING btree (user_id)`
+
+## task_submission_files
+
+ไฟล์ของการส่งงาน (bucket task-files ส่วนตัว) · ขนาด/ชนิดอ่านจาก storage ฝั่ง server
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `submission_id` | uuid | ✓ |  |  |
+| `object_path` | text | ✓ |  |  |
+| `file_name` | text | ✓ |  |  |
+| `size_bytes` | bigint |  |  |  |
+| `mime_type` | text |  |  |  |
+| `created_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `task_submission_files_file_name_check`: `CHECK (((char_length(file_name) >= 1) AND (char_length(file_name) <= 255)))`
+- `task_submission_files_submission_id_fkey`: `FOREIGN KEY (submission_id) REFERENCES task_submissions(id) ON DELETE RESTRICT`
+- `task_submission_files_pkey`: `PRIMARY KEY (id)`
+- `task_submission_files_object_path_key`: `UNIQUE (object_path)`
+
+**Indexes**
+
+- `CREATE INDEX task_submission_files_submission_idx ON public.task_submission_files USING btree (submission_id)`
