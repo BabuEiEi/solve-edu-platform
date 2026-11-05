@@ -123,6 +123,14 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 
 ลำดับคอลัมน์สลับได้ ใช้ชื่อเรียกอื่นได้บางชื่อ (เช่น `เฉลย`, `คำถาม`) คอลัมน์เกินถูกข้าม · รับเลขไทย · อ่านรหัส UTF-8 และ Windows-874 อัตโนมัติ · ≤ 200 ข้อ · error บอกเลขแถวตามที่เห็นในสเปรดชีต (หัวตาราง = แถว 1)
 
+## 2.5 Phase 3 — Rubric
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| สร้าง Rubric | `from('instruments').insert({..., instrument_type: 'rubric'})` + ฉบับร่างแรก (เหมือนแบบทดสอบ) | `instrument_type` ตั้งได้ตอนสร้างเท่านั้น |
+| เพิ่ม/แก้เกณฑ์ | `from('instrument_items')` `item_type: 'rubric_criterion'`, `prompt` = ชื่อเกณฑ์, `options_json` = `{description?, levels:[{id, label, score, description?}]}` | 2–6 ระดับ, id `[a-z0-9]{1,8}` ไม่ซ้ำ, คะแนน 0–1000 ไม่ซ้ำ (สูงสุด > 0) · `max_score` ที่ส่งมาถูกแทนด้วยคะแนนระดับสูงสุด · ไม่มีรูป ไม่มีโหมด ไม่มีเฉลย |
+| เผยแพร่ / ฉบับใหม่ | `publish_instrument_version` / `clone_instrument_version` | Rubric เผยแพร่ได้โดยไม่ต้องมีเฉลย · มอบหมายเป็นแบบทดสอบไม่ได้ (23514) — ภาระงานใช้ Rubric (ขั้น 2–3) |
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

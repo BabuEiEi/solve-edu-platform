@@ -72,6 +72,7 @@ ADR ทั้งหมดใน `BLUEPRINT.md` §3 ยังคงใช้ ส�
 | `20261105090000_thai_mark_order.sql` | (2C.1) `private.thai_mark_order`: เทียบคำตอบไทยได้ทุกลำดับการพิมพ์สระ/วรรณยุกต์ (ไม่ตรวจคำสะกดใกล้เคียง) |
 | `20261105090100_scoring_mode_on_item.sql` | (2C.1) วิธีให้คะแนนย้ายจากเฉลยไป `instrument_items.scoring_mode` (อ่านกลับได้, เฉลยยังอ่านไม่ได้) · ย้ายค่าข้อเดิม · `scoring_json` = `{}` เสมอ · `finalize_attempt` และ `clone_instrument_version` อ่าน/คัดลอกโหมดจากข้อ |
 | `20261105090200_import_instrument_items.sql` | (2D) `import_instrument_items`: นำเข้าข้อ+เฉลยต่อท้ายฉบับร่าง ทั้งหมดหรือไม่เลย · SECURITY INVOKER (ผ่าน RLS/trigger/`set_item_key` เดิม) · error บอก `แถวที่ n` |
+| `20261105090300_rubric_instruments.sql` | (3) Rubric = instrument ประเภท `rubric` (มีฉบับ/เผยแพร่แล้วแก้ไม่ได้) · ข้อ `rubric_criterion` {levels 2–6: id, label, score, description} · คะแนนเต็ม = ระดับสูงสุด (server) · Rubric มีแต่เกณฑ์ แบบทดสอบไม่มีเกณฑ์ · เผยแพร่ไม่ต้องมีเฉลย · มอบหมายเป็นแบบทดสอบไม่ได้ |
 
 ### เหตุผลการออกแบบสำคัญ
 
