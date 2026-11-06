@@ -41,3 +41,25 @@ migration `20261105090600_task_notices.sql`: `task_review_reads` (ผู้เ�
 2. helper ตรวจงาน (`reviewInUi`) เปิดรอบเก่าแล้วกรอกฟอร์มทันที ทั้งที่หน้ากำลังเปลี่ยนจากรอบใหม่ → เมื่อเครื่องช้า (load 8–11) ฟอร์มถูกแทนที่หลังกรอก ค่าที่เลือกหาย ระบบจึงส่งค่าเดิมที่เติมไว้ล่วงหน้า (ได้ 2/6 แทน 1/6) → รอให้หน้าแสดงรอบที่ต้องการก่อนกรอก · รันสเปคนี้ซ้ำ 3 รอบ ผ่านทุกรอบ
 
 รอบที่เครื่องหนัก (load 8–11) ชุด WebKit เคยพลาดเพิ่มข้อ `item-types` แบบสุ่มตามที่บันทึกไว้ตั้งแต่ 2C.1 — รอบสุดท้ายที่ load ต่ำ ผ่านครบ
+
+## ขั้น 3 — โครง Edge Function ร่วม + ล้างไฟล์ค้าง
+
+migration `20261105090700_task_files_cleanup.sql`: `task_files_cleanup_orphans` · `task_files_cleanup_stale_drafts` · `task_files_cleanup_record` — SECURITY INVOKER เรียกได้เฉพาะ `service_role` · `service_role` ได้ INSERT บน `private.audit_logs` อย่างเดียว
+Edge Function `cleanup-task-files` + โครงร่วม `supabase/functions/_shared/` (http, auth) · รายละเอียดและขั้นติดตั้งบนโปรเจกต์จริง: `docs/EDGE_FUNCTIONS.md`
+เครื่องมือ: `npm run test:functions` (serve functions ด้วย CRON_SECRET สุ่มครั้งเดียว) · ESLint/Prettier ครอบคลุม `supabase/functions` แล้ว (เดิมข้ามทั้งโฟลเดอร์ `supabase/`)
+
+| ชุดทดสอบ | ผล |
+|---|---|
+| `npm run check` | ✅ PASS — unit 357 (+14 `edge-shared`: ข้อผิดพลาดไม่รั่วรายละเอียด · CORS เฉพาะ origin ที่อนุญาต (รวม preflight และตอนเกิดข้อผิดพลาด) · secret ผิด/ไม่มี = 401, ไม่ได้ตั้ง/สั้น = 500 แม้ header ตรง · token ผู้ใช้ตรวจกับ Auth, รูปแบบผิดไม่เรียก Auth เลย · dry run ไม่ลบ · ลบเป็นชุดละ 100 · storage ล้มเหลวเหลือไว้รอบหน้า · ฐานข้อมูลล้มเหลวหยุดก่อนลบ) |
+| pgTAP | ✅ PASS 830/830 (+27 `310`: anon/ผู้ใช้/ผู้ดูแลระบบเรียกไม่ได้ · ไม่มี SECURITY DEFINER · service role อ่าน/แก้/ลบ audit ไม่ได้ · ไฟล์ค้างเฉพาะที่ไม่มีแถวและเก่ากว่า 24 ชม. (ไม่ใช่ที่เพิ่งอัปโหลด, ไม่ใช่ bucket อื่น) · ขั้นต่ำอายุ/จำนวน · dry run ไม่ลบ · ลบเฉพาะร่างที่นิ่ง 30 วัน ข้อความร่างยังอยู่ · ร่างที่มีไฟล์ใหม่และงานที่ส่งแล้วไม่ถูกแตะ · มี audit · รอบสองว่าง · ไฟล์ที่ลบไม่สำเร็จกลายเป็นไฟล์ค้างให้รอบหน้า · record บันทึกเฉพาะที่หายจริง ครั้งเดียว ไม่รับ path แปลก) |
+| Integration | ✅ PASS 76/76 |
+| Edge Function จริง (`npm run test:functions`) | ✅ PASS 5/5 (ไม่มี/ผิด secret และ token ผู้ใช้ = 401, GET = 405 · dry run ตรงสองไฟล์ ไม่ลบ · ลบจริงผ่าน Storage API: ไฟล์ค้างเก่าและไฟล์ร่างนิ่งหาย, ไฟล์เพิ่งอัปโหลด/ร่างที่ยังทำอยู่/งานที่ส่งแล้วอยู่ครบ, audit 2 แถว · ผู้เรียนเปิดร่างเดิมทำต่อได้ · รอบสองไม่มีอะไรทำ) |
+| E2E Chromium / WebKit (iPhone) | ✅ PASS 31/31 / 31/31 (ไม่มีหน้าจอเปลี่ยน — ยืนยันว่าไม่กระทบของเดิม) |
+| Mutation: ลืมกฎ "ร่างที่มีไฟล์ใหม่" | pgTAP **FAIL** · กู้คืนแล้ว |
+| Mutation: ให้ผู้ใช้ที่ล็อกอินเรียกรายการไฟล์ค้าง | pgTAP **FAIL** 2 ข้อ · กู้คืนแล้ว |
+| Mutation: function ไม่ตรวจ secret | test function **FAIL** 3 ข้อ · กู้คืนแล้ว |
+| Prettier (`src tests supabase/functions scripts`) / ESLint | ✅ PASS |
+| `scripts/db-local/test.sh` | SKIP — ไม่มี psql |
+
+พบระหว่างทำ: สคริปต์ทดสอบเดิมรอให้ function "พร้อม" ด้วยการรอ 401 — เมื่อลอง mutation ที่ปิดการตรวจ secret สคริปต์จึงค้างที่ขั้นรอ ไม่ได้รัน test (จับได้ แต่ไม่บอกว่าข้อไหน) → เปลี่ยนเป็นรอ 405 จาก GET ซึ่งไม่ขึ้นกับการตรวจสิทธิ์
+ยังไม่ได้ทดสอบบนโปรเจกต์จริง (deploy, secret, ตัวตั้งเวลา) — เป็นขั้นของเจ้าของระบบตาม `docs/EDGE_FUNCTIONS.md`

@@ -1,4 +1,5 @@
 dist
 node_modules
-supabase
+supabase/*
+!supabase/functions
 package-lock.json

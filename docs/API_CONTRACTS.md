@@ -164,6 +164,13 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | ตัวเลขป้ายเมนู | `rpc('task_notice_counts')` → `{unread_results, revise, waiting}` | `unread_results` = ผลตรวจที่ส่งแล้วบนงานของตนที่ยังไม่เปิดดู · `revise` = ภาระงานที่ผลล่าสุดของรอบล่าสุดเป็น "ส่งกลับแก้ไข" ยังเหลือรอบ และไม่มีร่างเปิดอยู่ · `waiting` = จำนวนคน (ในงานที่ตนมีสิทธิ์ตรวจ ไม่นับตนเอง) ที่รอบล่าสุดยังไม่มีผลตรวจ |
 | ทำเครื่องหมายว่าเปิดดูผลแล้ว | `rpc('mark_task_results_seen', { p_allocation })` → จำนวนที่เพิ่งทำเครื่องหมาย | ผลตรวจของงานตนเองเท่านั้น · ซ้ำได้ (ครั้งต่อไปได้ 0) · ลบ/แก้แถวไม่ได้ |
 
+## 2.7 Phase 3b — Edge Functions
+
+| งาน | เรียก | หมายเหตุ |
+|---|---|---|
+| ล้างไฟล์ค้าง (ตัวตั้งเวลา) | `POST /functions/v1/cleanup-task-files` + header `x-cron-secret` · body `{}` หรือ `{"dry_run": true}` | 200 `{dry_run:false, stale_draft_files_removed, orphans_removed, orphans_logged, failed[]}` / `{dry_run:true, orphans[], stale_draft_files[]}` · 401 `unauthorized` · 405 `method_not_allowed` · 500 `not_configured` (ไม่มี/สั้นเกิน CRON_SECRET) หรือ `internal` · เบราว์เซอร์ไม่เรียก — รายละเอียด `docs/EDGE_FUNCTIONS.md` |
+| RPC ที่ function ใช้ (service role เท่านั้น) | `task_files_cleanup_orphans(p_older_than, p_limit)` · `task_files_cleanup_stale_drafts(p_idle, p_limit, p_dry_run)` · `task_files_cleanup_record(p_paths)` | คืน `{object_path}[]` / จำนวนแถว audit · ค่าต่ำกว่าขั้นต่ำ = 22023 · ผู้ใช้อื่น = 42501 |
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

@@ -7,7 +7,7 @@ export default defineConfig({
   build: { sourcemap: true },
   test: {
     environment: 'jsdom',
-    include: ['tests/unit/**/*.test.js', 'tests/integration/**/*.test.js'],
+    include: ['tests/unit/**/*.test.js', 'tests/integration/**/*.test.js', 'tests/functions/**/*.test.js'],
     // A hang guard, not a speed check: view tests take <0.5 s idle but exceeded
     // the 5 s default when the CPU was busy (e.g. right after `db reset`).
     testTimeout: 20_000,
