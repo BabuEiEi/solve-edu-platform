@@ -21,3 +21,6 @@ supabase/signing_keys.json
 # Playwright
 test-results
 playwright-report
+
+# Vercel (project link of this machine)
+.vercel
