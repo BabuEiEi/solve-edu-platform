@@ -34,6 +34,9 @@
 - [`task_submission_files`](#task-submission-files) — ไฟล์ของการส่งงาน (bucket task-files ส่วนตัว) · ขนาด/ชนิดอ่านจาก storage ฝั่ง server
 - [`task_reviews`](#task-reviews) — ผลการตรวจงานรายรอบ: ร่าง (เฉพาะผู้ตรวจ) → ส่งผล (ผู้เรียนเห็น, แก้ไม่ได้) · คะแนนรวมจาก server · ตรวจใหม่ = แถวใหม่ + เหตุผล + supersedes_id
 - [`task_review_scores`](#task-review-scores) — ระดับที่เลือกรายเกณฑ์ของ Rubric + ความเห็น · score = คะแนนของระดับ (server)
+- [`task_review_reads`](#task-review-reads) — ผู้เรียนเปิดดูผลตรวจที่ส่งแล้วหรือยัง (ป้ายแจ้งเตือนในเมนู) · เจ้าของงานเท่านั้นที่เพิ่มแถวของตนได้
+- [`task_drive_exports`](#task-drive-exports) — การส่งสำเนาไฟล์งานไป Google Drive ส่วนกลาง (ต่อภาระงานต่อรุ่น): ใคร เมื่อไร ผลเป็นอย่างไร · เขียนผ่าน begin/finish เท่านั้น
+- [`task_drive_copies`](#task-drive-copies) — ไฟล์งานที่อยู่ใน Google Drive แล้ว: ไฟล์ไหน = ไฟล์ Drive ใด ส่งในครั้งไหน
 
 ## profiles
 
@@ -912,3 +915,76 @@
 - `task_review_scores_review_id_fkey`: `FOREIGN KEY (review_id) REFERENCES task_reviews(id) ON DELETE CASCADE`
 - `task_review_scores_pkey`: `PRIMARY KEY (id)`
 - `task_review_scores_once`: `UNIQUE (review_id, criterion_id)`
+
+## task_review_reads
+
+ผู้เรียนเปิดดูผลตรวจที่ส่งแล้วหรือยัง (ป้ายแจ้งเตือนในเมนู) · เจ้าของงานเท่านั้นที่เพิ่มแถวของตนได้
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `review_id` | uuid | ✓ |  |  |
+| `user_id` | uuid | ✓ | `auth.uid()` |  |
+| `read_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `task_review_reads_review_id_fkey`: `FOREIGN KEY (review_id) REFERENCES task_reviews(id) ON DELETE CASCADE`
+- `task_review_reads_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE`
+- `task_review_reads_pkey`: `PRIMARY KEY (review_id, user_id)`
+
+## task_drive_exports
+
+การส่งสำเนาไฟล์งานไป Google Drive ส่วนกลาง (ต่อภาระงานต่อรุ่น): ใคร เมื่อไร ผลเป็นอย่างไร · เขียนผ่าน begin/finish เท่านั้น
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `id` | uuid | ✓ | `gen_random_uuid()` |  |
+| `allocation_id` | uuid | ✓ |  |  |
+| `requested_by` | uuid | ✓ |  |  |
+| `started_at` | timestamp with time zone | ✓ | `now()` |  |
+| `finished_at` | timestamp with time zone |  |  |  |
+| `status` | text | ✓ | `'running'::text` |  |
+| `files_copied` | integer | ✓ | `0` |  |
+| `files_skipped` | integer | ✓ | `0` |  |
+| `files_failed` | integer | ✓ | `0` |  |
+| `drive_folder_id` | text |  |  |  |
+| `error` | text |  |  |  |
+
+**Constraints**
+
+- `task_drive_exports_drive_folder_id_check`: `CHECK (((drive_folder_id IS NULL) OR (drive_folder_id ~ '^[A-Za-z0-9_-]{1,200}$'::text)))`
+- `task_drive_exports_error_check`: `CHECK (((error IS NULL) OR (char_length(error) <= 500)))`
+- `task_drive_exports_files_copied_check`: `CHECK ((files_copied >= 0))`
+- `task_drive_exports_files_failed_check`: `CHECK ((files_failed >= 0))`
+- `task_drive_exports_files_skipped_check`: `CHECK ((files_skipped >= 0))`
+- `task_drive_exports_finished`: `CHECK (((status = 'running'::text) = (finished_at IS NULL)))`
+- `task_drive_exports_status_check`: `CHECK ((status = ANY (ARRAY['running'::text, 'done'::text, 'partial'::text, 'failed'::text])))`
+- `task_drive_exports_allocation_id_fkey`: `FOREIGN KEY (allocation_id) REFERENCES task_allocations(id) ON DELETE RESTRICT`
+- `task_drive_exports_requested_by_fkey`: `FOREIGN KEY (requested_by) REFERENCES profiles(id) ON DELETE RESTRICT`
+- `task_drive_exports_pkey`: `PRIMARY KEY (id)`
+
+**Indexes**
+
+- `CREATE INDEX task_drive_exports_allocation_idx ON public.task_drive_exports USING btree (allocation_id, started_at DESC)`
+
+## task_drive_copies
+
+ไฟล์งานที่อยู่ใน Google Drive แล้ว: ไฟล์ไหน = ไฟล์ Drive ใด ส่งในครั้งไหน
+
+| คอลัมน์ | ชนิด | NOT NULL | ค่าเริ่มต้น | หมายเหตุ |
+|---|---|:-:|---|---|
+| `file_id` | uuid | ✓ |  |  |
+| `run_id` | uuid | ✓ |  |  |
+| `drive_file_id` | text | ✓ |  |  |
+| `copied_at` | timestamp with time zone | ✓ | `now()` |  |
+
+**Constraints**
+
+- `task_drive_copies_drive_file_id_check`: `CHECK ((drive_file_id ~ '^[A-Za-z0-9_-]{1,200}$'::text))`
+- `task_drive_copies_file_id_fkey`: `FOREIGN KEY (file_id) REFERENCES task_submission_files(id) ON DELETE RESTRICT`
+- `task_drive_copies_run_id_fkey`: `FOREIGN KEY (run_id) REFERENCES task_drive_exports(id) ON DELETE RESTRICT`
+- `task_drive_copies_pkey`: `PRIMARY KEY (file_id)`
+
+**Indexes**
+
+- `CREATE INDEX task_drive_copies_run_idx ON public.task_drive_copies USING btree (run_id)`

@@ -2,7 +2,8 @@ import js from '@eslint/js'
 import globals from 'globals'
 
 export default [
-  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'supabase/**'] },
+  // supabase/ is SQL and config, except Edge Functions (JS run by Deno), which are linted
+  { ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'supabase/*', '!supabase/functions'] },
   js.configs.recommended,
   {
     files: ['**/*.js'],
@@ -27,6 +28,10 @@ export default [
   {
     files: ['src/shared/ui/html.js'],
     rules: { 'no-restricted-syntax': 'off' },
+  },
+  {
+    files: ['supabase/functions/**/*.js'],
+    languageOptions: { globals: { ...globals.serviceworker, Deno: 'readonly' } },
   },
   {
     files: ['tests/**/*.js', 'vite.config.js', 'eslint.config.js'],

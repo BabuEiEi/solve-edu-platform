@@ -17,6 +17,8 @@ const BY_CODE = {
   // tasks (ภาระงาน): SE006 = rubric frozen once work is submitted; SE007 = no new attempt now
   SE006: 'มีผู้ส่งงานแล้ว จึงเปลี่ยน Rubric ของภาระงานนี้ไม่ได้',
   SE007: 'รอบล่าสุดรอผลตรวจหรือผ่านแล้ว จึงส่งรอบใหม่ไม่ได้',
+  // Google Drive copy (begin_task_drive_export): one run per task-cohort at a time
+  SE008: 'กำลังส่งสำเนาไป Google Drive อยู่ กรุณารอสักครู่แล้วลองใหม่',
   PGRST116: 'ไม่พบข้อมูลที่ต้องการ',
   PGRST301: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
 }

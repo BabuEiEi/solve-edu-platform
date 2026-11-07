@@ -5,7 +5,7 @@ import { deriveCapabilities } from './core/permissions.js'
 import { compileRoutes, resolveRoute } from './core/router.js'
 import { toUserMessage } from './core/errors.js'
 import { html, render } from './shared/ui/html.js'
-import { appShell, centeredCard } from './shared/ui/layout.js'
+import { appShell, centeredCard, updateNavBadges } from './shared/ui/layout.js'
 import { alertBox, loading, bindFilePickers } from './shared/ui/components.js'
 import { createProfileService } from './features/profiles/service.js'
 import { createAdminService } from './features/admin/service.js'
@@ -23,6 +23,8 @@ import { renderCourseRubricsView, renderRubricEditorView } from './features/rubr
 import { createTaskService } from './features/tasks/service.js'
 import { createSubmissionService } from './features/submissions/service.js'
 import { createReviewService } from './features/reviews/service.js'
+import { createDriveService } from './features/drive/service.js'
+import { createNoticeService } from './features/notices/service.js'
 import { renderReviewQueueView, renderTaskPeopleView, renderReviewView } from './features/reviews/views.js'
 import { renderMyTasksView, renderTaskPageView } from './features/submissions/views.js'
 import { renderCourseTasksView, renderTaskDetailView } from './features/tasks/views.js'
@@ -125,6 +127,8 @@ async function boot() {
     tasks: createTaskService(supabase),
     submissions: createSubmissionService(supabase),
     reviews: createReviewService(supabase),
+    drive: createDriveService(supabase),
+    notices: createNoticeService(supabase),
     assignments: createAssignmentService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),
     editor: { mount: mountRichTextEditor },
@@ -166,12 +170,24 @@ async function boot() {
     if (!state.caps?.isActive) return
     const hit = resolveRoute(routes, window.location.hash, state.caps, '/')
     const currentPath = (window.location.hash || '#/').slice(1)
+    const notices = await services.notices.counts() // never throws: a failure shows no badge
     render(
       root,
-      appShell({ profile: state.context.profile, caps: state.caps, context: state.context, currentPath })
+      appShell({
+        profile: state.context.profile,
+        caps: state.caps,
+        context: state.context,
+        currentPath,
+        notices,
+      })
     )
+    const refreshNotices = async () => updateNavBadges(await services.notices.counts())
     const view = document.getElementById('view')
-    await hit.route.view(view, { ...state, services, auth, refresh: () => refresh() }, hit.params)
+    await hit.route.view(
+      view,
+      { ...state, services, auth, refresh: () => refresh(), refreshNotices },
+      hit.params
+    )
     view.focus({ preventScroll: true })
   }
 

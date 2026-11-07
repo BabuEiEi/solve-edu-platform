@@ -480,4 +480,28 @@ describe('pages', () => {
     expect(refused.el.querySelector('[data-form-error]').textContent).toContain('ไม่มีสิทธิ์')
     expect(refused.el.querySelector('input[name="level:c1"][value=a]').checked).toBe(true)
   })
+
+  it('autosave: choosing a level keeps a private draft; the discard button appears once there is one', async () => {
+    vi.useFakeTimers()
+    const { el, services } = await openReview(detail())
+    const discard = el.querySelector('[data-action=discard]')
+    expect(discard.hidden).toBe(true)
+    pick(el, 'c1', 'b')
+    el.querySelector('input[name="level:c1"][value=b]').dispatchEvent(new Event('input', { bubbles: true }))
+    await vi.advanceTimersByTimeAsync(1100)
+    expect(services.reviews.saveReview).toHaveBeenCalledWith('s1', {
+      scores: { c1: { level: 'b' } },
+      feedback: null,
+      outcome: null,
+      reason: null,
+    })
+    expect(services.reviews.release).not.toHaveBeenCalled() // a draft only
+    expect(discard.hidden).toBe(false)
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    discard.click()
+    await vi.advanceTimersByTimeAsync(10)
+    expect(services.reviews.discard).toHaveBeenCalledWith('R9') // the draft autosave created
+    window.confirm.mockRestore()
+    vi.useRealTimers()
+  })
 })

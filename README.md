@@ -3,7 +3,7 @@
 แพลตฟอร์มเดียวสำหรับอบรมพัฒนาครู ประเมินสมรรถนะ นิเทศ 6Es ติดตาม Coaching/PLC และวิเคราะห์ข้อมูลวิจัย
 สร้างใหม่จากการศึกษา `solve-edu-lms` และ `LMS` ตาม [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md)
 
-**สถานะ:** Phase 0–1 + Phase 2A (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อ CSV) + Phase 2B/2B.1 (แบบทดสอบ, ให้คะแนนฝั่ง server, มอบหมาย, จำกัดเวลา/บันทึกอัตโนมัติ, ผลของรุ่นและวิเคราะห์ข้อสอบ) + Phase 2C (ข้อสอบแบบใหม่ 7 แบบ: เรียงลำดับ จับคู่ จัดกลุ่ม ตารางตัวเลือก ดรอปดาวน์ เติมคำ ติดป้ายบนรูป) + Phase 2C.1 (เทียบข้อความไทยทุกลำดับการพิมพ์, วิธีให้คะแนนอ่านกลับได้, ใช้บนมือถือ/Safari ได้ดีขึ้น) + Phase 2D (นำเข้าข้อสอบจากไฟล์ CSV) + Phase 3 (ภาระงาน + Rubric: ส่งงานหลายรอบ ตรวจด้วย Rubric ส่งกลับแก้ไข ตรวจใหม่พร้อมเหตุผล) เสร็จ · ระบบทดลอง · **ยังไม่ Deploy**
+**สถานะ:** Phase 0–1 + Phase 2A (Course Builder, หน้าเรียน, Private Storage, นำเข้ารายชื่อ CSV) + Phase 2B/2B.1 (แบบทดสอบ, ให้คะแนนฝั่ง server, มอบหมาย, จำกัดเวลา/บันทึกอัตโนมัติ, ผลของรุ่นและวิเคราะห์ข้อสอบ) + Phase 2C (ข้อสอบแบบใหม่ 7 แบบ: เรียงลำดับ จับคู่ จัดกลุ่ม ตารางตัวเลือก ดรอปดาวน์ เติมคำ ติดป้ายบนรูป) + Phase 2C.1 (เทียบข้อความไทยทุกลำดับการพิมพ์, วิธีให้คะแนนอ่านกลับได้, ใช้บนมือถือ/Safari ได้ดีขึ้น) + Phase 2D (นำเข้าข้อสอบจากไฟล์ CSV) + Phase 3 (ภาระงาน + Rubric: ส่งงานหลายรอบ ตรวจด้วย Rubric ส่งกลับแก้ไข ตรวจใหม่พร้อมเหตุผล) + Phase 3b (บันทึกร่างอัตโนมัติ, ป้ายแจ้งเตือนในเมนู, ล้างไฟล์ค้างทุกคืน, ส่งสำเนาไฟล์งานไป Google Drive ส่วนกลาง — ต้องติดตั้งตาม `docs/DEPLOY_PHASE3B.md`) เสร็จ · ระบบทดลอง · **ยังไม่ Deploy**
 
 ## Stack
 
@@ -51,7 +51,8 @@ npm run dev                        # http://127.0.0.1:5173
 | `npm run db:reset` · `npm run db:test` | Supabase Local reset · pgTAP |
 | `npm run db:reset:pg` · `npm run db:test:pg` | ทางเลือกเมื่อไม่มี Docker: PostgreSQL 15+ ในเครื่อง + shim (ดู `scripts/db-local/`) |
 | `npm run test:integration` | Integration: service layer → Supabase Local จริง |
-| `npm run test:e2e` · `npm run test:e2e:webkit` | E2E บน Chromium (ชุดหลัก) · บน WebKit จำลอง iPhone 15 (ชุดเสริม รันแยก) — ทั้งสองคำสั่ง reset ฐานข้อมูลก่อน · ครั้งแรกต้อง `npx playwright install webkit` |
+| `npm run test:e2e` · `npm run test:e2e:webkit` | E2E บน Chromium (ชุดหลัก) · บน WebKit จำลอง iPhone 15 (ชุดเสริม รันแยก) — ทั้งสองคำสั่ง reset ฐานข้อมูลก่อน และเปิด Edge Functions พร้อม Google จำลองให้ (ต้อง `npx supabase start` แล้ว) · ครั้งแรกต้อง `npx playwright install webkit` |
+| `npm run test:functions` | ทดสอบ Edge Functions จริงกับ Supabase Local และ Google จำลอง (reset ฐานข้อมูลก่อน/หลัง) |
 | `POSTGREST_BIN=… scripts/db-local/test-rest.sh` | Integration: service layer → PostgREST → RLS |
 | `python3 scripts/db-local/gen-data-dictionary.py > docs/DATA_DICTIONARY.md` | สร้าง data dictionary ใหม่จาก schema |
 

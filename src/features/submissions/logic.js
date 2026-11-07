@@ -117,6 +117,24 @@ export function nextAction({ allocation, task, submissions, currentOf, now = Dat
 export const isOverdue = (allocation, now = Date.now()) =>
   Boolean(allocation.due_at) && now > new Date(allocation.due_at).getTime()
 
+/**
+ * Notices for one task in the list: results not opened yet, and whether the
+ * work was returned for revision (attempts left, no draft open).
+ */
+export function allocationNotice({ submissions, reviews, readIds, task }) {
+  const ids = new Set(submissions.map((s) => s.id))
+  const mine = reviews.filter((r) => ids.has(r.submission_id))
+  const unread = mine.filter((r) => !readIds.has(r.id)).length
+  const sorted = [...submissions].sort((a, b) => b.attempt_no - a.attempt_no)
+  const last = sorted.find((s) => s.status === 'submitted')
+  const current = last ? reviewsOf(mine.filter((r) => r.submission_id === last.id)).current : null
+  const revise =
+    current?.outcome === 'revise' &&
+    submissions.length < task.max_attempts &&
+    !submissions.some((s) => s.status === 'draft')
+  return { unread, revise: Boolean(revise) }
+}
+
 /** Score text: "3 / 5" or '' when the task has no rubric. */
 export const scoreText = (review) =>
   review?.score === null || review?.score === undefined || review?.max_score === null

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process'
+import { expect } from '@playwright/test'
 export const PASSWORD = 'DemoPass#2569' // LOCAL demo seed only
 export const IDS = {
   course: '40000000-0000-4000-a000-000000000001',
@@ -80,11 +81,14 @@ export function submitAs(userId, text) {
 export async function reviewInUi(page, personName, fields) {
   await page.goto(`/#/staff/tasks/${DEMO.allocation}`)
   await page.locator('tr', { hasText: personName }).locator('[data-review-link]').click()
-  if (fields.attempt)
+  if (fields.attempt) {
     await page
       .locator('[data-attempts]')
       .getByRole('link', { name: new RegExp(`รอบที่ ${fields.attempt}`) })
       .click()
+    // wait until the page shows THAT attempt: filling the old form while it is replaced loses the choices
+    await expect(page.locator('[data-work]')).toContainText(`รอบที่ ${fields.attempt} ·`)
+  }
   const form = page.locator('form[data-form=review]')
   await form.waitFor()
   for (const [criterion, levelLabel] of Object.entries(fields.levels ?? {})) {
@@ -119,7 +123,7 @@ export function resetTaskWork() {
     ['exec', '-i', 'supabase_db_solve-edu-platform', 'psql', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q'],
     {
       input:
-        'truncate public.task_review_scores, public.task_reviews, public.task_submission_files, public.task_submissions;',
+        'truncate public.task_drive_copies, public.task_drive_exports, public.task_review_reads, public.task_review_scores, public.task_reviews, public.task_submission_files, public.task_submissions;',
       encoding: 'utf8',
     }
   )

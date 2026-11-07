@@ -7,6 +7,7 @@ import {
   filePicker,
   bindFilePickers,
 } from '../../shared/ui/components.js'
+import { createAutosave } from '../../shared/ui/autosave.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { sortedLevels } from '../rubrics/logic.js'
@@ -15,6 +16,7 @@ import {
   MAX_FILES,
   MAX_LINKS,
   STATE_LABELS,
+  allocationNotice,
   attemptState,
   buildDraft,
   hasContent,
@@ -59,7 +61,7 @@ export async function renderMyTasksView(el, { services, session }) {
   } catch (err) {
     return render(el, alertBox(toUserMessage(err)))
   }
-  const { allocations, submissions } = data
+  const { allocations, submissions, reviews = [], readIds = new Set() } = data
   const stateOf = (allocationId) => {
     const mine = submissions.filter((s) => s.allocation_id === allocationId)
     if (!mine.length) return null
@@ -77,17 +79,25 @@ export async function renderMyTasksView(el, { services, session }) {
                 const count = submissions.filter(
                   (s) => s.allocation_id === a.id && s.status === 'submitted'
                 ).length
+                const notice = allocationNotice({
+                  submissions: submissions.filter((s) => s.allocation_id === a.id),
+                  reviews,
+                  readIds,
+                  task: a.tasks,
+                })
                 return html`<li>
                   <a
                     href="#/tasks/${a.id}"
                     class="flex flex-wrap items-center gap-3 rounded-xl border border-ink-200 bg-white px-5 py-4 hover:border-brand-300"
                   >
-                    <span class="min-w-0 flex-1">
+                    <span class="min-w-0 flex-1 basis-56">
                       <span class="block font-semibold text-ink-900">${a.tasks.title}</span>
                       <span class="text-xs text-ink-500"
                         >${a.tasks.courses?.title ?? ''} · ${a.due_at ? `กำหนดส่ง ${formatThaiDateTime(a.due_at)}` : 'ไม่กำหนดวันส่ง'} · ส่งแล้ว ${count}/${a.tasks.max_attempts} รอบ</span
                       >
                     </span>
+                    ${notice.unread ? html`<span class="rounded-full bg-rose-600 px-2.5 py-0.5 text-xs font-semibold text-white" data-notice="unread">มีผลตรวจใหม่</span>` : ''}
+                    ${notice.revise ? html`<span class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-800" data-notice="revise">ต้องแก้ไข</span>` : ''}
                     ${
                       state === 'draft'
                         ? stateBadge('draft')
@@ -121,7 +131,7 @@ function linkRow(link = {}) {
   </div>`
 }
 
-export async function renderTaskPageView(el, { services, session }, { allocationId }) {
+export async function renderTaskPageView(el, { services, session, refreshNotices }, { allocationId }) {
   render(el, loading)
   const userId = session.user.id
   let detail, urls
@@ -144,6 +154,12 @@ export async function renderTaskPageView(el, { services, session }, { allocation
       el,
       html`<a href="#/tasks" class="${backLink}">← ภาระงานของฉัน</a>${pageHeader('ไม่พบภาระงาน')}${emptyState('ไม่พบภาระงานนี้ หรือยังไม่ได้เปิดให้รุ่นของท่าน')}`
     )
+  // Opening the task is "seeing" its released results: the menu badge goes down.
+  if (detail.reviews.length)
+    services.submissions
+      .markSeen(allocationId)
+      .then(() => refreshNotices?.())
+      .catch(() => {})
   // A draft left by a closed page: remove files that were uploaded but never recorded.
   const openDraft = detail.submissions.find((s) => s.status === 'draft')
   if (openDraft)
@@ -289,6 +305,7 @@ export async function renderTaskPageView(el, { services, session }, { allocation
       <div class="flex flex-wrap gap-2">
         <button class="${secondary}" type="submit" data-intent="save">บันทึกร่าง</button>
         <button class="${primary}" type="submit" data-intent="submit">ส่งงาน</button>
+        <span class="self-center text-xs text-ink-500" data-save-status data-state="saved" aria-live="polite"></span>
       </div>
       <p class="text-xs text-ink-500">ส่งแล้วแก้ไขไม่ได้ ถ้าผู้ตรวจ “ส่งกลับแก้ไข” จึงส่งรอบใหม่ได้</p>
     </form>`
@@ -348,6 +365,28 @@ export async function renderTaskPageView(el, { services, session }, { allocation
         </details>`
       : ''
 
+  let autosave = null
+  /** Typing in the draft saves itself a moment later (text and links; files are saved as they are attached). */
+  const startAutosave = () => {
+    autosave?.dispose()
+    autosave = null
+    const form = el.querySelector('form[data-form=draft]')
+    if (!form) return
+    autosave = createAutosave({
+      form,
+      status: form.querySelector('[data-save-status]'),
+      canSave: () => {
+        try {
+          readDraft(form)
+          return true
+        } catch {
+          return false
+        }
+      },
+      save: () => services.submissions.saveDraft(form.dataset.draft, readDraft(form)),
+    })
+  }
+
   const draw = () => {
     const { allocation, submissions } = detail
     const task = allocation.tasks
@@ -379,6 +418,7 @@ export async function renderTaskPageView(el, { services, session }, { allocation
           }
         </div>`
     )
+    startAutosave()
   }
 
   const run = async (fn, okMessage) => {
@@ -431,6 +471,7 @@ export async function renderTaskPageView(el, { services, session }, { allocation
     busy = true
     ;(async () => {
       try {
+        await autosave?.flush() // never two saves at once
         await services.submissions.saveDraft(submissionId, draft)
         if (intent === 'submit') await services.submissions.submit(submissionId)
         await load()

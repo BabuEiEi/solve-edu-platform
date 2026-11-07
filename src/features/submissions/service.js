@@ -46,7 +46,30 @@ export function createSubmissionService(client) {
             'submissions.mine'
           )
         : []
-      return { allocations: mine, submissions }
+      const ids = submissions.map((s) => s.id)
+      const [reviews, reads] = await Promise.all([
+        ids.length
+          ? rows(
+              client
+                .from('task_reviews')
+                .select('id, submission_id, outcome, released_at')
+                .in('submission_id', ids),
+              'submissions.list_reviews'
+            )
+          : [],
+        ids.length
+          ? rows(client.from('task_review_reads').select('review_id'), 'submissions.list_reads')
+          : [],
+      ])
+      return { allocations: mine, submissions, reviews, readIds: new Set(reads.map((r) => r.review_id)) }
+    },
+
+    /** The trainee has opened the released results of this task (menu badge goes down). */
+    async markSeen(allocationId) {
+      return unwrap(
+        await client.rpc('mark_task_results_seen', { p_allocation: allocationId }),
+        'submissions.seen'
+      )
     },
 
     /** Everything the detail page shows. null when the allocation is not visible. */

@@ -157,6 +157,22 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 
 **ฝั่งผู้ตรวจ (ขั้น 7)** — `createReviewService`: อ่าน `task_allocations`, `task_submissions` (เฉพาะ `status = 'submitted'` ที่ RLS อนุญาต พร้อม `profiles ( id, full_name, display_name )`), `task_reviews` (`released` ทั้งหมด + ร่างของตน), `task_review_scores`, `instrument_items` ของ Rubric, `cohort_memberships` (รายชื่อ — เฉพาะผู้ดูแลรุ่น) · เขียนผ่าน `save_task_review` / `release_task_review` / ลบร่างของตน (ไม่มีทางเขียนตารางตรงๆ) · CSV (`ชื่อ, สถานะ, จำนวนรอบที่ส่ง, ส่งล่าสุด (ISO), ส่งช้า, [คะแนน, คะแนนเต็ม], ผลการตรวจล่าสุด`) สร้างในเบราว์เซอร์จากข้อมูลที่ RLS ให้ผู้ใช้เห็น จึงไม่รั่วข้ามขอบเขต
 
+**แจ้งเตือนในระบบ (3b)**
+
+| เรื่อง | Call | หมายเหตุ |
+|---|---|---|
+| ตัวเลขป้ายเมนู | `rpc('task_notice_counts')` → `{unread_results, revise, waiting}` | นับเฉพาะภาระงานที่เผยแพร่ · `unread_results` = ผลตรวจที่ส่งแล้วบนงานของตนที่ยังไม่เปิดดู · `revise` = ภาระงานที่ผลล่าสุดของรอบล่าสุดเป็น "ส่งกลับแก้ไข" ยังเหลือรอบ และไม่มีร่างเปิดอยู่ · `waiting` = จำนวนคน (ในงานที่ตนมีสิทธิ์ตรวจ ไม่นับตนเอง) ที่รอบล่าสุดยังไม่มีผลตรวจ |
+| ทำเครื่องหมายว่าเปิดดูผลแล้ว | `rpc('mark_task_results_seen', { p_allocation })` → จำนวนที่เพิ่งทำเครื่องหมาย | ผลตรวจของงานตนเองเท่านั้น · ซ้ำได้ (ครั้งต่อไปได้ 0) · ลบ/แก้แถวไม่ได้ |
+
+## 2.7 Phase 3b — Edge Functions
+
+| งาน | เรียก | หมายเหตุ |
+|---|---|---|
+| ล้างไฟล์ค้าง (ตัวตั้งเวลา) | `POST /functions/v1/cleanup-task-files` + header `x-cron-secret` · body `{}` หรือ `{"dry_run": true}` | 200 `{dry_run:false, stale_draft_files_removed, orphans_removed, orphans_logged, failed[]}` / `{dry_run:true, orphans[], stale_draft_files[]}` · 401 `unauthorized` · 405 `method_not_allowed` · 500 `not_configured` (ไม่มี/สั้นเกิน CRON_SECRET) หรือ `internal` · เบราว์เซอร์ไม่เรียก — รายละเอียด `docs/EDGE_FUNCTIONS.md` |
+| RPC ที่ function ใช้ (service role เท่านั้น) | `task_files_cleanup_orphans(p_older_than, p_limit)` · `task_files_cleanup_stale_drafts(p_idle, p_limit, p_dry_run)` · `task_files_cleanup_record(p_paths)` | คืน `{object_path}[]` / จำนวนแถว audit · ค่าต่ำกว่าขั้นต่ำ = 22023 · ผู้ใช้อื่น = 42501 |
+| ส่งสำเนาไป Google Drive (หน้าเว็บ) | `functions.invoke('drive-export-task', {body: {allocation_id}})` | 200 `{run_id, status: done\|partial\|failed, copied, skipped, failed, remaining, folder_url}` · 400 `bad_request` · 401 · 403 `forbidden` · 409 `already_running` · 500 `not_configured` (ยังไม่ได้ตั้ง Google) / `internal` · `partial` + `remaining` > 0 = กดอีกครั้งเพื่อส่งต่อ |
+| บันทึกการส่งสำเนา | `from('task_drive_exports').select('id, started_at, finished_at, status, files_copied, files_skipped, files_failed, drive_folder_id, requested_by').eq('allocation_id', …)` · `from('task_drive_copies').select('file_id, copied_at')` | ผู้ตรวจของรุ่นเท่านั้น · RPC `begin_task_drive_export` (เรียกผ่าน function) SE008 = กำลังส่งอยู่ |
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

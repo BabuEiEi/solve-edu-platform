@@ -395,6 +395,22 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Edge Functions (Phase 3b). verify_jwt = false: this function is called by
+# the scheduler, not a signed-in user; it checks its own x-cron-secret
+# header (CRON_SECRET, ≥ 32 characters) and fails closed without it.
+[functions.cleanup-task-files]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/cleanup-task-files/index.js"
+
+# Called by the page with the person's own session token. verify_jwt = false
+# so CORS preflight (no token) reaches the function; the function checks the
+# token with Supabase Auth itself and the database decides who may copy.
+[functions.drive-export-task]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/drive-export-task/index.js"
+
 [analytics]
 enabled = true
 port = 54327
