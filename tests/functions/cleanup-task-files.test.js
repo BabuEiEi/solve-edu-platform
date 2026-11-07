@@ -54,7 +54,7 @@ run('Edge Function cleanup-task-files (Supabase Local)', () => {
 
   beforeAll(async () => {
     sql(
-      'truncate public.task_review_reads, public.task_review_scores, public.task_reviews, public.task_submission_files, public.task_submissions;'
+      'truncate public.task_drive_copies, public.task_drive_exports, public.task_review_reads, public.task_review_scores, public.task_reviews, public.task_submission_files, public.task_submissions;'
     )
     // A1: an idle draft with a linked file, plus an upload whose row was never written, plus one in progress
     const a1 = supabaseAs(env, 'teacher_a1')

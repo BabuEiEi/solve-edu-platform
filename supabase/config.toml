@@ -403,6 +403,14 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/cleanup-task-files/index.js"
 
+# Called by the page with the person's own session token. verify_jwt = false
+# so CORS preflight (no token) reaches the function; the function checks the
+# token with Supabase Auth itself and the database decides who may copy.
+[functions.drive-export-task]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/drive-export-task/index.js"
+
 [analytics]
 enabled = true
 port = 54327

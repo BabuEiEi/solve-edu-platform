@@ -63,3 +63,28 @@ Edge Function `cleanup-task-files` + โครงร่วม `supabase/function
 
 พบระหว่างทำ: สคริปต์ทดสอบเดิมรอให้ function "พร้อม" ด้วยการรอ 401 — เมื่อลอง mutation ที่ปิดการตรวจ secret สคริปต์จึงค้างที่ขั้นรอ ไม่ได้รัน test (จับได้ แต่ไม่บอกว่าข้อไหน) → เปลี่ยนเป็นรอ 405 จาก GET ซึ่งไม่ขึ้นกับการตรวจสิทธิ์
 ยังไม่ได้ทดสอบบนโปรเจกต์จริง (deploy, secret, ตัวตั้งเวลา) — เป็นขั้นของเจ้าของระบบตาม `docs/EDGE_FUNCTIONS.md`
+
+## ขั้น 4 — ระบบหลังบ้านสำหรับส่งสำเนาไป Google Drive
+
+migration `20261105090800_task_drive_exports.sql`: `task_drive_exports` (การกดแต่ละครั้ง) · `task_drive_copies` (ไฟล์ใด = ไฟล์ Drive ใด) — ผู้ตรวจของรุ่นอ่านได้ ไม่มีใครเขียนตรง · `begin_task_drive_export` (ในนามผู้กด) · `finish_task_drive_export` (service_role เท่านั้น) · รหัสใหม่ SE008 (กำลังส่งอยู่)
+Edge Function `drive-export-task` + `_shared/google.js` (token ของ service account) + `_shared/drive.js` (Drive v3) · Google จำลองที่เข้มงวด `tests/fake-google.js` (ตรวจลายเซ็น assertion, scope, audience, token ทุกคำขอ, `supportsAllDrives`) · รายละเอียดและขั้นเตรียม Google/ติดตั้ง: `docs/EDGE_FUNCTIONS.md`
+
+| ชุดทดสอบ | ผล |
+|---|---|
+| `npm run check` | ✅ PASS — unit 371 (+14 `edge-drive`: token ลงนามถูกและใช้ซ้ำ · กุญแจผิดถูก Google ปฏิเสธ · JSON ของ service account ไม่ครบ = ยังไม่ได้ตั้งค่า · URL ทดแทนชี้ได้เฉพาะเครื่องนี้ · หาโฟลเดอร์ด้วย key ไม่ใช่ชื่อ (ชื่อซ้ำต่างคนได้คนละโฟลเดอร์) · อัปโหลดแบบ resumable เนื้อไฟล์ครบ · 5xx ลองใหม่ 403 หยุดทันที · ปฏิเสธ upload session บน host อื่น · ทำความสะอาดชื่อ · โครงโฟลเดอร์ครบ 5 ชั้น · กดซ้ำไม่ซ้ำ ไฟล์ที่ลบใน Drive ถูกส่งใหม่ · ไฟล์หนึ่งล้มไม่หยุดไฟล์อื่น · หมดเวลา = partial + remaining แล้วกดต่อได้ · วันที่ไทย; +1 ข้อความ SE008) |
+| pgTAP | ✅ PASS 867/867 (+37 `320`: anon/ผู้ใช้เรียก finish ไม่ได้ · finish ไม่ใช่ DEFINER · begin ตรึง search_path · ผู้ใช้เขียนตารางไม่ได้ · กุญแจ server ลบบันทึก/แก้ผู้กด-เวลาไม่ได้ · ผู้เรียน ครูพี่เลี้ยง คนนอก รหัสไม่รู้จัก = 42501 และไม่ทิ้งบันทึก · trainer กดได้ บันทึกว่าใครกด · รายการมีเฉพาะรอบที่ส่งแล้วที่มีไฟล์ (ไม่ใช่ข้อความล้วน ไม่ใช่ร่าง) พร้อมชื่อไฟล์และชื่อผู้เรียน ไม่มีอีเมล ไม่มีไฟล์ของภาระงานอื่น · กดซ้ำระหว่างส่ง SE008 · เห็นบันทึกเฉพาะ trainer · trainer ลบบันทึกไม่ได้ · ผู้เรียน/trainer ปิดงานเอง (ปลอมผล) ไม่ได้ · finish บันทึกเฉพาะไฟล์ของภาระงานนี้ที่ส่งแล้ว ไม่รับ id แปลก · ปิดซ้ำไม่ได้ · สถานะไม่รู้จักถูกปฏิเสธ · ไฟล์ Drive เดิมคงบันทึกแรก สร้างใหม่ย้ายไปครั้งใหม่ · งานค้างเกิน 15 นาทีไม่ขวางและถูกปิดเป็นล้มเหลวพร้อมเหตุผล) |
+| Integration | ✅ PASS 76/76 |
+| Edge Function จริง (`npm run test:functions`) | ✅ PASS 10/10 (+5 `drive-export-task` ใน Edge runtime + Google จำลอง: ไม่ล็อกอิน 401 · ผู้เรียน/ครูพี่เลี้ยง 403 · body ผิด 400 · GET 405 · ถูกปฏิเสธแล้วไม่มีบันทึก · trainer ส่ง 3 ไฟล์ (ไม่รวมร่าง) โครง หลักสูตร/รุ่น/ภาระงาน/ผู้เรียน/รอบ เนื้อไฟล์ตรงกับที่ผู้เรียนอัปโหลด บันทึก done/3/ผู้กด · กดซ้ำ copied 0 · ไฟล์ที่ลบใน Drive กลับมา · Drive ปฏิเสธ = partial พร้อมรหัสเหตุผล แล้วกดต่อได้ ไม่มีงานค้าง · Google ไม่เห็นกุญแจฐานข้อมูล · ผู้เรียนไม่เห็นบันทึก) |
+| E2E Chromium / WebKit (iPhone) | ✅ PASS 31/31 / 31/31 (ยังไม่มีหน้าจอใหม่ — ยืนยันว่าไม่กระทบของเดิม) |
+| Mutation: ครูพี่เลี้ยงเริ่มส่งได้ | pgTAP **FAIL** 2 ข้อ · กู้คืนแล้ว |
+| Mutation: finish บันทึกไฟล์ของภาระงานใดก็ได้ | pgTAP **FAIL** 3 ข้อ · กู้คืนแล้ว |
+| Mutation: ไม่ข้ามไฟล์ที่อยู่ใน Drive แล้ว | unit **FAIL** 2 ข้อ · กู้คืนแล้ว |
+| Mutation: ลืม `supportsAllDrives` (Shared Drive ต้องมี) | unit **FAIL** 8 ข้อ · กู้คืนแล้ว |
+| Prettier (`src tests supabase/functions scripts`) / ESLint | ✅ PASS |
+| `scripts/db-local/test.sh` | SKIP — ไม่มี psql |
+
+พบระหว่างทำ:
+- gateway ในเครื่อง (Kong) เติม `access-control-allow-origin: *` ให้คำตอบของ function เอง จึงทดสอบรายการ origin ที่อนุญาตผ่าน gateway ในเครื่องไม่ได้ → ตรวจใน unit test แทน และบันทึกไว้ในเอกสาร
+- ตารางใหม่อ้างถึงไฟล์งาน → คำสั่งล้างข้อมูลใน test เดิม (E2E helper, test ล้างไฟล์) ต้องรวมตารางใหม่
+- ไฟล์ test ของ function สองไฟล์ใช้ภาระงานสาธิตเดียวกัน vitest รันพร้อมกันจึงชนกัน → รันทีละไฟล์ (`--no-file-parallelism`)
+ยังไม่ได้ทดสอบกับ Google จริง — ต้องรอเจ้าของระบบเตรียมโปรเจกต์ Google Cloud, service account และ Shared Drive ตาม `docs/EDGE_FUNCTIONS.md`

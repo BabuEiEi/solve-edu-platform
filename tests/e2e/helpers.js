@@ -123,7 +123,7 @@ export function resetTaskWork() {
     ['exec', '-i', 'supabase_db_solve-edu-platform', 'psql', '-U', 'postgres', '-v', 'ON_ERROR_STOP=1', '-q'],
     {
       input:
-        'truncate public.task_review_reads, public.task_review_scores, public.task_reviews, public.task_submission_files, public.task_submissions;',
+        'truncate public.task_drive_copies, public.task_drive_exports, public.task_review_reads, public.task_review_scores, public.task_reviews, public.task_submission_files, public.task_submissions;',
       encoding: 'utf8',
     }
   )

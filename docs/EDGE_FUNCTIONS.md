@@ -16,6 +16,8 @@
 |---|---|
 | `http.js` | `handle(fn, {cors})` ห่อ handler: `HttpError(status, code)` → `{error: code}` · อื่น ๆ → 500 `internal` · ตอบ JSON แบบ `no-store` · CORS เฉพาะ origin ที่อยู่ในรายการ · `readJson` · `unwrap` |
 | `auth.js` | `requireCronSecret(req, secret)` (งานตั้งเวลา: header `x-cron-secret`, เทียบแบบเวลาคงที่, ≥ 32 ตัวอักษร) · `requireUser(req, makeClient)` (ผู้ใช้ที่ล็อกอิน: token ถูกตรวจกับ Supabase Auth จริง ไม่ใช่แค่ถอดรหัส แล้วได้ client ที่ทำงานในนามผู้เรียก — RLS ใช้กับเขา) · `requireEnv` |
+| `google.js` | token ของ service account (JWT RS256 ด้วย WebCrypto, ใช้ซ้ำจนใกล้หมดอายุ) · `parseServiceAccount` · `googleUrl` (URL ทดแทนสำหรับ Google จำลองชี้ได้เฉพาะเครื่องนี้) · `DriveError` (รหัสสั้นที่ปลอดภัย ไม่มีเนื้อหาคำตอบของ Google) |
+| `drive.js` | Drive v3 เท่าที่ใช้: `ensureFolder` (หาโฟลเดอร์ด้วย key ของเราใน `appProperties` ไม่ใช่ด้วยชื่อ) · `filesIn` · `uploadFile` (resumable, session ต้องอยู่บน host ที่ตั้งไว้) · ทุกคำขอมี `supportsAllDrives=true` · 429/5xx ลองใหม่ 3 ครั้ง |
 
 ไฟล์เหล่านี้ไม่ใช้ `Deno` จึงทดสอบด้วย Vitest ได้ (`tests/unit/edge-shared.test.js`) — มีแค่ `index.js` ของแต่ละ function ที่ใช้ `Deno.serve` / `Deno.env`
 
@@ -73,3 +75,40 @@ $$);
 6. **ตรวจหลังคืนแรก**: Edge Functions → Logs (บรรทัด `{"fn":"cleanup-task-files", …}`) · `select * from cron.job_run_details order by start_time desc limit 5;` · `select occurred_at, table_name, before_json, reason from private.audit_logs where reason like 'cleanup:%' order by occurred_at desc limit 20;`
 
 เปลี่ยน secret: ตั้งค่าใหม่ทั้งที่ Edge Functions → Secrets และใน Vault (`vault.update_secret`) พร้อมกัน · หยุดชั่วคราว: `select cron.unschedule('cleanup-task-files-nightly');`
+
+## `drive-export-task` — ส่งสำเนาไฟล์งานไป Google Drive ส่วนกลาง
+
+| | |
+|---|---|
+| เรียกโดย | หน้าเว็บ เมื่อผู้ตรวจของรุ่น (trainer / ผู้ดูแลรุ่น) กด "ส่งสำเนาไป Google Drive" · `POST {"allocation_id": "<uuid>"}` · ใช้ token ของผู้กดเอง |
+| ผล | 200 `{run_id, status: done\|partial\|failed, copied, skipped, failed, remaining, folder_url}` · 400 `bad_request` · 401 `unauthorized` · 403 `forbidden` · 409 `already_running` (SE008) · 500 `not_configured` / `internal` |
+| โครงโฟลเดอร์ | `<โฟลเดอร์กลาง> / หลักสูตร / รุ่น / ภาระงาน / ชื่อผู้เรียน / รอบที่ N (ส่ง YYYY-MM-DD[, ส่งช้า]) / ไฟล์` |
+| กดซ้ำ | ไม่เกิดไฟล์ซ้ำ: ไฟล์ใน Drive มี `appProperties.solveeduFile = <id ไฟล์งาน>` ระบบค้นด้วย id นี้ก่อนอัปโหลด · ไฟล์ที่ถูกลบจาก Drive จะถูกส่งใหม่ · เปลี่ยนชื่อผู้เรียน/ภาระงานแล้วยังใช้โฟลเดอร์เดิม (หาด้วย key ไม่ใช่ชื่อ) |
+| ส่งอะไร | ไฟล์ของ **รอบที่ส่งแล้ว** ทุกรอบ (ร่างไม่ส่ง) · ข้อความและลิงก์ที่พิมพ์ในงาน **ไม่** ถูกส่ง (เป็นข้อมูลในระบบ) |
+| ใครทำได้ | ตัดสินในฐานข้อมูล: `begin_task_drive_export` ทำงานในนามผู้กด (ผู้ตรวจของรุ่นเท่านั้น — ไม่ใช่ครูพี่เลี้ยง ไม่ใช่ผู้เรียน) · ไฟล์ดาวน์โหลดในนามผู้กด (สิทธิ์ storage เดิม) · กุญแจ server ใช้เฉพาะ `finish_task_drive_export` (บันทึกผล) |
+| บันทึก | `task_drive_exports` (ใครกด เมื่อไร ผล จำนวน ข้อผิดพลาดแบบรหัสสั้น) · `task_drive_copies` (ไฟล์ใด = ไฟล์ Drive ใด) — ผู้ตรวจของรุ่นอ่านได้ ไม่มีใครเขียนตรง แม้กุญแจ server ก็ลบหรือแก้ "ใคร/เมื่อไร" ไม่ได้ |
+| พร้อมกัน | กดซ้ำระหว่างที่กำลังส่ง = 409 · งานที่ค้าง (function ถูกหยุด) เกิน 15 นาทีถือว่าล้มเหลวและไม่ขวางอีก |
+| เวลาจำกัด | หยุดเริ่มไฟล์ใหม่หลัง ~100 วินาที (ให้อยู่ในเวลาที่ Edge Function ได้) → `partial` พร้อม `remaining` กดอีกครั้งเพื่อส่งต่อ |
+| ข้อผิดพลาด | ไฟล์หนึ่งล้มเหลวไม่หยุดไฟล์อื่น (`partial`) · สร้างโฟลเดอร์บนสุดไม่ได้ = `failed` · บันทึกเป็นรหัส เช่น `drive_forbidden: upload (HTTP 403)` · ปิดงานในฐานข้อมูลเสมอ |
+
+**CORS:** ตอบเฉพาะ origin ใน `ALLOWED_ORIGINS` (ทดสอบใน unit test) — gateway ในเครื่อง (Kong) เติม `access-control-allow-origin: *` ให้เอง จึงตรวจผ่าน gateway ในเครื่องไม่ได้ · ระบบใช้ token ใน header ไม่ใช้ cookie
+
+**ทดสอบ:** `npm run test:functions` สร้างกุญแจ service account ใช้ครั้งเดียว และเปิด Google จำลอง (`tests/fake-google.js`) บนเครื่องนี้ ซึ่งตรวจลายเซ็นของ assertion, scope, audience, token ทุกคำขอ และ `supportsAllDrives` — function จริงใน Edge runtime เรียกผ่าน `host.docker.internal`
+
+### เตรียม Google — เจ้าของระบบเป็นผู้ทำ
+
+> PDPA: ชื่อผู้เรียนและไฟล์งานจะอยู่ใน Google Drive ขององค์กร — เจ้าของระบบยืนยันว่าใช้ได้ และกำหนดว่าใครเข้าถึง Shared Drive ได้
+
+1. Google Cloud Console: สร้าง (หรือเลือก) โปรเจกต์ขององค์กร → เปิด **Google Drive API**
+2. IAM → Service Accounts → สร้าง service account (เช่น `solveedu-drive-copier`) → Keys → Add key → JSON (ดาวน์โหลดครั้งเดียว เก็บให้ปลอดภัย ห้าม commit ห้ามส่งในแชท)
+3. Google Drive: สร้าง **Shared Drive** (เช่น "SolveEdu งานผู้เรียน") → Manage members → เพิ่มอีเมลของ service account เป็น **Content manager**
+4. ในนั้นสร้างโฟลเดอร์กลาง (หรือใช้รากของ Shared Drive) → คัด id จาก URL `…/folders/<id>` และ id ของ Shared Drive (URL เมื่อเปิดราก)
+5. ถ้าองค์กรมีนโยบายห้ามสร้าง service account key (`iam.disableServiceAccountKeyCreation`) ต้องให้ผู้ดูแล Google Workspace อนุญาตเฉพาะโปรเจกต์นี้
+
+### ติดตั้งบนโปรเจกต์จริง — ต้องได้รับอนุมัติจากเจ้าของระบบ
+
+1. Edge Functions → Secrets: `GOOGLE_SERVICE_ACCOUNT_JSON` (ทั้งไฟล์ JSON) · `GOOGLE_DRIVE_FOLDER_ID` · `GOOGLE_SHARED_DRIVE_ID` · `ALLOWED_ORIGINS` (เช่น `https://<โดเมนของระบบ>`) — **ห้ามตั้ง** `GOOGLE_TOKEN_URL` / `GOOGLE_DRIVE_API` / `GOOGLE_DRIVE_UPLOAD` (มีไว้สำหรับ test; ถ้าตั้ง function ยอมให้ชี้ได้เฉพาะเครื่องตัวเองอยู่แล้ว)
+2. `npx supabase db push` (migration `20261105090800`) และ `npx supabase functions deploy drive-export-task --project-ref <ref>`
+3. ตรวจว่ามี `SUPABASE_ANON_KEY` (หรือ `SUPABASE_PUBLISHABLE_KEY`) และ `SUPABASE_SERVICE_ROLE_KEY` ใน Secrets (Supabase ใส่ให้เอง)
+4. ลองกับภาระงานที่มีงานส่งไม่กี่ชิ้น → เปิด `folder_url` ตรวจโครงโฟลเดอร์ → กดซ้ำ ต้องได้ `copied: 0`
+5. ปิดการใช้งาน: ลบ secret `GOOGLE_SERVICE_ACCOUNT_JSON` (function ตอบ `not_configured`) หรือ disable key ที่ Google Cloud

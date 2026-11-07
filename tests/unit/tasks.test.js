@@ -82,6 +82,7 @@ describe('task logic', () => {
   it('new error codes have Thai messages', () => {
     expect(toUserMessage({ code: 'SE006' })).toContain('เปลี่ยน Rubric')
     expect(toUserMessage({ code: 'SE007' })).toContain('ส่งรอบใหม่ไม่ได้')
+    expect(toUserMessage({ code: 'SE008' })).toContain('กำลังส่งสำเนาไป Google Drive')
   })
 })
 
