@@ -1,0 +1,10 @@
+# Upload ONLY what the web build needs (allow-list). Everything else — .env*,
+# supabase/ (config, functions, migrations), tests, scripts, docs, local build
+# output — stays on this machine.
+/*
+!/src
+!/index.html
+!/package.json
+!/package-lock.json
+!/vite.config.js
+!/vercel.json
