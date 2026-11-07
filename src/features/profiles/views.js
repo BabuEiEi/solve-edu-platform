@@ -65,6 +65,12 @@ export function renderAuthScreen(root, { auth }) {
             ${signup ? 'เข้าสู่ระบบ' : 'สมัครใช้งาน'}
           </button>
         </p>
+        <p class="mt-4 text-center text-xs text-ink-400">
+          การสมัครหรือเข้าสู่ระบบ ถือว่าท่านได้อ่าน
+          <a href="/privacy.html" target="_blank" rel="noopener noreferrer" class="underline hover:text-ink-600" data-privacy-link
+            >นโยบายความเป็นส่วนตัว</a
+          >
+        </p>
       `)
     )
   }

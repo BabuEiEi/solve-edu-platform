@@ -3,6 +3,7 @@
 # output — stays on this machine.
 /*
 !/src
+!/public
 !/index.html
 !/package.json
 !/package-lock.json
