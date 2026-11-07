@@ -9,15 +9,18 @@
 |---|---|---|
 | ฐานข้อมูล / Auth / Storage | Supabase `solve-edu-platform` · ref `hcudarobowuwsmmyoyrd` · Singapore (ap-southeast-1) | ✅ migration 34 ไฟล์ (ถึง `20261105090800`) ไม่มีข้อมูลสาธิต · ตรวจ RLS/สิทธิ์แล้ว |
 | Edge Functions | `cleanup-task-files`, `drive-export-task` (v1) | ✅ ติดตั้งแล้ว · ⏸ ยังไม่มี secret จึงปฏิเสธทุกคำขอ (`not_configured`) |
-| หน้าเว็บ | Vercel โปรเจกต์ `solve-edu-platform` (ทีม `babueieis-projects`) | ✅ preview (ต้องล็อกอิน Vercel) · ⏸ production: `solve-edu-platform.vercel.app` ยังเป็น build ที่ไม่มีค่า Supabase (หน้า "ยังไม่ได้ตั้งค่า") |
-| ตั้งค่า Auth URL, ผู้ดูแลคนแรก, SMTP | — | ⏸ เจ้าของระบบ |
+| หน้าเว็บ | Vercel โปรเจกต์ `solve-edu-platform` (ทีม `babueieis-projects`) | ✅ **production** https://solve-edu-platform.vercel.app (2569-11-08) · preview ต้องล็อกอิน Vercel · ตรวจแล้ว: ชี้ `hcudarobowuwsmmyoyrd`, header ครบ, ไฟล์ภายในเป็น 404 |
+| Auth URL | Site URL + Redirect URLs (production และ preview) | ✅ ตั้งแล้ว (เจ้าของระบบ) |
+| ผู้ดูแลระบบคนแรก | ด้วย SQL ด้านล่าง | ✅ 1 คน |
+| หน่วยงาน | สพม.พิษณุโลก อุตรดิตถ์ + โรงเรียน 57 แห่ง (รหัส 10 หลักทางการ) | ✅ (รหัสเขตเป็นรหัสชั่วคราว — ปรับเป็นรหัสทางการเมื่อขยายระดับ สพฐ.) |
+| ผู้ดูแลเขต, SMTP, ล้างไฟล์ทุกคืน, Google Drive | — | ⏸ เจ้าของระบบ (ดูด้านล่างและ `docs/DEPLOY_PHASE3B.md`) |
 
 ## หน้าเว็บบน Vercel
 
 - `vercel.json` — build ด้วย Vite (`npm ci` → `npm run build` → `dist`) · header ความปลอดภัยที่ meta tag ทำไม่ได้ (`frame-ancestors 'none'`, `X-Frame-Options`, `nosniff`, `Referrer-Policy`, `Permissions-Policy`) · ไฟล์ใน `/assets/` cache ได้ 1 ปี (ชื่อไฟล์มี hash)
 - `.vercelignore` — อัปโหลด **เฉพาะ** `src/`, `index.html`, `package*.json`, `vite.config.js`, `vercel.json` (ไม่มี `.env*`, `supabase/`, test, เอกสาร)
 - ค่าที่ใช้ตอน build (ค่าสาธารณะ ฝังในหน้าเว็บ): `VITE_SUPABASE_URL` = `https://hcudarobowuwsmmyoyrd.supabase.co` · `VITE_SUPABASE_PUBLISHABLE_KEY` = publishable key (`sb_publishable_…`) — **ห้ามใส่ secret/service key** (หน้าเว็บจะ throw ทันทีถ้าเจอ)
-- ตั้งค่าแล้วสำหรับ **Preview** เท่านั้น · Production ต้องตั้งก่อน deploy production
+- ตั้งค่าแล้วทั้ง **Preview** และ **Production**
 
 ข้อควรระวังที่เจอจริง:
 - โปรเจกต์ที่ยังไม่ผูก git: `vercel deploy` ครั้งแรกขึ้น **production** เอง แม้ไม่ใส่ `--prod` → ใส่ `--target=preview` ทุกครั้งที่ต้องการ preview
