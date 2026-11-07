@@ -78,9 +78,13 @@ security invoker
 set search_path = ''
 as $$
   select jsonb_build_object(
+    -- Only PUBLISHED tasks count: an archived task leaves every page, so a
+    -- badge for it could never be cleared.
     'unread_results', (
       select count(*) from public.task_reviews r
         join public.task_submissions s on s.id = r.submission_id
+        join public.task_allocations a on a.id = s.allocation_id
+        join public.tasks t on t.id = a.task_id and t.status = 'published'
        where r.status = 'released' and s.user_id = auth.uid()
          and not exists (select 1 from public.task_review_reads x where x.review_id = r.id and x.user_id = auth.uid())),
     'revise', (
@@ -102,6 +106,8 @@ as $$
       select count(*) from (
         select distinct on (s.allocation_id, s.user_id) s.id
           from public.task_submissions s
+          join public.task_allocations a on a.id = s.allocation_id
+          join public.tasks t on t.id = a.task_id and t.status = 'published'
          where s.status = 'submitted' and s.user_id <> auth.uid()
          order by s.allocation_id, s.user_id, s.attempt_no desc) l
        where not exists (select 1 from public.task_reviews r where r.submission_id = l.id and r.status = 'released'))

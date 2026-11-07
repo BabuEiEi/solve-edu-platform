@@ -2,6 +2,7 @@
 
 > งานที่ฐานข้อมูลทำเองไม่ได้ (ลบไฟล์ใน Storage, เรียกบริการภายนอก) ทำใน Supabase Edge Functions (Deno)
 > โค้ดอยู่ที่ `supabase/functions/` เป็น JavaScript ธรรมดา (ผ่าน ESLint/Prettier ชุดเดียวกับหน้าเว็บ)
+> ลำดับการติดตั้งทั้ง Phase 3b (รวม migration และ Google) อยู่ใน `docs/DEPLOY_PHASE3B.md`
 
 ## หลักการ
 

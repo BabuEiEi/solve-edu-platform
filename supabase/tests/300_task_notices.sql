@@ -1,7 +1,7 @@
 -- Phase 3b step 2: notice counts and "opened" marks — right numbers, and
 -- nobody learns or marks anything outside their own scope.
 begin;
-select plan(25);
+select plan(31);
 
 create or replace function pg_temp.err(p_sql text) returns text language plpgsql as $$
 declare v_state text;
@@ -94,6 +94,35 @@ select is(pg_temp.err($$ update public.task_review_reads set read_at = now() - i
 reset role;
 select tests.as_anon();
 select is(pg_temp.err('select 1 from public.task_review_reads'), '42501', 'anon cannot read marks');
+reset role;
+
+-- ---------- an archived task leaves the pages, so it leaves the badges too ----------
+select tests.authenticate_as('teacher_b1');
+insert into ids values ('b1', public.start_task_submission(pg_temp.id('alloc')));
+update public.task_submissions set text_response = 'งาน ข1' where id = pg_temp.id('b1');
+do $$ begin perform public.submit_task_submission(pg_temp.id('b1')); end $$;
+reset role;
+select tests.authenticate_as('trainer');
+insert into ids select 'r2', public.save_task_review(pg_temp.id('a2'), pg_temp.lv(), 'ดี', 'passed');
+do $$ begin perform public.release_task_review(pg_temp.id('r2')); end $$;
+select is(pg_temp.n('waiting'), 1, 'before archiving: B1 waits for the trainer');
+reset role;
+select tests.authenticate_as('teacher_a2');
+select is(pg_temp.n('unread_results'), 1, 'before archiving: A2 has an unread result');
+reset role;
+update public.tasks set status = 'archived' where id = (select task_id from public.task_allocations where id = pg_temp.id('alloc'));
+select tests.authenticate_as('trainer');
+select is(pg_temp.n('waiting'), 0, 'archived: the reviewer badge no longer counts work no page lists');
+reset role;
+select tests.authenticate_as('teacher_a2');
+select is(pg_temp.n('unread_results'), 0, 'archived: the trainee badge no longer counts a result no page can open');
+reset role;
+update public.tasks set status = 'published' where id = (select task_id from public.task_allocations where id = pg_temp.id('alloc'));
+select tests.authenticate_as('trainer');
+select is(pg_temp.n('waiting'), 1, 'published again: B1 counts again');
+reset role;
+select tests.authenticate_as('teacher_a2');
+select is(pg_temp.n('unread_results'), 1, 'published again: the unread result counts again');
 reset role;
 
 select * from finish();
