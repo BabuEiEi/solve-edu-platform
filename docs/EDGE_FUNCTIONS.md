@@ -93,6 +93,8 @@ $$);
 
 **CORS:** ตอบเฉพาะ origin ใน `ALLOWED_ORIGINS` (ทดสอบใน unit test) — gateway ในเครื่อง (Kong) เติม `access-control-allow-origin: *` ให้เอง จึงตรวจผ่าน gateway ในเครื่องไม่ได้ · ระบบใช้ token ใน header ไม่ใช้ cookie
 
+**หน้าจอ:** ปุ่ม "ส่งสำเนาไป Google Drive" อยู่ในหน้าภาระงานของผู้ตรวจ (`#/staff/tasks/:allocationId`) — เฉพาะผู้ตรวจของรุ่น · มีคำถามยืนยันก่อนส่ง · แสดงผล ลิงก์เปิดโฟลเดอร์ และประวัติ 5 ครั้งล่าสุด · E2E: `tests/e2e/task-drive.spec.js` รันผ่าน `npm run test:e2e` / `npm run test:e2e:webkit` (สคริปต์ `scripts/supabase-local/test-e2e.sh` เปิด function และ secret ทดสอบให้เอง; รัน `npx playwright test` ตรง ๆ จะข้ามสเปคนี้)
+
 **ทดสอบ:** `npm run test:functions` สร้างกุญแจ service account ใช้ครั้งเดียว และเปิด Google จำลอง (`tests/fake-google.js`) บนเครื่องนี้ ซึ่งตรวจลายเซ็นของ assertion, scope, audience, token ทุกคำขอ และ `supportsAllDrives` — function จริงใน Edge runtime เรียกผ่าน `host.docker.internal`
 
 ### เตรียม Google — เจ้าของระบบเป็นผู้ทำ

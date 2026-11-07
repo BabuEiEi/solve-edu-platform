@@ -18,8 +18,8 @@
     "db:test:pg": "scripts/db-local/test.sh",
     "test:integration": "scripts/supabase-local/test-integration.sh",
     "test:functions": "scripts/supabase-local/test-functions.sh",
-    "test:e2e": "npx supabase db reset --local && playwright test --project=chromium",
-    "test:e2e:webkit": "npx supabase db reset --local && playwright test --project=webkit-iphone",
+    "test:e2e": "scripts/supabase-local/test-e2e.sh chromium",
+    "test:e2e:webkit": "scripts/supabase-local/test-e2e.sh webkit-iphone",
     "check": "npm run lint && npm run test && npm run build"
   },
   "license": "UNLICENSED",

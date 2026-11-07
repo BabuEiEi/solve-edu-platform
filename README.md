@@ -51,7 +51,8 @@ npm run dev                        # http://127.0.0.1:5173
 | `npm run db:reset` · `npm run db:test` | Supabase Local reset · pgTAP |
 | `npm run db:reset:pg` · `npm run db:test:pg` | ทางเลือกเมื่อไม่มี Docker: PostgreSQL 15+ ในเครื่อง + shim (ดู `scripts/db-local/`) |
 | `npm run test:integration` | Integration: service layer → Supabase Local จริง |
-| `npm run test:e2e` · `npm run test:e2e:webkit` | E2E บน Chromium (ชุดหลัก) · บน WebKit จำลอง iPhone 15 (ชุดเสริม รันแยก) — ทั้งสองคำสั่ง reset ฐานข้อมูลก่อน · ครั้งแรกต้อง `npx playwright install webkit` |
+| `npm run test:e2e` · `npm run test:e2e:webkit` | E2E บน Chromium (ชุดหลัก) · บน WebKit จำลอง iPhone 15 (ชุดเสริม รันแยก) — ทั้งสองคำสั่ง reset ฐานข้อมูลก่อน และเปิด Edge Functions พร้อม Google จำลองให้ (ต้อง `npx supabase start` แล้ว) · ครั้งแรกต้อง `npx playwright install webkit` |
+| `npm run test:functions` | ทดสอบ Edge Functions จริงกับ Supabase Local และ Google จำลอง (reset ฐานข้อมูลก่อน/หลัง) |
 | `POSTGREST_BIN=… scripts/db-local/test-rest.sh` | Integration: service layer → PostgREST → RLS |
 | `python3 scripts/db-local/gen-data-dictionary.py > docs/DATA_DICTIONARY.md` | สร้าง data dictionary ใหม่จาก schema |
 

@@ -8,6 +8,7 @@ import { downloadText } from '../../shared/ui/download.js'
 import { canAssessHint, traineeOnlyCohorts } from '../assignments/logic.js'
 import { sortedLevels } from '../rubrics/logic.js'
 import { reviewsOf } from '../submissions/logic.js'
+import { historyLine, resultMessage, resultTone } from '../drive/logic.js'
 import {
   FILTERS,
   buildReviewPayload,
@@ -121,6 +122,79 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
   const all = groupByPerson(submissions, reviews, roster)
   let filter = 'all'
 
+  // Copy to the central Google Drive: for the cohort's assessors only (the
+  // database decides; this hint only keeps the button off other people's pages)
+  const driveOn = canAssessHint(caps, context, allocation.cohort_id)
+  const drive = { busy: false, result: null, error: '', history: [] }
+  if (driveOn) drive.history = (await services.drive?.history(allocationId)) ?? []
+
+  const driveSection =
+    () => html`<section class="mb-4 rounded-xl border border-ink-200 bg-white p-4" data-drive aria-labelledby="drive-title">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0 flex-1 basis-64">
+        <h2 id="drive-title" class="text-sm font-semibold text-ink-800">สำเนาไฟล์งานไป Google Drive ส่วนกลาง</h2>
+        <p class="mt-1 text-xs text-ink-500">
+          ส่งไฟล์แนบของงานที่ส่งแล้วทุกรอบ จัดเป็นโฟลเดอร์ ภาระงาน / ชื่อผู้เรียน / รอบที่ส่ง · ข้อความและลิงก์ในงานไม่ถูกส่ง · กดซ้ำได้ ไฟล์ที่มีแล้วไม่ถูกส่งซ้ำ
+        </p>
+      </div>
+      <button type="button" class="${secondary}" data-action="drive-export" ${drive.busy ? html`disabled aria-busy="true"` : ''}>
+        ${drive.busy ? 'กำลังส่งสำเนา…' : 'ส่งสำเนาไป Google Drive'}
+      </button>
+    </div>
+    <div class="mt-3 space-y-2" aria-live="polite" data-drive-status>
+      ${drive.busy ? alertBox('กำลังส่งสำเนาไป Google Drive อาจใช้เวลาหลายนาทีถ้ามีไฟล์มาก — อย่าปิดหน้านี้', 'info') : ''}
+      ${drive.error ? alertBox(drive.error, 'error') : ''}
+      ${
+        drive.result
+          ? html`${alertBox(resultMessage(drive.result), resultTone(drive.result))}
+              ${
+                drive.result.folder_url
+                  ? html`<p class="text-sm"><a href="${safeUrl(drive.result.folder_url)}" target="_blank" rel="noopener noreferrer" class="text-brand-700 hover:underline" data-drive-link>เปิดโฟลเดอร์ใน Google Drive</a></p>`
+                  : ''
+              }`
+          : ''
+      }
+    </div>
+    ${
+      drive.history.length
+        ? html`<div class="mt-3">
+            <h3 class="text-xs font-medium text-ink-500">ประวัติการส่งสำเนา</h3>
+            <ul class="mt-1 divide-y divide-ink-100 text-xs text-ink-600" data-drive-history>
+              ${drive.history.map((run) => {
+                const line = historyLine(run)
+                const who = run.profiles ? displayName(run.profiles) : 'ผู้ตรวจ'
+                return html`<li class="py-1.5">
+                  <span class="font-medium text-ink-700">${line.label}</span>
+                  ${line.detail ? html`· ${line.detail}` : ''} · ${formatThaiDateTime(run.started_at)} · โดย ${who}
+                  ${line.error ? html`<span class="block text-rose-700">${line.error.reason} <span class="text-ink-400">(${line.error.code})</span></span>` : ''}
+                </li>`
+              })}
+            </ul>
+          </div>`
+        : ''
+    }
+  </section>`
+
+  const runDriveExport = async () => {
+    if (drive.busy) return
+    if (
+      !window.confirm(
+        'ส่งสำเนาไฟล์งานของภาระงานนี้ไป Google Drive ส่วนกลาง?\nชื่อผู้เรียนจะปรากฏในชื่อโฟลเดอร์ ผู้ที่เข้าถึง Drive ส่วนกลางได้จะเห็นไฟล์เหล่านี้'
+      )
+    )
+      return
+    Object.assign(drive, { busy: true, result: null, error: '' })
+    draw()
+    try {
+      drive.result = await services.drive.exportTask(allocationId)
+    } catch (err) {
+      drive.error = toUserMessage(err)
+    }
+    drive.busy = false
+    drive.history = (await services.drive.history(allocationId)) ?? []
+    draw()
+  }
+
   const draw = () => {
     const rows = filterRows(all, filter)
     render(
@@ -130,6 +204,7 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
           ${pageHeader(task.title, `${cohortLabel(allocation.cohorts)} · ${task.courses?.title ?? ''}${allocation.due_at ? ` · กำหนดส่ง ${formatThaiDateTime(allocation.due_at)}` : ''}`)}
           <button type="button" class="${secondary}" data-action="export-csv">ดาวน์โหลดผล (CSV)</button>
         </div>
+        ${driveOn ? driveSection() : ''}
         <div class="mb-3 flex flex-wrap gap-2" role="group" aria-label="กรองตามสถานะ">
           ${Object.entries(FILTERS).map(
             ([key, text]) => html`<button
@@ -191,6 +266,10 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
     if (f) {
       filter = f.dataset.filter
       return draw()
+    }
+    if (e.target.closest('button[data-action=drive-export]')) {
+      runDriveExport()
+      return undefined
     }
     if (e.target.closest('button[data-action=export-csv]')) {
       downloadText(

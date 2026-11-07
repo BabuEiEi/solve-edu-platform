@@ -23,6 +23,7 @@ import { renderCourseRubricsView, renderRubricEditorView } from './features/rubr
 import { createTaskService } from './features/tasks/service.js'
 import { createSubmissionService } from './features/submissions/service.js'
 import { createReviewService } from './features/reviews/service.js'
+import { createDriveService } from './features/drive/service.js'
 import { createNoticeService } from './features/notices/service.js'
 import { renderReviewQueueView, renderTaskPeopleView, renderReviewView } from './features/reviews/views.js'
 import { renderMyTasksView, renderTaskPageView } from './features/submissions/views.js'
@@ -126,6 +127,7 @@ async function boot() {
     tasks: createTaskService(supabase),
     submissions: createSubmissionService(supabase),
     reviews: createReviewService(supabase),
+    drive: createDriveService(supabase),
     notices: createNoticeService(supabase),
     assignments: createAssignmentService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),
