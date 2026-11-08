@@ -1,5 +1,8 @@
 import { html } from './html.js'
 import { sanitizeRichText } from './sanitize.js'
+import { promptDialog } from './dialog.js'
+
+const LINK_RE = /^https:\/\/\S+$/i
 
 /**
  * Rich-text editor (Tiptap 3, MIT) — loaded on demand so learners never
@@ -86,16 +89,22 @@ export async function mountRichTextEditor(host, initialHtml = '') {
   })
 
   const toolbar = host.querySelector('[role=toolbar]')
-  const onToolbar = (e) => {
+  const onToolbar = async (e) => {
     const cmd = e.target.closest('[data-cmd]')?.dataset.cmd
     if (!cmd) return
     e.preventDefault()
     e.stopPropagation()
     if (cmd === 'link') {
       if (editor.isActive('link')) return editor.chain().focus().unsetLink().run()
-      const href = window.prompt('ลิงก์ (ต้องขึ้นต้นด้วย https://)', 'https://')
-      if (href && /^https:\/\/\S+$/i.test(href.trim()))
-        editor.chain().focus().setLink({ href: href.trim() }).run()
+      const href = await promptDialog({
+        title: 'ใส่ลิงก์',
+        label: 'ลิงก์ (ต้องขึ้นต้นด้วย https://)',
+        defaultValue: 'https://',
+        maxLength: 2000,
+        validate: (v) =>
+          LINK_RE.test(v.trim()) ? undefined : 'ลิงก์ต้องขึ้นต้นด้วย https:// และไม่มีช่องว่าง',
+      })
+      if (href && !editor.isDestroyed) editor.chain().focus().setLink({ href: href.trim() }).run()
       return
     }
     RUN[cmd]?.(editor.chain().focus()).run()

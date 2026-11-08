@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, IDS } from './helpers.js'
+import { signIn, watchCsp, IDS, answerDialog } from './helpers.js'
 
 test('trainer builds a rubric: two criteria, publish, then a new draft version; the quiz list stays separate', async ({
   page,
@@ -53,8 +53,8 @@ test('trainer builds a rubric: two criteria, publish, then a new draft version; 
   // Reorder, then publish
   await page.locator('[data-criterion-id]').nth(1).getByRole('button', { name: 'เลื่อนขึ้น' }).click()
   await expect(page.locator('[data-criterion-id]').first()).toContainText('การใช้หลักฐาน')
-  page.once('dialog', (d) => d.accept())
   await page.getByRole('button', { name: 'เผยแพร่ฉบับนี้' }).click()
+  await answerDialog(page)
   await expect(page.getByText('เผยแพร่แล้ว — นำไปใช้กับภาระงานได้')).toBeVisible()
   await expect(page.getByRole('button', { name: 'แก้ไข', exact: true })).toHaveCount(0) // published: read-only
 

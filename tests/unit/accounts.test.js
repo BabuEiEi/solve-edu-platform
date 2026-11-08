@@ -3,6 +3,8 @@
  * (offers only what each row allows, edit, status, typed-e-mail delete).
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { promptDialog } from '../../src/shared/ui/dialog.js'
 import { createAdminService } from '../../src/features/admin/service.js'
 import { renderAccountsView } from '../../src/features/admin/accounts.js'
 import { deriveCapabilities } from '../../src/core/permissions.js'
@@ -181,13 +183,18 @@ describe('page', () => {
 
   it('suspending asks for a reason; cancelling the question changes nothing', async () => {
     const { el, admin } = await open()
-    vi.spyOn(window, 'prompt').mockReturnValueOnce(null).mockReturnValueOnce('ย้ายโรงเรียน')
+    promptDialog.mockResolvedValueOnce(null).mockResolvedValueOnce('ย้ายโรงเรียน')
     el.querySelector('[data-status=suspended]').click()
     await settle()
     expect(admin.setProfileStatus).not.toHaveBeenCalled()
     el.querySelector('[data-status=suspended]').click()
     await settle()
     expect(admin.setProfileStatus).toHaveBeenCalledWith('u1', 'suspended', 'ย้ายโรงเรียน')
+    // the dialog itself refuses an empty reason
+    const { validate, danger } = promptDialog.mock.calls[0][0]
+    expect(danger).toBe(true)
+    expect(validate('   ')).toBe('กรุณาระบุเหตุผล')
+    expect(validate('ย้าย')).toBeUndefined()
   })
 
   it('delete (platform admin): the button stays disabled until the e-mail is typed, then deletes', async () => {

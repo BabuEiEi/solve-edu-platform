@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, submitAs, resetTaskWork, sqlAs, DEMO, PEOPLE } from './helpers.js'
+import { signIn, submitAs, resetTaskWork, sqlAs, DEMO, PEOPLE, answerDialog } from './helpers.js'
 
 test('trainee: typing in the draft saves itself; reload keeps it; leaving unsaved asks first', async ({
   page,
@@ -64,8 +64,8 @@ test('reviewer: choosing levels keeps a private draft without pressing save; the
   const seen = sqlAs(PEOPLE.a1.id, 'select count(*) from public.task_reviews;')
   expect(seen.split('\n').find((l) => /^\d+$/.test(l))).toBe('0') // a draft is private to the reviewer
   // Discarding removes it
-  page.once('dialog', (d) => d.accept())
   await page.locator('form[data-form=review]').getByRole('button', { name: 'ทิ้งร่าง' }).click()
+  await answerDialog(page)
   await expect(page.getByText('ทิ้งร่างการตรวจแล้ว')).toBeVisible()
   await expect(page.locator('form[data-form=review] input:checked')).toHaveCount(0)
 })

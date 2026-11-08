@@ -1,5 +1,6 @@
-import Swal from 'sweetalert2'
-import 'sweetalert2/dist/sweetalert2.min.css'
+// Not 'sweetalert2' itself: that entry (the .all build) injects its stylesheet at run time, outside
+// our cascade layer. This build has no CSS in it; main.css imports the stylesheet into a layer.
+import Swal from 'sweetalert2/dist/sweetalert2.esm.min.js'
 
 /**
  * The only place that knows about SweetAlert2. Every confirmation / question
@@ -8,6 +9,9 @@ import 'sweetalert2/dist/sweetalert2.min.css'
  *
  *   await confirmDialog({ title, text, danger })    → true | false
  *   await promptDialog({ title, label, validate })  → string | null (null = cancelled)
+ *
+ * The library's stylesheet is imported in styles/main.css, inside a cascade layer
+ * (see the note there), so that the Tailwind classes below can override it.
  *
  * Security: SweetAlert2 treats `title`, `html`, button texts and labels as
  * HTML (the input label and the placeholder are text). Text that may come from users (a unit title in "delete this unit?")
@@ -36,12 +40,12 @@ function look({ danger }) {
     focusCancel: Boolean(danger), // Enter must not delete by accident
     customClass: {
       popup: 'rounded-2xl p-6 text-left',
-      title: 'p-0 text-lg font-semibold text-ink-900',
-      htmlContainer: 'm-0 mt-2 whitespace-pre-line p-0 text-sm text-ink-600',
-      input: 'mt-3 w-full rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-900',
-      inputLabel: 'mt-3 text-sm font-medium text-ink-700',
-      validationMessage: 'text-sm text-rose-700',
-      actions: 'mt-5 flex-wrap gap-2',
+      title: 'p-0 text-left text-lg font-semibold text-ink-900',
+      htmlContainer: 'm-0 mt-2 whitespace-pre-line p-0 text-left text-sm text-ink-600',
+      input: 'mx-0 mt-2 w-full rounded-lg border border-ink-200 px-3 py-2 text-sm text-ink-900',
+      inputLabel: 'm-0 mt-3 justify-start p-0 text-left text-sm font-medium text-ink-700',
+      validationMessage: 'justify-start text-sm text-rose-700',
+      actions: 'mt-5 w-full flex-wrap justify-end gap-2',
       confirmButton: `${BTN} ${danger ? 'bg-rose-600 text-white hover:bg-rose-700' : 'bg-brand-600 text-white hover:bg-brand-700'}`,
       cancelButton: `${BTN} border border-ink-200 bg-white text-ink-700 hover:bg-ink-50`,
     },

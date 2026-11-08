@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { test, expect } from './fixtures.js'
-import { signIn, resetTaskWork, DEMO } from './helpers.js'
+import { signIn, resetTaskWork, DEMO, answerDialog } from './helpers.js'
 import { createFakeGoogle } from '../fake-google.js'
 
 /**
@@ -38,8 +38,8 @@ test('the trainer copies submitted files to the central Drive: failure first, th
     await form.locator('[name=text]').fill('แผนการสอนเรื่องเศษส่วน')
     await form.locator('input[name=task_file]').setInputFiles(PDF)
     await expect(page.locator('[data-file]')).toContainText('แผนการสอน.pdf')
-    page.once('dialog', (d) => d.accept())
     await form.getByRole('button', { name: 'ส่งงาน' }).click()
+    await answerDialog(page)
     await expect(page.getByText('ส่งงานแล้ว — รอผู้ตรวจ')).toBeVisible()
 
     // The trainer opens the people page
@@ -52,19 +52,15 @@ test('the trainer copies submitted files to the central Drive: failure first, th
     await expect(section.locator('[data-drive-history]')).toHaveCount(0)
 
     // Declining the question sends nothing
-    let asked = ''
-    trainer.once('dialog', (d) => {
-      asked = d.message()
-      return d.dismiss()
-    })
     await button.click()
-    await expect.poll(() => asked).toContain('ชื่อผู้เรียนจะปรากฏในชื่อโฟลเดอร์')
+    const asked = await answerDialog(trainer, 'cancel')
+    expect(asked.text).toContain('ชื่อผู้เรียนจะปรากฏในชื่อโฟลเดอร์')
     expect(google.log).toEqual([])
 
     // Google refuses the sign-in: the page says nothing was sent, and records the try
     google.fail.token = 400
-    trainer.once('dialog', (d) => d.accept())
     await button.click()
+    await answerDialog(trainer)
     await expect(section.locator('[data-drive-status]')).toContainText('ส่งสำเนาไม่สำเร็จ — ไม่มีไฟล์ถูกส่ง')
     await expect(button).toBeEnabled()
     await expect(section.locator('[data-drive-history] li')).toHaveCount(1)
@@ -74,8 +70,8 @@ test('the trainer copies submitted files to the central Drive: failure first, th
 
     // Google works again: the next press is not blocked and copies the file
     google.fail.token = 0
-    trainer.once('dialog', (d) => d.accept())
     await button.click()
+    await answerDialog(trainer)
     await expect(section.locator('[data-drive-status]')).toContainText('ส่งครบแล้ว: ส่งใหม่ 1 ไฟล์')
     const link = section.locator('[data-drive-link]')
     await expect(link).toHaveAttribute(
@@ -101,8 +97,8 @@ test('the trainer copies submitted files to the central Drive: failure first, th
     }
 
     // Again: nothing is sent twice
-    trainer.once('dialog', (d) => d.accept())
     await button.click()
+    await answerDialog(trainer)
     await expect(section.locator('[data-drive-status]')).toContainText(
       'ส่งครบแล้ว: มีใน Drive อยู่แล้ว 1 ไฟล์'
     )

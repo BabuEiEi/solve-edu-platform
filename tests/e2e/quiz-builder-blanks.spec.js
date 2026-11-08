@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, IDS } from './helpers.js'
+import { signIn, watchCsp, IDS, answerDialog } from './helpers.js'
 
 const PICTURE = 'supabase/seed-media/assessment-media/a1000000-0000-4000-a000-000000000002/afl-cycle.png'
 
@@ -70,9 +70,9 @@ test('trainer builds dropdown, cloze and image-labelling items (real upload, tap
   await form.locator('select[data-key-select]').nth(1).selectOption({ label: 'รวบรวมหลักฐาน' })
   await form.getByRole('button', { name: 'บันทึกข้อ' }).click()
   await expect(trainer.getByText('พร้อมเผยแพร่ (3 ข้อ)')).toBeVisible()
-
-  trainer.once('dialog', (d) => d.accept())
   await trainer.locator('[data-action=publish]').click()
+
+  await answerDialog(trainer)
   await expect(trainer.getByText(/เผยแพร่แล้ว/).first()).toBeVisible()
   await trainer.locator('a[data-action-link=assign]').click()
   const a = trainer.locator('form[data-form=assignment]')

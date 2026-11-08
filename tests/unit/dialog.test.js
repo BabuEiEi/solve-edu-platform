@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import Swal from 'sweetalert2'
+import Swal from 'sweetalert2/dist/sweetalert2.esm.min.js'
 import { confirmDialog, promptDialog } from '../../src/shared/ui/dialog.js'
 
 // jsdom has no layout, no innerText (SweetAlert2 sets the title with it) and does not move

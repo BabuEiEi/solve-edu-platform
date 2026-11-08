@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, reviewInUi, resetTaskWork, PEOPLE, DEMO } from './helpers.js'
+import { signIn, watchCsp, reviewInUi, resetTaskWork, PEOPLE, DEMO, answerDialog } from './helpers.js'
 
 const PDF = {
   name: 'แผนการสอน.pdf',
@@ -44,8 +44,8 @@ test('trainee submits work (text, link, file); the trainer reviews on the review
   await page.reload() // the draft is on the server
   await expect(page.locator('form[data-form=draft] [name=text]')).toHaveValue(/เศษส่วน/)
   await expect(page.locator('[data-file]')).toHaveCount(1)
-  page.once('dialog', (d) => d.accept())
   await page.locator('form[data-form=draft]').getByRole('button', { name: 'ส่งงาน' }).click()
+  await answerDialog(page)
   await expect(page.getByText('ส่งงานแล้ว — รอผู้ตรวจ')).toBeVisible()
   const attempt1 = page.locator('[data-attempt="1"]')
   await expect(attempt1).toContainText('รอตรวจ')
@@ -76,8 +76,8 @@ test('trainee submits work (text, link, file); the trainer reviews on the review
   // Attempt 2
   await page.getByRole('button', { name: 'แก้ไขและส่งรอบที่ 2' }).click()
   await page.locator('form[data-form=draft] [name=text]').fill('แผนฉบับแก้ไข เพิ่มหลักฐานจากบัตรคำถาม')
-  page.once('dialog', (d) => d.accept())
   await page.locator('form[data-form=draft]').getByRole('button', { name: 'ส่งงาน' }).click()
+  await answerDialog(page)
   await expect(page.locator('[data-attempt="2"]')).toContainText('รอตรวจ')
   await reviewInUi(trainer, PEOPLE.a1.name, {
     levels: { [C1]: 'ดีมาก', [C2]: 'มีหลักฐานและนำไปใช้' },

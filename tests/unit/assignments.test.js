@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { promptDialog } from '../../src/shared/ui/dialog.js'
 import {
   toBangkokInput,
   fromBangkokInput,
@@ -501,16 +503,17 @@ describe('assignment views', () => {
     const el = document.createElement('div')
     const services = makeServices()
     await renderAssignmentDetailView(el, ctx(services, trainer), { id: 'A1' })
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValueOnce(null).mockReturnValueOnce('สัญญาณขาด')
+    promptDialog.mockResolvedValueOnce(null).mockResolvedValueOnce('สัญญาณขาด')
     const button = el.querySelector('tr[data-user-id=u2] [data-action=grant-extra]')
     button.click() // cancelled
+    await settle()
     expect(services.assignments.grantExtraAttempt).not.toHaveBeenCalled()
     el.querySelector('tr[data-user-id=u2] [data-action=grant-extra]').click()
     await settle()
     expect(services.assignments.grantExtraAttempt).toHaveBeenCalledWith('A1', 'u2', 'สัญญาณขาด')
     expect(el.textContent).toContain('ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ครู ข แล้ว')
     expect(el.querySelector('input[name=time_limit_minutes]').disabled).toBe(true) // frozen with attempts
-    prompt.mockRestore()
+    promptDialog.mockReset()
   })
 
   it('detail (trainer): results and item analysis download as Excel and as CSV', async () => {

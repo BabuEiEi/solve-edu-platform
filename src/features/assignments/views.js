@@ -4,7 +4,7 @@ import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { downloadTable, exportButtons } from '../../shared/ui/download.js'
-import { confirmDialog } from '../../shared/ui/dialog.js'
+import { confirmDialog, promptDialog } from '../../shared/ui/dialog.js'
 import { PURPOSE_LABELS, attemptPercent } from '../assessments/logic.js'
 import { purposeChip, resultBadge, windowText, timeLimitText } from '../assessments/views.js'
 import {
@@ -619,10 +619,11 @@ export async function renderAssignmentDetailView(el, { services, caps, context }
           { sheetName: 'วิเคราะห์ข้อสอบ' }
         )
       case 'grant-extra': {
-        const reason = window.prompt(
-          `ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ${b.dataset.name}\nเหตุผล (ไม่บังคับ เช่น สัญญาณขาด):`,
-          ''
-        )
+        const reason = await promptDialog({
+          title: `ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ${b.dataset.name}`,
+          label: 'เหตุผล (ไม่บังคับ เช่น สัญญาณขาด)',
+          confirmText: 'ให้สิทธิ์',
+        })
         if (reason === null) return undefined
         return run(
           () => services.assignments.grantExtraAttempt(id, b.dataset.userId, reason),
