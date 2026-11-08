@@ -2,7 +2,7 @@
 -- personal data gone everywhere (profile, roster, audit), every right ended,
 -- results kept anonymised, and the account can never come back.
 begin;
-select plan(24);
+select plan(25);
 
 create or replace function pg_temp.err(p_sql text) returns text language plpgsql as $$
 declare v_state text;
@@ -33,6 +33,11 @@ select lives_ok($$ select public.start_attempt('a4000000-0000-4000-a000-00000000
 reset role;
 insert into public.mentor_assignments (cohort_id, mentor_id, trainee_id, assigned_by)
 values (tests.uid('cohort'), tests.uid('mentor'), '99999999-0000-4000-a000-0000000000f1', tests.uid('district_admin'));
+
+-- an audit row about SOMEONE ELSE that the person once wrote (e.g. as an admin)
+insert into private.audit_logs (actor_id, action, table_name, record_id, before_json, after_json)
+values ('99999999-0000-4000-a000-0000000000f1', 'UPDATE_PROFILE', 'public.profiles', tests.uid('teacher_a2'),
+        '{"user_code": null}', '{"user_code": "KEEP-A2", "full_name": "ครู ก2 (สมมติ)"}');
 
 -- ---------- who may delete ----------
 select ok(not has_function_privilege('anon', 'public.admin_delete_account(uuid,text)', 'execute'), 'anon cannot call it');
@@ -74,6 +79,10 @@ select is((select count(*)::int from private.audit_logs
 select is((select count(*)::int from private.audit_logs
             where action = 'DELETE_ACCOUNT' and record_id = '99999999-0000-4000-a000-0000000000f1' and actor_id = tests.uid('platform_admin')), 1,
   'the deletion itself is audited (who, when, what was ended)');
+
+select is((select after_json ->> 'user_code' from private.audit_logs
+            where actor_id = '99999999-0000-4000-a000-0000000000f1' and record_id = tests.uid('teacher_a2')), 'KEEP-A2',
+  'audit rows about other people that the deleted person wrote keep their content (only rows about the person are scrubbed)');
 
 -- ---------- what stays ----------
 select is((select count(*)::int from public.assessment_attempts where user_id = '99999999-0000-4000-a000-0000000000f1'), 1,

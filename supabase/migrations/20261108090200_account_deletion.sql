@@ -219,11 +219,13 @@ begin
    where r.id = any (v_prereg);
   get diagnostics v_roster = row_count;
 
-  -- audit rows about the person keep what happened, not who it was
+  -- audit rows ABOUT the person (their profile, their roster rows) keep what
+  -- happened, not who it was. Rows the person wrote about other people stay
+  -- as they are: those people did not ask for anything to be erased.
   update private.audit_logs a
      set before_json = a.before_json - array['full_name', 'display_name', 'user_code', 'contact_email', 'avatar_path', 'email'],
          after_json = a.after_json - array['full_name', 'display_name', 'user_code', 'contact_email', 'avatar_path', 'email']
-   where a.record_id = p_target or a.actor_id = p_target
+   where a.record_id = p_target
       or (a.table_name = 'public.preregistrations' and a.record_id = any (v_prereg));
 
   insert into private.audit_logs (actor_id, action, table_name, record_id, after_json)

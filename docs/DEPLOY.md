@@ -71,3 +71,13 @@ commit;
 ```
 
 ผลที่ถูก: แถวเดียว `active | platform_admin` · การให้บทบาทถูกบันทึกใน `private.audit_logs` โดยอัตโนมัติ · ผู้ดูแลคนต่อไปให้คนแรกตั้งผ่านหน้าเว็บ ไม่ต้องใช้ SQL อีก
+
+## ขึ้น Phase 4a บนระบบจริง — ต้องอนุมัติทีละข้อ
+
+| ลำดับ | ทำอะไร | หมายเหตุ |
+|---|---|---|
+| 1 | `npx supabase db push --dry-run` แล้ว `db push` | migration `20261108090000`–`20261108090300` (รหัสประจำตัว · ลบที่ยังไม่ใช้ · ลบบัญชี · รายชื่อบัญชี) เพิ่มอย่างเดียว ไม่แก้ข้อมูลเดิม |
+| 2 | `npx supabase functions deploy delete-account --project-ref hcudarobowuwsmmyoyrd` | function ใหม่ · ต้องมี secret `ALLOWED_ORIGINS` = `https://solve-edu-platform.vercel.app` (ไม่ใช่ความลับ ตั้งได้เมื่ออนุมัติ) |
+| 3 | `npx supabase functions deploy cleanup-task-files --project-ref hcudarobowuwsmmyoyrd` | รุ่นใหม่ลบรูปของบทเรียน/แบบทดสอบที่ถูกลบด้วย (ยังต้องมี `CRON_SECRET` + ตัวตั้งเวลา จึงจะทำงานทุกคืน) |
+| 4 | `vercel deploy --prod` | หน้า "จัดการบัญชี" ปุ่มลบ/เก็บถาวร และนโยบายความเป็นส่วนตัวฉบับปรับปรุง |
+| 5 | ตรวจ | security advisor · หน้า "จัดการบัญชี" ในฐานะผู้ดูแลระบบ · ลบหลักสูตรทดลองที่ไม่มีผู้ใช้ 1 รายการ |
