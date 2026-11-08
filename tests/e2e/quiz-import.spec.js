@@ -27,7 +27,7 @@ const BAD = [
 
 test('trainer imports a Windows-874 CSV: errors first, then preview, import, publish; a trainee scores it', async ({
   browser,
-}) => {
+}, testInfo) => {
   const trainer = await (await browser.newContext()).newPage()
   const csp = watchCsp(trainer)
   await signIn(trainer, 'trainer@example.test')
@@ -38,14 +38,25 @@ test('trainer imports a Windows-874 CSV: errors first, then preview, import, pub
   await create.getByRole('button', { name: 'สร้างแบบทดสอบ' }).click()
   await expect(trainer.getByRole('heading', { name: 'ข้อสอบนำเข้าจากไฟล์ (E2E)' })).toBeVisible()
 
-  await trainer.getByRole('button', { name: 'นำเข้าจากไฟล์ (CSV)' }).click()
+  await trainer.getByRole('button', { name: 'นำเข้าจากไฟล์ (Excel/CSV)' }).click()
   const panel = trainer.locator('[data-import-panel]')
-  await expect(panel.getByText('เลือกไฟล์ CSV…')).toBeVisible() // Thai, not "Choose File"
+  await expect(panel.getByText('เลือกไฟล์ Excel หรือ CSV…')).toBeVisible() // Thai, not "Choose File"
 
   // The template downloads and is a valid file as it is
   const download = trainer.waitForEvent('download')
   await panel.getByRole('button', { name: 'ดาวน์โหลดแม่แบบ (CSV)' }).click()
   expect((await download).suggestedFilename()).toBe('quiz-import-template.csv')
+
+  // The Excel template downloads too, and reads back as the same four rows
+  const xlsxDownload = trainer.waitForEvent('download')
+  await panel.getByRole('button', { name: 'ดาวน์โหลดแม่แบบ (Excel)' }).click()
+  const xlsx = await xlsxDownload
+  expect(xlsx.suggestedFilename()).toBe('quiz-import-template.xlsx')
+  const xlsxPath = testInfo.outputPath('quiz-import-template.xlsx')
+  await xlsx.saveAs(xlsxPath)
+  await panel.locator('input[name=import_file]').setInputFiles(xlsxPath)
+  await expect(panel.locator('[data-import-row]')).toHaveCount(4)
+  await expect(panel.locator('[data-import-errors]')).toHaveCount(0)
 
   // A file with problems: every one listed by spreadsheet row, nothing can be confirmed
   await panel
@@ -103,5 +114,5 @@ test('trainer imports a Windows-874 CSV: errors first, then preview, import, pub
 test('a trainee has no import button and cannot open a quiz editor', async ({ page }) => {
   await signIn(page, 'teacher.a1@example.test')
   await page.goto(`/#/courses/${IDS.course}/quizzes`)
-  await expect(page.getByRole('button', { name: 'นำเข้าจากไฟล์ (CSV)' })).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'นำเข้าจากไฟล์ (Excel/CSV)' })).toHaveCount(0)
 })

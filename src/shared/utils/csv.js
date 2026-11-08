@@ -49,3 +49,15 @@ export function toCsv(rows) {
   }
   return '﻿' + rows.map((r) => r.map(cell).join(',')).join('\r\n') + '\r\n'
 }
+
+/**
+ * File bytes → text. UTF-8 when it is valid UTF-8 (Google Sheets, Excel's
+ * "CSV UTF-8"); otherwise Windows-874, which Thai Excel writes by default.
+ */
+export function decodeCsvBytes(buffer) {
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(buffer)
+  } catch {
+    return new TextDecoder('windows-874').decode(buffer)
+  }
+}

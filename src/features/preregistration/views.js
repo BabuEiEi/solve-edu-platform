@@ -10,8 +10,17 @@ import {
 import { ROLE_LABELS } from '../../core/permissions.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
-import { downloadText } from '../../shared/ui/download.js'
-import { analyzeRoster, rosterTemplateCsv, TEMPLATE_FILENAME, MAX_ROWS } from './service.js'
+import { downloadText, downloadBytes } from '../../shared/ui/download.js'
+import {
+  analyzeRosterRows,
+  rosterTemplateCsv,
+  rosterTemplateXlsx,
+  TEMPLATE_FILENAME,
+  TEMPLATE_XLSX_FILENAME,
+  MAX_ROWS,
+} from './service.js'
+import { readTableFile, TABLE_FILE_ACCEPT } from '../../shared/utils/tableFile.js'
+import { XLSX_MIME } from '../../shared/utils/xlsx.js'
 
 const input =
   'mt-1 block w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30'
@@ -38,7 +47,10 @@ export function importableOrgs(orgs, context, caps) {
   return orgs.filter((o) => mine.has(o.id) || mine.has(o.parent_id))
 }
 
-const downloadTemplate = () => downloadText(TEMPLATE_FILENAME, rosterTemplateCsv())
+const downloadTemplate = (format) =>
+  format === 'xlsx'
+    ? downloadBytes(TEMPLATE_XLSX_FILENAME, rosterTemplateXlsx(), XLSX_MIME)
+    : downloadText(TEMPLATE_FILENAME, rosterTemplateCsv())
 
 export async function renderImportView(el, { services, context, caps }) {
   render(el, html`${pageHeader('นำเข้ารายชื่อล่วงหน้า')}${loading}`)
@@ -102,9 +114,9 @@ export async function renderImportView(el, { services, context, caps }) {
         </select></label
       >
       <div class="sm:col-span-2">
-        <span class="${label}">ไฟล์ CSV (UTF-8)</span>
+        <span class="${label}">ไฟล์ Excel (.xlsx) หรือ CSV</span>
         <div class="mt-1">
-          ${filePicker({ name: 'file', accept: '.csv,text/csv', button: 'เลือกไฟล์ CSV…', label: 'ไฟล์ CSV (UTF-8)', required: true })}
+          ${filePicker({ name: 'file', accept: TABLE_FILE_ACCEPT, button: 'เลือกไฟล์ Excel หรือ CSV…', label: 'ไฟล์รายชื่อ (Excel หรือ CSV)', required: true })}
         </div>
       </div>
       <p class="text-xs text-ink-500 sm:col-span-2">
@@ -112,9 +124,14 @@ export async function renderImportView(el, { services, context, caps }) {
         ใช้ข้อมูลสมมติ (<code>*.example.test</code>) เมื่อทดสอบ
       </p>
       <div class="sm:col-span-2">
-        <button type="button" class="${secondary}" data-action="download-template">
-          ⬇ ดาวน์โหลดไฟล์ตัวอย่าง (${TEMPLATE_FILENAME})
-        </button>
+        <span class="inline-flex flex-wrap gap-2">
+          <button type="button" class="${secondary}" data-action="download-template-xlsx">
+            ⬇ ดาวน์โหลดไฟล์ตัวอย่าง Excel (${TEMPLATE_XLSX_FILENAME})
+          </button>
+          <button type="button" class="${secondary}" data-action="download-template">
+            ⬇ ดาวน์โหลดไฟล์ตัวอย่าง CSV (${TEMPLATE_FILENAME})
+          </button>
+        </span>
       </div>
       <div class="sm:col-span-2"><button class="${primary}" type="submit">ตรวจสอบไฟล์</button></div>
     </form>`
@@ -186,7 +203,7 @@ export async function renderImportView(el, { services, context, caps }) {
   const draw = () =>
     render(
       el,
-      html`${pageHeader('นำเข้ารายชื่อล่วงหน้า', 'ลงทะเบียนครูล่วงหน้าจากไฟล์ CSV — ระบบไม่ส่งอีเมลและไม่สร้างบัญชีแทนผู้ใช้')}
+      html`${pageHeader('นำเข้ารายชื่อล่วงหน้า', 'ลงทะเบียนครูล่วงหน้าจากไฟล์ Excel หรือ CSV — ระบบไม่ส่งอีเมลและไม่สร้างบัญชีแทนผู้ใช้')}
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''} ${form()} ${preview()} ${pendingList()}`
     )
 
@@ -217,9 +234,9 @@ export async function renderImportView(el, { services, context, caps }) {
         target.orgRole,
         target.cohortId || null
       )
-      analysis = analyzeRoster(await file.text(), { existing })
+      analysis = analyzeRosterRows(await readTableFile(file), { existing })
     } catch (err) {
-      message = err?.message === 'no file' ? 'กรุณาเลือกไฟล์ CSV' : toUserMessage(err)
+      message = err?.message === 'no file' ? 'กรุณาเลือกไฟล์ Excel หรือ CSV' : toUserMessage(err)
       tone = 'error'
     }
     draw()
@@ -229,7 +246,8 @@ export async function renderImportView(el, { services, context, caps }) {
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return
     const { action, id } = b.dataset
-    if (action === 'download-template') return downloadTemplate()
+    if (action === 'download-template') return downloadTemplate('csv')
+    if (action === 'download-template-xlsx') return downloadTemplate('xlsx')
     if (action === 'clear-preview') {
       analysis = null
       return draw()

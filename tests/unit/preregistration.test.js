@@ -1,9 +1,13 @@
 import { describe, it, expect, vi } from 'vitest'
-import { parseCsv } from '../../src/shared/utils/csv.js'
+import { unzipSync, strFromU8 } from 'fflate'
+import { parseCsv, toCsv } from '../../src/shared/utils/csv.js'
+import { readXlsxRows, toXlsx, XLSX_MIME } from '../../src/shared/utils/xlsx.js'
 import {
   analyzeRoster,
+  analyzeRosterRows,
   createPreregistrationService,
   rosterTemplateCsv,
+  rosterTemplateXlsx,
   TEMPLATE_HEADER,
 } from '../../src/features/preregistration/service.js'
 import { renderImportView, grantableRoles, importableOrgs } from '../../src/features/preregistration/views.js'
@@ -252,7 +256,55 @@ describe('roster template', () => {
   })
 })
 
+describe('roster template as Excel', () => {
+  it('has the same table as the CSV template, user_code as a Text column, and imports as-is', () => {
+    const rows = readXlsxRows(rosterTemplateXlsx())
+    expect(rows).toEqual(parseCsv(rosterTemplateCsv()))
+    expect(rows[0]).toEqual(TEMPLATE_HEADER)
+    const result = analyzeRosterRows(rows)
+    expect(result.errorCount).toBe(0)
+    expect(result.validCount).toBe(2)
+    // codes typed later keep leading zeros: column C (user_code) is formatted as Text
+    const sheet = strFromU8(unzipSync(rosterTemplateXlsx())['xl/worksheets/sheet1.xml'])
+    expect(sheet).toMatch(/<col min="3" max="3" [^>]*style="2"\/>/)
+  })
+  it('an Excel file gives the same analysis as the same CSV, including bad rows', () => {
+    const table = [
+      ['email', 'full_name', 'user_code'],
+      ['ok@example.test', 'ครู', '00123'],
+      ['broken', 'x', ''],
+    ]
+    expect(analyzeRosterRows(readXlsxRows(toXlsx(table)))).toEqual(analyzeRoster(toCsv(table)))
+  })
+})
+
 describe('import view template download', () => {
+  it('downloads roster-template.xlsx as an Excel file', async () => {
+    const el = document.createElement('div')
+    const services = {
+      organizations: { listActiveOrganizations: async () => [{ id: 'A', name: 'ก', parent_id: null }] },
+      programs: { listVisiblePrograms: async () => [] },
+      preregistration: { list: async () => [] },
+    }
+    const context = { orgMemberships: [{ organization_id: 'A', org_role: 'school_admin' }] }
+    const made = []
+    URL.createObjectURL = vi.fn((b) => (made.push(b), 'blob:test'))
+    URL.revokeObjectURL = vi.fn()
+    let downloaded = null
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
+      downloaded = this.download
+    })
+    await renderImportView(el, {
+      services,
+      context,
+      caps: { isPlatformAdmin: false, orgRoles: ['school_admin'] },
+    })
+    el.querySelector('[data-action=download-template-xlsx]').click()
+    expect(downloaded).toBe('roster-template.xlsx')
+    expect(made[0].type).toBe(XLSX_MIME)
+    expect(readXlsxRows(new Uint8Array(await made[0].arrayBuffer()))[0]).toEqual(TEMPLATE_HEADER)
+    click.mockRestore()
+  })
   it('downloads roster-template.csv from a blob URL', async () => {
     const el = document.createElement('div')
     const services = {
@@ -276,5 +328,64 @@ describe('import view template download', () => {
     expect(downloaded).toEqual({ name: 'roster-template.csv', href: 'blob:test' })
     expect(URL.createObjectURL.mock.calls[0][0].type).toContain('text/csv')
     click.mockRestore()
+  })
+})
+
+describe('import view with an Excel file', () => {
+  it('previews and imports rows read from an .xlsx file; an old .xls gets a Thai explanation', async () => {
+    const el = document.createElement('div')
+    const importRows = vi.fn(async (rows) => ({ count: rows.length }))
+    const services = {
+      organizations: {
+        listActiveOrganizations: async () => [{ id: 'A', name: 'โรงเรียน ก', parent_id: null }],
+      },
+      programs: { listVisiblePrograms: async () => [] },
+      preregistration: {
+        list: async () => [],
+        pendingEmails: async () => [],
+        importRows,
+        cancel: async () => {},
+      },
+    }
+    const context = { orgMemberships: [{ organization_id: 'A', org_role: 'school_admin' }] }
+    await renderImportView(el, {
+      services,
+      context,
+      caps: { isPlatformAdmin: false, orgRoles: ['school_admin'] },
+    })
+    expect(el.querySelector('input[name=file]').accept).toContain('.xlsx')
+
+    const submit = async (file) => {
+      const form = el.querySelector('form[data-form=roster]')
+      const real = globalThis.FormData
+      globalThis.FormData = class extends real {
+        constructor() {
+          super(form)
+          this.set('file', file)
+        }
+      }
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await flush()
+      globalThis.FormData = real
+    }
+
+    const old = new File([new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])], 'r.xls')
+    await submit(old)
+    expect(el.textContent).toContain('.xls')
+    expect(el.querySelector('[data-action=confirm-import]')).toBeNull()
+
+    const table = [
+      ['email', 'full_name', 'user_code'],
+      ['ok@example.test', 'ครู ก', '00123'],
+      ['broken', 'x', ''],
+    ]
+    await submit(new File([toXlsx(table)], 'r.xlsx', { type: XLSX_MIME }))
+    expect(el.textContent).toContain('ถูกต้อง 1')
+    expect(el.textContent).toContain('มีข้อผิดพลาด 1')
+    el.querySelector('[data-action=confirm-import]').click()
+    await flush()
+    expect(importRows.mock.calls[0][0]).toMatchObject([
+      { email: 'ok@example.test', full_name: 'ครู ก', user_code: '00123' },
+    ])
   })
 })

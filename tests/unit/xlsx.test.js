@@ -282,9 +282,9 @@ describe('readTableFile', () => {
       ['a@example.test', 'ครู'],
     ])
   })
-  it('explains CSV saved in a Thai legacy encoding instead of garbling it', async () => {
-    const tis620 = new Uint8Array([0x65, 0x6d, 0x61, 0x69, 0x6c, 0x2c, 0xa4, 0xc3, 0xd9]) // "email,ครู" in TIS-620
-    await expect(readTableFile(fileOf(tis620))).rejects.toThrow(/UTF-8/)
+  it('reads CSV saved in Thai Windows-874, the default of Thai Excel', async () => {
+    const win874 = new Uint8Array([0x65, 0x6d, 0x61, 0x69, 0x6c, 0x2c, 0xa4, 0xc3, 0xd9]) // "email,ครู"
+    await expect(readTableFile(fileOf(win874))).resolves.toEqual([['email', 'ครู']])
   })
   it('refuses a missing or oversized file before reading it', async () => {
     await expect(readTableFile(null)).rejects.toThrow('ยังไม่ได้เลือกไฟล์')
