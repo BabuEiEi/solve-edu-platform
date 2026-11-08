@@ -180,6 +180,8 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | แก้ชื่อ/รหัสประจำตัวของผู้ใช้ | `rpc('admin_update_profile', {p_target, p_full_name, p_display_name, p_user_code})` → `{id, full_name, display_name, user_code}` | ช่องว่าง = ล้างค่า · 42501 = นอกขอบเขต · 23505 = รหัสซ้ำ (ไม่สนตัวพิมพ์) · 23514 = รูปแบบรหัสผิด/ไม่มีชื่อ |
 | อ่านรหัสประจำตัว | `from('profiles').select('id, full_name, display_name, user_code, status, …')` | เห็นเท่าที่เห็นโปรไฟล์ได้ (RLS เดิม) |
 | นำเข้ารายชื่อพร้อมรหัส | `from('preregistrations').insert({…, user_code})` | ใส่ให้โปรไฟล์ตอนผูกบัญชี ถ้ายังไม่มีรหัสและรหัสยังว่าง |
+| ลบได้ไหม / เพราะอะไร | `rpc('deletion_usage', {p_kind: 'course'\|'instrument'\|'task', p_id})` → `{can_delete, reasons: {enrollments?, attempts?, submissions?, drive_exports?, rubric_tasks?, rubric_tasks_elsewhere?, reviews?}}` | นับเฉพาะเหตุที่มี · 42501 = ไม่ใช่ผู้จัดการ |
+| ลบ | `rpc('delete_course', {p_course, p_confirm: code})` · `rpc('delete_instrument', {p_instrument, p_confirm: code})` · `rpc('delete_task', {p_task, p_confirm: title})` → `{deleted, removed: {…}}` | SE009 = มีผู้ใช้แล้ว (ให้เก็บถาวรแทน; รายละเอียดใน detail) · 22023 = ยืนยันไม่ตรง · 23503 = มีผู้เริ่มใช้ระหว่างลบ (ลองใหม่จะได้ SE009) |
 
 ## 3. Error mapping (`src/core/errors.js`)
 
