@@ -2,6 +2,7 @@ import { html, render } from '../../shared/ui/html.js'
 import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../shared/ui/components.js'
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
+import { watchDeleteZones } from '../deletion/zone.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { canAssessHint } from '../assignments/logic.js'
 import { dateField, watchDateLabels } from '../assignments/views.js'
@@ -169,7 +170,7 @@ export async function renderTaskDetailView(el, { services, caps, context }, { id
   } catch (err) {
     return render(el, alertBox(toUserMessage(err)))
   }
-  const options = rubricOptions(rubrics)
+  const options = rubricOptions(rubrics, task.rubric_version_id)
   let message = null
   let tone = 'success'
   let busy = false
@@ -247,15 +248,11 @@ export async function renderTaskDetailView(el, { services, caps, context }, { id
             ${taskFields(task, options)}
             <div class="flex flex-wrap gap-2 sm:col-span-2">
               <button class="${primary}" type="submit">บันทึกการตั้งค่า</button>
-              ${
-                task.status === 'draft' && !(task.task_allocations ?? []).length
-                  ? html`<button class="${danger}" type="button" data-action="delete-task">ลบภาระงาน</button>`
-                  : ''
-              }
             </div>
           </form>
           ${allocationPanel()}
           <p class="text-xs text-ink-500">สร้างเมื่อ ${formatThaiDateTime(task.created_at)}</p>
+          <section class="pt-4" data-delete-zone data-kind="task" data-id="${task.id}"></section>
         </div>`
     )
 
@@ -321,21 +318,28 @@ export async function renderTaskDetailView(el, { services, caps, context }, { id
         return undefined
       return run(() => services.tasks.removeAllocation(id), 'เลิกเปิดให้รุ่นแล้ว')
     }
-    if (action === 'delete-task') {
-      if (!window.confirm('ลบภาระงานฉบับร่างนี้?')) return undefined
-      return (async () => {
-        try {
-          await services.tasks.remove(task.id)
-          navigate(`/courses/${courseId}/tasks`)
-        } catch (err) {
-          message = toUserMessage(err)
-          tone = 'error'
-          draw()
-        }
-      })()
-    }
     return undefined
   }
+
+  // "ลบภาระงาน": unused → delete with the typed title; used → reasons (archive is in the status bar above)
+  watchDeleteZones(el, {
+    services,
+    config: () => ({
+      confirmWord: task.title,
+      archive:
+        task.status === 'archived'
+          ? null
+          : {
+              label: 'เก็บถาวรภาระงาน',
+              run: () =>
+                run(
+                  () => services.tasks.update(task.id, { status: 'archived' }),
+                  'เปลี่ยนสถานะเป็น “เก็บถาวร” แล้ว'
+                ),
+            },
+      onDeleted: () => navigate(`/courses/${courseId}/tasks`),
+    }),
+  })
 
   watchDateLabels(el)
   draw()

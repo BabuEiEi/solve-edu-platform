@@ -37,14 +37,25 @@ export function buildAllocationPayload(fields) {
   return { available_at, due_at }
 }
 
-/** Published rubric versions of a course's rubrics → select options. */
-export function rubricOptions(rubrics = []) {
-  return rubrics.flatMap((r) =>
-    (r.instrument_versions ?? [])
-      .filter((v) => v.status === 'published')
-      .sort((a, b) => b.version_no - a.version_no)
-      .map((v) => ({ id: v.id, label: `${r.title} · ฉบับที่ ${v.version_no}` }))
-  )
+/**
+ * Published rubric versions of a course's rubrics → select options.
+ * Archived rubrics are not offered for new choices; `keepVersionId` keeps the
+ * one a task already uses visible.
+ */
+export function rubricOptions(rubrics = [], keepVersionId = null) {
+  return rubrics
+    .filter(
+      (r) => r.status !== 'archived' || (r.instrument_versions ?? []).some((v) => v.id === keepVersionId)
+    )
+    .flatMap((r) =>
+      (r.instrument_versions ?? [])
+        .filter((v) => v.status === 'published' && (r.status !== 'archived' || v.id === keepVersionId))
+        .sort((a, b) => b.version_no - a.version_no)
+        .map((v) => ({
+          id: v.id,
+          label: `${r.title} · ฉบับที่ ${v.version_no}${r.status === 'archived' ? ' (เก็บถาวร)' : ''}`,
+        }))
+    )
 }
 
 /** Cohorts a task is not yet open to. */

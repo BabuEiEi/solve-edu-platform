@@ -9,6 +9,8 @@ import {
 } from '../../shared/ui/components.js'
 import { richTextEditorMarkup } from '../../shared/ui/richTextEditor.js'
 import { toUserMessage } from '../../core/errors.js'
+import { navigate } from '../../core/router.js'
+import { watchDeleteZones } from '../deletion/zone.js'
 import { moveId, nextOrder, learnerVisibility } from './service.js'
 import {
   BLOCK_TYPES,
@@ -214,6 +216,7 @@ export async function renderCourseBuilderView(el, { services }, { id }) {
           <input id="add-unit-title" name="title" required maxlength="300" placeholder="ชื่อหน่วยการเรียนรู้ใหม่" class="${inputInline}" />
           <button class="${primary} shrink-0" type="submit">+ เพิ่มหน่วย</button>
         </form>
+        ${course ? html`<section class="mt-10" data-delete-zone data-kind="course" data-id="${course.id}"></section>` : ''}
       `
     )
 
@@ -234,6 +237,23 @@ export async function renderCourseBuilderView(el, { services }, { id }) {
       draw()
     }
   }
+
+  // "ลบหลักสูตร": unused → delete with the typed code; used → reasons + archive
+  watchDeleteZones(el, {
+    services,
+    config: () => ({
+      confirmWord: course.code,
+      archive:
+        course.status === 'archived'
+          ? null
+          : {
+              label: 'เก็บถาวรหลักสูตร',
+              run: () =>
+                run(() => services.builder.updateCourse(id, { status: 'archived' }), 'เก็บถาวรหลักสูตรแล้ว'),
+            },
+      onDeleted: () => navigate('/courses'),
+    }),
+  })
 
   const unitOf = (unitId) => units().find((u) => u.id === unitId)
   const lessonOf = (lessonId) =>

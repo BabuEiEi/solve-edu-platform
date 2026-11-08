@@ -2,6 +2,7 @@ import { html, render } from '../../shared/ui/html.js'
 import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../shared/ui/components.js'
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
+import { watchDeleteZones } from '../deletion/zone.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { moveId, nextOrder } from '../builder/service.js'
 import { defaultVersion } from '../quizzes/logic.js'
@@ -58,9 +59,11 @@ export async function renderCourseRubricsView(el, { services }, { id }) {
         ${
           rubrics.length
             ? html`<ul class="space-y-3" data-rubrics>
-                ${rubrics.map((r) => {
-                  const current = defaultVersion(r.instrument_versions)
-                  return html`<li>
+                ${[...rubrics]
+                  .sort((a, b) => (a.status === 'archived') - (b.status === 'archived'))
+                  .map((r) => {
+                    const current = defaultVersion(r.instrument_versions)
+                    return html`<li>
                     <a
                       href="#/courses/${course.id}/rubrics/${r.id}"
                       class="flex flex-wrap items-center gap-3 rounded-xl border border-ink-200 bg-white px-5 py-4 hover:border-brand-300"
@@ -70,9 +73,10 @@ export async function renderCourseRubricsView(el, { services }, { id }) {
                         <span class="text-xs text-ink-500">${r.code}</span>
                       </span>
                       ${current ? html`<span class="text-sm text-ink-500">${versionLabel(current)}</span>${statusBadge(current.status)}` : ''}
+                      ${r.status === 'archived' ? html`<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/20" data-archived-badge>เก็บถาวร</span>` : ''}
                     </a>
                   </li>`
-                })}
+                  })}
               </ul>`
             : emptyState('ยังไม่มี Rubric ในหลักสูตรนี้')
         }
@@ -275,6 +279,14 @@ export async function renderRubricEditorView(el, { services }, { id: courseId, r
       el,
       html`<a href="#/courses/${courseId}/rubrics" class="text-sm text-brand-700 hover:underline">← Rubric ของหลักสูตร</a>
         <div class="mt-3">${pageHeader(instrument.title, `${instrument.code} · ${course.title}`)}</div>
+        ${
+          instrument.status === 'archived'
+            ? html`<div class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-archived>
+                <span>Rubric นี้เก็บถาวรแล้ว (ไม่ถูกเสนอเมื่อสร้างภาระงานใหม่) ผลที่ให้ไปแล้วยังอยู่ครบ</span>
+                <button type="button" class="${secondary}" data-action="unarchive">นำกลับมาใช้</button>
+              </div>`
+            : ''
+        }
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''}
         <div class="space-y-4">
           ${versionBar()} ${statusPanel()}
@@ -288,6 +300,7 @@ export async function renderRubricEditorView(el, { services }, { id: courseId, r
                   </div>`
               : ''
           }
+          <section class="pt-6" data-delete-zone data-kind="instrument" data-id="${instrument.id}"></section>
         </div>`
     )
 
@@ -308,6 +321,28 @@ export async function renderRubricEditorView(el, { services }, { id: courseId, r
       draw()
     }
   }
+
+  // "ลบ Rubric": unused → delete with the typed code; used → reasons + archive
+  watchDeleteZones(el, {
+    services,
+    config: () => ({
+      confirmWord: instrument.code,
+      noun: 'Rubric',
+      below: 'ทุกฉบับและทุกเกณฑ์ของ Rubric นี้',
+      archive:
+        instrument.status === 'archived'
+          ? null
+          : {
+              label: 'เก็บถาวร Rubric',
+              run: () =>
+                run(
+                  () => services.quizzes.setInstrumentStatus(instrument.id, 'archived'),
+                  'เก็บถาวร Rubric แล้ว'
+                ),
+            },
+      onDeleted: () => navigate(`/courses/${courseId}/rubrics`),
+    }),
+  })
 
   const saveCriterion = async (form) => {
     const f = new FormData(form)
@@ -384,6 +419,11 @@ export async function renderRubricEditorView(el, { services }, { id: courseId, r
               )
             ),
           'จัดลำดับเกณฑ์แล้ว'
+        )
+      case 'unarchive':
+        return run(
+          () => services.quizzes.setInstrumentStatus(instrument.id, 'active'),
+          'นำ Rubric กลับมาใช้แล้ว'
         )
       case 'delete-criterion':
         if (!window.confirm('ลบเกณฑ์นี้?')) return undefined

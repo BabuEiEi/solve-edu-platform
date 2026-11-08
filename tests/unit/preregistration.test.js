@@ -95,9 +95,29 @@ describe('preregistration service', () => {
     expect(inserts).toHaveLength(1)
     expect(inserts[0][1]).toHaveLength(1)
     expect(Object.keys(inserts[0][1][0]).sort()).toEqual(
-      ['batch_id', 'cohort_id', 'cohort_role', 'email', 'full_name', 'org_role', 'organization_id'].sort()
+      [
+        'batch_id',
+        'cohort_id',
+        'cohort_role',
+        'email',
+        'full_name',
+        'org_role',
+        'organization_id',
+        'user_code',
+      ].sort()
     )
     expect(out.count).toBe(1)
+  })
+  it('sends the personal code when the row has one, null when not', async () => {
+    const c = fakeClient({ data: null, error: null })
+    await createPreregistrationService(c).importRows(
+      [
+        { email: 'a@example.test', full_name: 'ก', user_code: 'T-0001' },
+        { email: 'b@example.test', full_name: 'ข', user_code: '' },
+      ],
+      { organizationId: 'O', orgRole: 'teacher' }
+    )
+    expect(c.calls.find(([op]) => op === 'insert')[1].map((r) => r.user_code)).toEqual(['T-0001', null])
   })
   it('drops cohort_role when no cohort is chosen', async () => {
     const c = fakeClient({ data: null, error: null })
@@ -200,14 +220,34 @@ describe('import view', () => {
   })
 })
 
+describe('roster personal codes', () => {
+  const csv = (...rows) => ['email,full_name,user_code', ...rows].join('\n')
+  it('reads an optional user_code column (Thai header too); a file without it still works', () => {
+    const r = analyzeRoster(csv('a@example.test,ก,T-0001', 'b@example.test,ข,'))
+    expect(r.rows.map((x) => x.user_code)).toEqual(['T-0001', ''])
+    expect(r.errorCount).toBe(0)
+    expect(analyzeRoster('อีเมล,ชื่อ,รหัสประจำตัว\na@example.test,ก,ค-1').rows[0].user_code).toBe('ค-1')
+    expect(analyzeRoster('email,full_name\na@example.test,ก').rows[0].user_code).toBe('')
+  })
+  it('flags a malformed code and a code repeated in the file (ignoring case), by row', () => {
+    const r = analyzeRoster(csv('a@example.test,ก,T 1', 'b@example.test,ข,T-2', 'c@example.test,ค,t-2'))
+    expect(r.rows[0].errors.join()).toContain('ไม่เว้นวรรค')
+    expect(r.rows[1].errors).toEqual([])
+    expect(r.rows[2].errors).toEqual(['รหัสประจำตัวซ้ำกับแถว 3'])
+    expect(r.errorCount).toBe(2)
+  })
+})
+
 describe('roster template', () => {
   it('has the exact headers the importer requires and every example row passes validation', () => {
     const csv = rosterTemplateCsv()
     expect(csv.startsWith('﻿')).toBe(true) // Excel opens Thai as UTF-8
     expect(parseCsv(csv)[0]).toEqual(TEMPLATE_HEADER)
+    expect(TEMPLATE_HEADER).toEqual(['email', 'full_name', 'user_code'])
     const result = analyzeRoster(csv)
     expect(result.errorCount).toBe(0)
     expect(result.validCount).toBe(2)
+    expect(result.rows.map((r) => r.user_code)).toEqual(['T-0001', 'T-0002'])
     expect(result.rows.every((r) => r.email.endsWith('@example.test'))).toBe(true)
   })
 })
