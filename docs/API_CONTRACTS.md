@@ -110,7 +110,7 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 |---|---|---|
 | นำเข้าข้อพร้อมเฉลย | `rpc('import_instrument_items', { p_version, p_items })` → จำนวนข้อ | `p_items` = `[{item_type, prompt, max_score?, options_json, scoring_mode?, answer}]` · ประเภท `mcq_single`/`mcq_multiple`/`true_false`/`numeric` · ทุกแถวต้องมี `answer` (รูปแบบเดียวกับ `set_item_key`) · ไม่มีรูป · ≤ 200 แถว · ต่อท้ายฉบับร่าง · **ทั้งหมดหรือไม่เลย** · แถวผิด → error มี `details: 'แถวที่ n'` (n นับจาก 1 ตามลำดับใน array) · ฉบับที่ไม่ใช่ draft → 23514 · ไม่ใช่ผู้สร้างข้อสอบ → 42501 |
 
-**ไฟล์นำเข้า (CSV)** — `src/features/quizzes/importFile.js` ตรวจในเบราว์เซอร์ก่อนส่ง (server ตรวจซ้ำ):
+**ไฟล์นำเข้า (Excel .xlsx หรือ CSV)** — `src/features/quizzes/importFile.js` ตรวจในเบราว์เซอร์ก่อนส่ง (server ตรวจซ้ำ) · ไฟล์ Excel อ่านชีตแรก ตัวเลขใน Excel อ่านเป็นข้อความเหมือนพิมพ์ใน CSV · แม่แบบมีทั้งสองแบบ:
 
 | คอลัมน์ | ความหมาย |
 |---|---|
@@ -155,7 +155,7 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 
 **ฝั่งผู้เรียน (ขั้น 6)** — `createSubmissionService` ใช้ call ข้างบนทั้งหมด และอ่าน: `task_allocations` (ฝัง `tasks`, `cohorts`) · `task_submissions` (`user_id` = ตนเอง) · `task_submission_files` · `task_reviews` / `task_review_scores` (เฉพาะที่ส่งผลแล้ว) · `instrument_items` ของ Rubric ที่ภาระงานใช้ · ไฟล์ผ่าน `storage.from('task-files').createSignedUrls` · ไฟล์ที่อัปโหลดแต่ไม่ได้บันทึกแถว (ปิดหน้าไประหว่างทาง) ถูกลบเมื่อเปิดร่างอีกครั้ง หากเก่ากว่า 10 นาที
 
-**ฝั่งผู้ตรวจ (ขั้น 7)** — `createReviewService`: อ่าน `task_allocations`, `task_submissions` (เฉพาะ `status = 'submitted'` ที่ RLS อนุญาต พร้อม `profiles ( id, full_name, display_name )`), `task_reviews` (`released` ทั้งหมด + ร่างของตน), `task_review_scores`, `instrument_items` ของ Rubric, `cohort_memberships` (รายชื่อ — เฉพาะผู้ดูแลรุ่น) · เขียนผ่าน `save_task_review` / `release_task_review` / ลบร่างของตน (ไม่มีทางเขียนตารางตรงๆ) · CSV (`ชื่อ, สถานะ, จำนวนรอบที่ส่ง, ส่งล่าสุด (ISO), ส่งช้า, [คะแนน, คะแนนเต็ม], ผลการตรวจล่าสุด`) สร้างในเบราว์เซอร์จากข้อมูลที่ RLS ให้ผู้ใช้เห็น จึงไม่รั่วข้ามขอบเขต
+**ฝั่งผู้ตรวจ (ขั้น 7)** — `createReviewService`: อ่าน `task_allocations`, `task_submissions` (เฉพาะ `status = 'submitted'` ที่ RLS อนุญาต พร้อม `profiles ( id, full_name, display_name )`), `task_reviews` (`released` ทั้งหมด + ร่างของตน), `task_review_scores`, `instrument_items` ของ Rubric, `cohort_memberships` (รายชื่อ — เฉพาะผู้ดูแลรุ่น) · เขียนผ่าน `save_task_review` / `release_task_review` / ลบร่างของตน (ไม่มีทางเขียนตารางตรงๆ) · ไฟล์ Excel/CSV (`ชื่อ, สถานะ, จำนวนรอบที่ส่ง, ส่งล่าสุด (ISO), ส่งช้า, [คะแนน, คะแนนเต็ม], ผลการตรวจล่าสุด` — ทั้งสองแบบมีแถวเดียวกัน) สร้างในเบราว์เซอร์จากข้อมูลที่ RLS ให้ผู้ใช้เห็น จึงไม่รั่วข้ามขอบเขต
 
 **แจ้งเตือนในระบบ (3b)**
 
