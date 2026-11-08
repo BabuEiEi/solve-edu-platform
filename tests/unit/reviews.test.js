@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { readXlsxRows } from '../../src/shared/utils/xlsx.js'
 import {
   buildReviewPayload,
   countWaiting,
@@ -308,6 +309,10 @@ describe('pages', () => {
     expect(el.querySelectorAll('[data-people] tbody tr')).toHaveLength(1)
     el.querySelector('[data-action=export-csv]').click()
     expect(await created[0].text()).toContain('ชื่อ,สถานะ')
+    el.querySelector('[data-action=export-xlsx]').click()
+    const sheet = readXlsxRows(new Uint8Array(await created[1].arrayBuffer()))
+    expect(sheet[0].slice(0, 2)).toEqual(['ชื่อ', 'สถานะ'])
+    expect(sheet).toHaveLength(4) // header + the 3 people (the waiting filter does not narrow the export)
     const mentor = document.createElement('div')
     const mentorCtx = {
       ...ctx(baseServices()),

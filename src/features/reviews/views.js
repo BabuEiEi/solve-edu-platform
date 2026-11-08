@@ -3,8 +3,7 @@ import { pageHeader, emptyState, alertBox, loading } from '../../shared/ui/compo
 import { createAutosave } from '../../shared/ui/autosave.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
-import { toCsv } from '../../shared/utils/csv.js'
-import { downloadText } from '../../shared/ui/download.js'
+import { downloadTable, exportButtons } from '../../shared/ui/download.js'
 import { canAssessHint, traineeOnlyCohorts } from '../assignments/logic.js'
 import { sortedLevels } from '../rubrics/logic.js'
 import { reviewsOf } from '../submissions/logic.js'
@@ -202,7 +201,7 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
       html`<a href="#/staff/tasks" class="${backLink}">← ตรวจงาน</a>
         <div class="mt-3 flex flex-wrap items-start justify-between gap-3">
           ${pageHeader(task.title, `${cohortLabel(allocation.cohorts)} · ${task.courses?.title ?? ''}${allocation.due_at ? ` · กำหนดส่ง ${formatThaiDateTime(allocation.due_at)}` : ''}`)}
-          <button type="button" class="${secondary}" data-action="export-csv">ดาวน์โหลดผล (CSV)</button>
+          ${exportButtons({ action: 'export', label: 'ดาวน์โหลดผล', className: secondary })}
         </div>
         ${driveOn ? driveSection() : ''}
         <div class="mb-3 flex flex-wrap gap-2" role="group" aria-label="กรองตามสถานะ">
@@ -257,7 +256,7 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
               </div>`
             : emptyState('ไม่มีรายการในสถานะนี้')
         }
-        <p class="mt-2 text-xs text-ink-400">CSV มีชื่อ สถานะ จำนวนรอบ เวลาส่ง ป้ายส่งช้า และคะแนน — ไม่มีเนื้อหางานหรือไฟล์</p>`
+        <p class="mt-2 text-xs text-ink-400">ไฟล์ Excel/CSV มีชื่อ สถานะ จำนวนรอบ เวลาส่ง ป้ายส่งช้า และคะแนน — ไม่มีเนื้อหางานหรือไฟล์</p>`
     )
   }
 
@@ -271,10 +270,13 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
       runDriveExport()
       return undefined
     }
-    if (e.target.closest('button[data-action=export-csv]')) {
-      downloadText(
-        `task-${allocation.cohorts?.code ?? 'cohort'}-${allocation.id.slice(0, 8)}.csv`,
-        toCsv(reviewCsvRows(all, task))
+    const exp = e.target.closest('button[data-action=export-xlsx], button[data-action=export-csv]')
+    if (exp) {
+      downloadTable(
+        `task-${allocation.cohorts?.code ?? 'cohort'}-${allocation.id.slice(0, 8)}`,
+        reviewCsvRows(all, task),
+        exp.dataset.action.slice('export-'.length),
+        { sheetName: 'คะแนนภาระงาน' }
       )
     }
     return undefined

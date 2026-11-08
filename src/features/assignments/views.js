@@ -3,8 +3,7 @@ import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../sh
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
-import { toCsv } from '../../shared/utils/csv.js'
-import { downloadText } from '../../shared/ui/download.js'
+import { downloadTable, exportButtons } from '../../shared/ui/download.js'
 import { PURPOSE_LABELS, attemptPercent } from '../assessments/logic.js'
 import { purposeChip, resultBadge, windowText, timeLimitText } from '../assessments/views.js'
 import {
@@ -400,7 +399,7 @@ function itemAnalysis(stats) {
     return html`<section class="mt-8" data-item-analysis>${alertBox(`วิเคราะห์ข้อสอบไม่สำเร็จ: ${stats.error}`)}</section>`
   const head = html`<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
     <h2 class="text-sm font-semibold text-ink-700">วิเคราะห์ข้อสอบ</h2>
-    ${stats.suppressed ? '' : html`<button type="button" class="${secondary}" data-action="export-items">ดาวน์โหลดผลวิเคราะห์ (CSV)</button>`}
+    ${stats.suppressed ? '' : exportButtons({ action: 'export-items', label: 'ดาวน์โหลดผลวิเคราะห์', className: secondary })}
   </div>`
   if (stats.suppressed)
     return html`<section class="mt-8" data-item-analysis>
@@ -540,7 +539,7 @@ export async function renderAssignmentDetailView(el, { services, caps, context }
         <section class="mt-6">
           <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
             <h2 class="text-sm font-semibold text-ink-700">ผลรายบุคคล</h2>
-            ${rows.length ? html`<button type="button" class="${secondary}" data-action="export">ดาวน์โหลด CSV</button>` : ''}
+            ${rows.length ? exportButtons({ action: 'export', label: 'ดาวน์โหลด', className: secondary }) : ''}
           </div>
           ${canEdit ? '' : html`<p class="mb-2 text-xs text-ink-500">แสดงเฉพาะผู้เรียนที่ท่านมีสิทธิ์ดูผล</p>`}
           ${resultsTable(rows, canEdit)}
@@ -600,17 +599,23 @@ export async function renderAssignmentDetailView(el, { services, caps, context }
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return undefined
     switch (b.dataset.action) {
-      case 'export': {
+      case 'export-xlsx':
+      case 'export-csv': {
         const { rows } = summarizeResults(results, assignment)
-        return downloadText(
-          `results-${assignment.cohorts?.code ?? 'cohort'}-${assignment.id.slice(0, 8)}.csv`,
-          toCsv(resultsCsvRows(rows))
+        return downloadTable(
+          `results-${assignment.cohorts?.code ?? 'cohort'}-${assignment.id.slice(0, 8)}`,
+          resultsCsvRows(rows),
+          b.dataset.action.slice('export-'.length),
+          { sheetName: 'ผลสอบ' }
         )
       }
-      case 'export-items':
-        return downloadText(
-          `item-analysis-${assignment.cohorts?.code ?? 'cohort'}-${assignment.id.slice(0, 8)}.csv`,
-          toCsv(itemStatsCsvRows(stats))
+      case 'export-items-xlsx':
+      case 'export-items-csv':
+        return downloadTable(
+          `item-analysis-${assignment.cohorts?.code ?? 'cohort'}-${assignment.id.slice(0, 8)}`,
+          itemStatsCsvRows(stats),
+          b.dataset.action.slice('export-items-'.length),
+          { sheetName: 'วิเคราะห์ข้อสอบ' }
         )
       case 'grant-extra': {
         const reason = window.prompt(

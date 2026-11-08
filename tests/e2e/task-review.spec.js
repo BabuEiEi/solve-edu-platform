@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { test, expect } from './fixtures.js'
 import { signIn, watchCsp, sqlAs, submitAs, reviewInUi, resetTaskWork, DEMO, PEOPLE } from './helpers.js'
+import { xlsxTexts } from './xlsx-text.js'
 
 // psql also prints SET / COMMIT: the count is the one line that is only digits
 const count = (userId, sql) =>
@@ -91,6 +92,15 @@ test('trainer reviews with the rubric: queue, draft hidden from the trainee, rel
   expect(csv).toContain('ยังไม่ส่ง') // trainees who have not submitted are listed too
   expect(csv).not.toContain('งานของ ก1')
   expect(csv).not.toContain('onerror')
+
+  // Excel: the same people and scores, still no work content
+  const xlsxDownload = page.waitForEvent('download')
+  await page.getByRole('button', { name: 'ดาวน์โหลดผล (Excel)' }).click()
+  const sheet = await xlsxTexts(await (await xlsxDownload).path())
+  expect(sheet.slice(0, 3)).toEqual(['ชื่อ', 'สถานะ', 'จำนวนรอบที่ส่ง'])
+  expect(sheet.join('|')).toContain(PEOPLE.a1.name)
+  expect(sheet).toContain('ยังไม่ส่ง')
+  expect(sheet.join(' ')).not.toContain('งานของ ก1')
   expect(csp).toEqual([])
 
   // A mentor sees only their mentee (A1): one person, and A2's work is closed to them

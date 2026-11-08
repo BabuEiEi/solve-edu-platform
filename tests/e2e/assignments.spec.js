@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { test, expect } from './fixtures.js'
 import { signIn, watchCsp, IDS } from './helpers.js'
+import { xlsxTexts } from './xlsx-text.js'
 
 const QUIZ = 'a1000000-0000-4000-a000-000000000001'
 const TITLE = 'แบบทดสอบหลังเรียน (E2E)'
@@ -51,12 +52,23 @@ test('trainer assigns a posttest, follows the cohort results and exports them; a
 
   const [download] = await Promise.all([
     trainer.waitForEvent('download'),
-    trainer.getByRole('button', { name: 'ดาวน์โหลด CSV' }).click(),
+    trainer.getByRole('button', { name: 'ดาวน์โหลด (CSV)' }).click(),
   ])
   expect(download.suggestedFilename()).toMatch(/^results-C1-.+\.csv$/)
   const csv = await readFile(await download.path(), 'utf8')
   expect(csv).toContain('ครู ก1 (สมมติ)')
   expect(csv).toContain('ยังไม่เริ่ม')
+
+  // Excel: the same table as a real .xlsx file
+  const [xlsxDownload] = await Promise.all([
+    trainer.waitForEvent('download'),
+    trainer.getByRole('button', { name: 'ดาวน์โหลด (Excel)' }).click(),
+  ])
+  expect(xlsxDownload.suggestedFilename()).toMatch(/^results-C1-.+\.xlsx$/)
+  const sheet = await xlsxTexts(await xlsxDownload.path())
+  expect(sheet.slice(0, 2)).toEqual(['ชื่อ', 'สถานะ'])
+  expect(sheet).toContain('ครู ก1 (สมมติ)')
+  expect(sheet).toContain('ยังไม่เริ่ม')
 
   // Deadline stays editable after attempts
   await trainer.locator('form[data-form=assignment] [name=attempt_limit]').fill('2')
