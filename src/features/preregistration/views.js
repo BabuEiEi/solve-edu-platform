@@ -108,7 +108,7 @@ export async function renderImportView(el, { services, context, caps }) {
         </div>
       </div>
       <p class="text-xs text-ink-500 sm:col-span-2">
-        แถวแรกเป็นหัวตาราง ต้องมีคอลัมน์ <code>email</code> และอาจมี <code>full_name</code> · สูงสุด ${MAX_ROWS} แถว ·
+        แถวแรกเป็นหัวตาราง ต้องมีคอลัมน์ <code>email</code> และอาจมี <code>full_name</code> กับ <code>user_code</code> (รหัสประจำตัว ไม่ซ้ำกัน; ถ้าคนนั้นมีรหัสอยู่แล้วหรือรหัสถูกใช้แล้ว ระบบไม่เขียนทับ) · สูงสุด ${MAX_ROWS} แถว ·
         ใช้ข้อมูลสมมติ (<code>*.example.test</code>) เมื่อทดสอบ
       </p>
       <div class="sm:col-span-2">
@@ -139,7 +139,7 @@ export async function renderImportView(el, { services, context, caps }) {
           <div class="max-h-96 overflow-auto">
             <table class="min-w-full divide-y divide-ink-100 text-sm">
               <thead class="bg-ink-50 text-left text-xs text-ink-500">
-                <tr><th class="px-4 py-2">แถว</th><th class="px-4 py-2">อีเมล</th><th class="px-4 py-2">ชื่อ</th><th class="px-4 py-2">ผลตรวจ</th></tr>
+                <tr><th class="px-4 py-2">แถว</th><th class="px-4 py-2">อีเมล</th><th class="px-4 py-2">ชื่อ</th><th class="px-4 py-2">รหัส</th><th class="px-4 py-2">ผลตรวจ</th></tr>
               </thead>
               <tbody class="divide-y divide-ink-100">
                 ${analysis.rows.map(
@@ -148,6 +148,7 @@ export async function renderImportView(el, { services, context, caps }) {
                       <td class="px-4 py-2 text-ink-400">${r.line}</td>
                       <td class="px-4 py-2">${r.email || '—'}</td>
                       <td class="px-4 py-2">${r.full_name || '—'}</td>
+                      <td class="px-4 py-2 font-mono text-xs">${r.user_code || '—'}</td>
                       <td class="px-4 py-2 ${r.errors.length ? 'text-rose-700' : 'text-emerald-700'}">
                         ${r.errors.length ? r.errors.join(' · ') : '✓ พร้อมนำเข้า'}
                       </td>
@@ -170,7 +171,7 @@ export async function renderImportView(el, { services, context, caps }) {
                 ${pending.map(
                   (p) =>
                     html`<tr>
-                      <td class="px-4 py-2 font-medium text-ink-800">${p.email}<span class="block text-xs font-normal text-ink-400">${p.full_name}</span></td>
+                      <td class="px-4 py-2 font-medium text-ink-800">${p.email}<span class="block text-xs font-normal text-ink-400">${p.full_name}${p.user_code ? ` · ${p.user_code}` : ''}</span></td>
                       <td class="px-4 py-2 text-ink-600">${p.organizations?.name ?? ''}<span class="block text-xs text-ink-400">${ROLE_LABELS[p.org_role]}${p.cohorts ? ` · ${p.cohorts.name}` : ''}</span></td>
                       <td class="px-4 py-2 text-xs text-ink-500">${formatThaiDateTime(p.created_at)}</td>
                       <td class="px-4 py-2">${statusBadge('pending')}</td>

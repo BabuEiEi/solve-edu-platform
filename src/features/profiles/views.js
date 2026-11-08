@@ -172,6 +172,23 @@ export async function renderPendingScreen(root, { context, services, auth, refre
   draw()
 }
 
+export function renderDeletedScreen(root, { auth, refresh }) {
+  render(
+    root,
+    centeredCard(html`
+      <h1 class="text-xl font-semibold text-ink-900">บัญชีนี้ถูกลบแล้ว</h1>
+      <p class="mt-3 text-sm text-ink-600">ข้อมูลส่วนตัวของบัญชีนี้ถูกลบตามคำขอแล้ว หากต้องการใช้งานอีกครั้ง กรุณาสมัครใหม่</p>
+      <button data-action="sign-out" class="${primaryBtn} mt-6">ออกจากระบบ</button>
+    `)
+  )
+  root.onclick = async (e) => {
+    if (e.target.closest('[data-action="sign-out"]')) {
+      await auth.signOut()
+      refresh()
+    }
+  }
+}
+
 export function renderSuspendedScreen(root, { auth, refresh }) {
   render(
     root,

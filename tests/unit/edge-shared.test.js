@@ -127,7 +127,7 @@ describe('auth', () => {
 })
 
 describe('cleanup logic', () => {
-  function fakes({ orphans = [], stale = [], removeResult } = {}) {
+  function fakes({ orphans = [], stale = [], media = [], removeResult } = {}) {
     const calls = []
     const db = {
       rpc: vi.fn(async (name, args) => {
@@ -137,6 +137,8 @@ describe('cleanup logic', () => {
         if (name === 'task_files_cleanup_stale_drafts')
           return { data: stale.map((p) => ({ object_path: p })), error: null }
         if (name === 'task_files_cleanup_record') return { data: args.p_paths.length, error: null }
+        if (name === 'media_cleanup_orphans') return { data: media, error: null }
+        if (name === 'media_cleanup_record') return { data: args.p_paths.length, error: null }
         throw new Error(name)
       }),
     }
@@ -151,7 +153,7 @@ describe('cleanup logic', () => {
   it('dry run: lists, deletes nothing, logs nothing', async () => {
     const f = fakes({ orphans: ['s/a.pdf'], stale: ['d/b.pdf'] })
     const out = await runCleanup({ db: f.db, bucket: f.bucket, dryRun: true })
-    expect(out).toEqual({ dry_run: true, orphans: ['s/a.pdf'], stale_draft_files: ['d/b.pdf'] })
+    expect(out).toEqual({ dry_run: true, orphans: ['s/a.pdf'], stale_draft_files: ['d/b.pdf'], media: [] })
     expect(f.bucket.remove).not.toHaveBeenCalled()
     expect(f.calls.find(([n]) => n === 'task_files_cleanup_stale_drafts')[1].p_dry_run).toBe(true)
     expect(f.calls.some(([n]) => n === 'task_files_cleanup_record')).toBe(false)
@@ -172,6 +174,8 @@ describe('cleanup logic', () => {
       stale_draft_files_removed: 1,
       orphans_removed: 1,
       orphans_logged: 1,
+      media_removed: 0,
+      media_logged: 0,
       failed: ['s/kept.pdf'],
     })
     expect(f.calls.find(([n]) => n === 'task_files_cleanup_record')[1]).toEqual({ p_paths: ['s/a.pdf'] })
@@ -195,6 +199,45 @@ describe('cleanup logic', () => {
     expect(f.bucket.remove.mock.calls.map(([p]) => p.length)).toEqual([100, 100, 50])
     expect(out.stale_draft_files_removed).toBe(250)
     expect(f.calls.some(([n]) => n === 'task_files_cleanup_record')).toBe(false)
+  })
+
+  it('media of deleted lessons and quizzes: listed in a dry run, removed per bucket, logged', async () => {
+    const media = [
+      { bucket_id: 'lesson-media', object_path: 'L1/a.png' },
+      { bucket_id: 'assessment-media', object_path: 'Q1/b.png' },
+      { bucket_id: 'lesson-media', object_path: 'L1/c.png' },
+    ]
+    const buckets = {}
+    const storageFrom = vi.fn((id) => {
+      buckets[id] ??= {
+        remove: vi.fn(async (paths) => ({ data: paths.map((name) => ({ name })), error: null })),
+      }
+      return buckets[id]
+    })
+    const dry = fakes({ media })
+    expect((await runCleanup({ db: dry.db, bucket: dry.bucket, storageFrom, dryRun: true })).media).toEqual([
+      'lesson-media/L1/a.png',
+      'assessment-media/Q1/b.png',
+      'lesson-media/L1/c.png',
+    ])
+    expect(storageFrom).not.toHaveBeenCalled()
+    const f = fakes({ media })
+    const out = await runCleanup({ db: f.db, bucket: f.bucket, storageFrom })
+    expect(out).toMatchObject({ media_removed: 3, media_logged: 3, failed: [] })
+    expect(buckets['lesson-media'].remove).toHaveBeenCalledWith(['L1/a.png', 'L1/c.png'])
+    expect(buckets['assessment-media'].remove).toHaveBeenCalledWith(['Q1/b.png'])
+    expect(f.calls.filter(([n]) => n === 'media_cleanup_record').map(([, a]) => a.p_bucket)).toEqual([
+      'lesson-media',
+      'assessment-media',
+    ])
+    expect(f.bucket.remove).not.toHaveBeenCalled() // task-files untouched by media
+  })
+
+  it('without storageFrom, media is not even asked for', async () => {
+    const f = fakes({ media: [{ bucket_id: 'lesson-media', object_path: 'L/x.png' }] })
+    const out = await runCleanup({ db: f.db, bucket: f.bucket })
+    expect(out.media_removed).toBe(0)
+    expect(f.calls.some(([n]) => n === 'media_cleanup_orphans')).toBe(false)
   })
 
   it('a database error stops the run before anything is deleted', async () => {

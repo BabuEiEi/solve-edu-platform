@@ -24,6 +24,7 @@ import { createTaskService } from './features/tasks/service.js'
 import { createSubmissionService } from './features/submissions/service.js'
 import { createReviewService } from './features/reviews/service.js'
 import { createDriveService } from './features/drive/service.js'
+import { createDeletionService } from './features/deletion/service.js'
 import { createNoticeService } from './features/notices/service.js'
 import { renderReviewQueueView, renderTaskPeopleView, renderReviewView } from './features/reviews/views.js'
 import { renderMyTasksView, renderTaskPageView } from './features/submissions/views.js'
@@ -39,9 +40,11 @@ import {
   renderAuthScreen,
   renderPendingScreen,
   renderSuspendedScreen,
+  renderDeletedScreen,
   renderProfileView,
 } from './features/profiles/views.js'
 import { renderApprovalsView } from './features/admin/views.js'
+import { renderAccountsView } from './features/admin/accounts.js'
 import { renderImportView } from './features/preregistration/views.js'
 import { renderProgramsView } from './features/programs/views.js'
 import { renderCoursesView, renderCourseOutlineView } from './features/courses/views.js'
@@ -91,6 +94,7 @@ const routes = compileRoutes([
   { path: '/staff/assessments/new/:versionId', view: renderNewAssignmentView, allow: (c) => c.isActive },
   { path: '/staff/assessments/:id', view: renderAssignmentDetailView, allow: (c) => c.isActive },
   { path: '/admin/approvals', view: renderApprovalsView, allow: (c) => c.canApproveUsers },
+  { path: '/admin/accounts', view: renderAccountsView, allow: (c) => c.canApproveUsers },
   { path: '/admin/import', view: renderImportView, allow: (c) => c.canApproveUsers },
 ])
 
@@ -128,6 +132,7 @@ async function boot() {
     submissions: createSubmissionService(supabase),
     reviews: createReviewService(supabase),
     drive: createDriveService(supabase),
+    deletion: createDeletionService(supabase),
     notices: createNoticeService(supabase),
     assignments: createAssignmentService(supabase),
     assessmentMedia: createMediaService(supabase, 'assessment-media'),
@@ -161,6 +166,7 @@ async function boot() {
     }
     state.caps = deriveCapabilities(state.context)
     const ctx = { ...state, services, auth, refresh: () => refresh() }
+    if (state.caps.isDeleted) return renderDeletedScreen(root, ctx)
     if (state.caps.isSuspended) return renderSuspendedScreen(root, ctx)
     if (state.caps.isPending) return renderPendingScreen(root, ctx)
     route()

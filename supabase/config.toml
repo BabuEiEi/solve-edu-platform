@@ -411,6 +411,12 @@ enabled = true
 verify_jwt = false
 entrypoint = "./functions/drive-export-task/index.js"
 
+# Called by the page (platform admin's own token); checks the token itself.
+[functions.delete-account]
+enabled = true
+verify_jwt = false
+entrypoint = "./functions/delete-account/index.js"
+
 [analytics]
 enabled = true
 port = 54327

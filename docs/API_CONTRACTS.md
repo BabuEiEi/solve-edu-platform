@@ -173,6 +173,19 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | ส่งสำเนาไป Google Drive (หน้าเว็บ) | `functions.invoke('drive-export-task', {body: {allocation_id}})` | 200 `{run_id, status: done\|partial\|failed, copied, skipped, failed, remaining, folder_url}` · 400 `bad_request` · 401 · 403 `forbidden` · 409 `already_running` · 500 `not_configured` (ยังไม่ได้ตั้ง Google) / `internal` · `partial` + `remaining` > 0 = กดอีกครั้งเพื่อส่งต่อ |
 | บันทึกการส่งสำเนา | `from('task_drive_exports').select('id, started_at, finished_at, status, files_copied, files_skipped, files_failed, drive_folder_id, requested_by').eq('allocation_id', …)` · `from('task_drive_copies').select('file_id, copied_at')` | ผู้ตรวจของรุ่นเท่านั้น · RPC `begin_task_drive_export` (เรียกผ่าน function) SE008 = กำลังส่งอยู่ |
 
+## 2.8 Phase 4a — การจัดการ
+
+| งาน | เรียก | หมายเหตุ |
+|---|---|---|
+| รายชื่อบัญชี (หน้า จัดการบัญชี) | `rpc('admin_list_accounts', {p_search, p_status, p_limit: 50, p_offset})` → `{total, rows: [{id, full_name, display_name, user_code, email, status, created_at, last_sign_in_at, requested_org, orgs: [{name, role}], platform_roles, is_self, can_edit, can_manage, can_delete}]}` | เฉพาะคนในขอบเขต · 42501 = ไม่ใช่ผู้ดูแล · 22023 = สถานะ/ขนาดหน้าผิด |
+| แก้ชื่อ/รหัสประจำตัวของผู้ใช้ | `rpc('admin_update_profile', {p_target, p_full_name, p_display_name, p_user_code})` → `{id, full_name, display_name, user_code}` | ช่องว่าง = ล้างค่า · 42501 = นอกขอบเขต · 23505 = รหัสซ้ำ (ไม่สนตัวพิมพ์) · 23514 = รูปแบบรหัสผิด/ไม่มีชื่อ |
+| อ่านรหัสประจำตัว | `from('profiles').select('id, full_name, display_name, user_code, status, …')` | เห็นเท่าที่เห็นโปรไฟล์ได้ (RLS เดิม) |
+| นำเข้ารายชื่อพร้อมรหัส | `from('preregistrations').insert({…, user_code})` | ใส่ให้โปรไฟล์ตอนผูกบัญชี ถ้ายังไม่มีรหัสและรหัสยังว่าง |
+| ลบได้ไหม / เพราะอะไร | `rpc('deletion_usage', {p_kind: 'course'\|'instrument'\|'task', p_id})` → `{can_delete, reasons: {enrollments?, attempts?, submissions?, drive_exports?, rubric_tasks?, rubric_tasks_elsewhere?, reviews?}}` | นับเฉพาะเหตุที่มี · 42501 = ไม่ใช่ผู้จัดการ |
+| ลบ | `rpc('delete_course', {p_course, p_confirm: code})` · `rpc('delete_instrument', {p_instrument, p_confirm: code})` · `rpc('delete_task', {p_task, p_confirm: title})` → `{deleted, removed: {…}}` | SE009 = มีผู้ใช้แล้ว (ให้เก็บถาวรแทน; รายละเอียดใน detail) · 22023 = ยืนยันไม่ตรง · 23503 = มีผู้เริ่มใช้ระหว่างลบ (ลองใหม่จะได้ SE009) |
+| เก็บถาวร/นำกลับมาใช้ แบบทดสอบหรือ Rubric | `from('instruments').update({status: 'archived'\|'active'}).eq('id', …)` | สิทธิ์ผู้จัดการ (RLS เดิม) · ฐานข้อมูลยังไม่ห้ามมอบหมายแบบทดสอบที่เก็บถาวร (หน้าจอซ่อนปุ่มไว้) |
+| ลบบัญชี (หน้าเว็บ) | `functions.invoke('delete-account', {body: {user_id, confirm_email}})` → `{deleted, already_deleted, sign_in: removed\|already_removed, avatars_removed}` | ผู้ดูแลระบบเท่านั้น · 400 `confirm_mismatch` · 403 `forbidden` · 404 `not_found` · 502 `sign_in_not_removed` (ข้อมูลส่วนตัวหายแล้ว กดอีกครั้ง) · กดซ้ำได้ |
+
 ## 3. Error mapping (`src/core/errors.js`)
 
 | code | ข้อความผู้ใช้ |

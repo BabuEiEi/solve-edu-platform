@@ -9,6 +9,7 @@ import {
 } from '../../shared/ui/components.js'
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
+import { watchDeleteZones } from '../deletion/zone.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { PURPOSE_LABELS } from '../assessments/logic.js'
 import { moveId, nextOrder } from '../builder/service.js'
@@ -105,9 +106,11 @@ export async function renderCourseQuizzesView(el, { services }, { id }) {
         ${
           quizzes.length
             ? html`<ul class="space-y-3">
-                ${quizzes.map((q) => {
-                  const current = defaultVersion(q.instrument_versions)
-                  return html`<li>
+                ${[...quizzes]
+                  .sort((a, b) => (a.status === 'archived') - (b.status === 'archived'))
+                  .map((q) => {
+                    const current = defaultVersion(q.instrument_versions)
+                    return html`<li>
                     <a
                       href="#/courses/${course.id}/quizzes/${q.id}"
                       class="flex flex-wrap items-center gap-3 rounded-xl border border-ink-200 bg-white px-5 py-4 hover:border-brand-300"
@@ -117,9 +120,10 @@ export async function renderCourseQuizzesView(el, { services }, { id }) {
                         <span class="text-xs text-ink-500">${q.code}</span>
                       </span>
                       ${current ? html`<span class="text-sm text-ink-500">${versionLabel(current)}</span>${statusBadge(current.status)}` : ''}
+                      ${q.status === 'archived' ? html`<span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-inset ring-slate-500/20" data-archived-badge>เก็บถาวร</span>` : ''}
                     </a>
                   </li>`
-                })}
+                  })}
               </ul>`
             : emptyState('ยังไม่มีแบบทดสอบในหลักสูตรนี้')
         }
@@ -446,8 +450,17 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     </section>`
   }
 
+  const archivedBar = () =>
+    instrument.status === 'archived'
+      ? html`<div class="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900" data-archived>
+          <span>แบบทดสอบนี้เก็บถาวรแล้ว (ซ่อนจากรายการ) ผลที่เกิดขึ้นแล้วยังอยู่ครบ</span>
+          <button type="button" class="${secondary}" data-action="unarchive">นำกลับมาใช้</button>
+        </div>`
+      : ''
+
   const assignmentPanel = () => {
-    const canAssign = version?.status === 'published' && services.assignments
+    const canAssign =
+      version?.status === 'published' && instrument.status !== 'archived' && services.assignments
     if (!canAssign && assignments.length === 0) return ''
     return html`<section class="rounded-xl border border-ink-200 bg-white p-4 text-sm" data-assignments>
       <div class="flex flex-wrap items-center justify-between gap-2">
@@ -574,6 +587,7 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
       el,
       html`<a href="#/courses/${courseId}/quizzes" class="text-sm text-brand-700 hover:underline">← แบบทดสอบของหลักสูตร</a>
         <div class="mt-3">${pageHeader(instrument.title, `${instrument.code} · ${course.title}`)}</div>
+        ${archivedBar()}
         ${message ? html`<div class="mb-4">${alertBox(message, tone)}</div>` : ''}
         <div class="space-y-4">
           ${versionBar()} ${statusPanel()} ${assignmentPanel()}
@@ -601,6 +615,7 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
                   </div>`
               : ''
           }
+          <section class="pt-6" data-delete-zone data-kind="instrument" data-id="${instrument.id}"></section>
         </div>`
     )
 
@@ -622,6 +637,26 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
       draw()
     }
   }
+
+  // "ลบแบบทดสอบ": unused → delete with the typed code; used → reasons + archive
+  watchDeleteZones(el, {
+    services,
+    config: () => ({
+      confirmWord: instrument.code,
+      archive:
+        instrument.status === 'archived'
+          ? null
+          : {
+              label: 'เก็บถาวรแบบทดสอบ',
+              run: () =>
+                run(
+                  () => services.quizzes.setInstrumentStatus(instrument.id, 'archived'),
+                  'เก็บถาวรแบบทดสอบแล้ว'
+                ),
+            },
+      onDeleted: () => navigate(`/courses/${courseId}/quizzes`),
+    }),
+  })
 
   const upload = async (file) =>
     file && typeof file === 'object' && file.size > 0
@@ -833,6 +868,11 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         }, 'สร้างฉบับร่างใหม่แล้ว (คัดลอกข้อและเฉลยจากฉบับเดิม)')
       case 'clean-media':
         return cleanMedia()
+      case 'unarchive':
+        return run(
+          () => services.quizzes.setInstrumentStatus(instrument.id, 'active'),
+          'นำแบบทดสอบกลับมาใช้แล้ว'
+        )
     }
     return undefined
   }

@@ -162,6 +162,10 @@ describe('task pages', () => {
     builder: { getCourseTree: async () => course },
     quizzes: { listForCourse: vi.fn(async () => rubrics) },
     assignments: { listCohortsForCourse: vi.fn(async () => cohorts) },
+    deletion: {
+      usage: vi.fn(async () => ({ can_delete: true, reasons: {} })),
+      remove: vi.fn(async () => ({ deleted: true })),
+    },
     tasks: {
       listForCourse: vi.fn(async () => [t]),
       get: vi.fn(async () => t),
@@ -190,6 +194,7 @@ describe('task pages', () => {
     const el = document.createElement('div')
     document.body.append(el)
     await renderTaskDetailView(el, ctx(services), { id: 'K', taskId: 'T1' })
+    await settle() // the delete zone asks the database whether anyone has used the task
     return el
   }
 
@@ -239,7 +244,10 @@ describe('task pages', () => {
     const el = await open(services)
     expect(el.querySelector('img')).toBeNull()
     expect(el.querySelector('[data-allocations]').textContent).toContain('เผยแพร่ภาระงานก่อน')
-    expect(el.querySelector('[data-action=delete-task]')).not.toBeNull()
+    expect(el.querySelector('[data-action=delete-task]')).toBeNull() // replaced by the shared delete zone
+    expect(
+      el.querySelector('[data-delete-zone][data-kind=task][data-id=T1] [data-zone-action=open]')
+    ).not.toBeNull()
     el.querySelector('input[name=max_attempts]').value = '2'
     el.querySelector('form[data-form=task]').requestSubmit()
     await settle()
@@ -253,12 +261,43 @@ describe('task pages', () => {
     expect(services.tasks.update).toHaveBeenLastCalledWith('T1', { status: 'published' })
   })
 
+  it('delete zone: typing the exact title deletes an unused task and goes back to the list', async () => {
+    const services = makeServices()
+    const el = await open(services)
+    el.querySelector('[data-zone-action=open]').click()
+    const typed = el.querySelector('input[name=confirm]')
+    typed.value = 'ส่งแผนการสอน'
+    typed.dispatchEvent(new Event('input', { bubbles: true }))
+    expect(el.querySelector('[data-zone-confirm]').disabled).toBe(true) // not the whole title
+    const { title } = await services.tasks.get()
+    typed.value = title
+    typed.dispatchEvent(new Event('input', { bubbles: true }))
+    el.querySelector('[data-zone-form]').dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true })
+    )
+    await settle()
+    expect(services.deletion.remove).toHaveBeenCalledWith('task', 'T1', title)
+    expect(window.location.hash).toBe('#/courses/K/tasks')
+  })
+
+  it('delete zone: a task somebody started shows why it cannot go, and offers archive', async () => {
+    const t = task({ status: 'published' })
+    const services = makeServices(t)
+    services.deletion.usage.mockResolvedValue({ can_delete: false, reasons: { submissions: 2 } })
+    const el = await open(services)
+    const zone = el.querySelector('[data-delete-zone]')
+    expect(zone.textContent).toContain('มีงานที่ผู้เรียนเริ่มหรือส่งแล้ว 2 รอบ')
+    expect(zone.querySelector('[data-zone-action=open]')).toBeNull()
+    zone.querySelector('[data-zone-action=archive]').click()
+    await settle()
+    expect(services.tasks.update).toHaveBeenLastCalledWith('T1', { status: 'archived' })
+  })
+
   it('published: open to a cohort with dates (Bangkok time), change the dates, withdraw', async () => {
     const t = task({ status: 'published' })
     const services = makeServices(t)
     vi.spyOn(window, 'confirm').mockReturnValue(true)
     const el = await open(services)
-    expect(el.querySelector('[data-action=delete-task]')).toBeNull()
     const form = el.querySelector('form[data-form=new-allocation]')
     expect(form.querySelectorAll('select[name=cohort_id] option')).toHaveLength(2)
     form.querySelector('select[name=cohort_id]').value = 'C1'

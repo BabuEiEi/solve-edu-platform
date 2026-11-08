@@ -39,6 +39,20 @@ export function createQuizBuilderService(client) {
       return (rows ?? []).map(sortVersions)
     },
 
+    /** Hide (archived) or bring back (active) a quiz or rubric; results already given stay. */
+    async setInstrumentStatus(instrumentId, status) {
+      if (!['active', 'archived'].includes(status)) throw new AppError('สถานะไม่ถูกต้อง')
+      return unwrap(
+        await client
+          .from('instruments')
+          .update({ status })
+          .eq('id', instrumentId)
+          .select('id, status')
+          .single(),
+        'quizzes.set_status'
+      )
+    },
+
     async getInstrument(instrumentId) {
       return sortVersions(
         unwrap(

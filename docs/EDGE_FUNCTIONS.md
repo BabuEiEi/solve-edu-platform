@@ -29,6 +29,7 @@
 | เรียกโดย | ตัวตั้งเวลา (pg_cron + pg_net) · `POST` · header `x-cron-secret: <CRON_SECRET>` |
 | `POST {}` | ลบ (1) ไฟล์ใน `task-files` ที่ไม่มีแถวในงานส่งและเก่ากว่า 24 ชม. (2) ไฟล์ของ **ร่าง** ที่ไม่มีใครแตะเกิน 30 วัน (ข้อความ ลิงก์ และไฟล์) → `{stale_draft_files_removed, orphans_removed, orphans_logged, failed[]}` |
 | `POST {"dry_run": true}` | แสดงรายการที่จะลบ ไม่ลบอะไร → `{orphans[], stale_draft_files[]}` |
+| สื่อของรายการที่ถูกลบ (4a) | รูปใน `lesson-media` / `assessment-media` ที่บทเรียนหรือแบบทดสอบเจ้าของถูกลบแล้ว (เก่ากว่า 24 ชม.) — ลบแล้วบันทึก audit · ผลเพิ่ม `media_removed`, `media_logged` (dry run: `media[]`) |
 | ไม่แตะ | งานที่ส่งแล้ว (ไม่ว่าเก่าแค่ไหน) · ไฟล์ที่เพิ่งอัปโหลด (< 24 ชม., แถวอาจกำลังจะตามมา) · ร่างที่มีไฟล์ใหม่ภายใน 30 วัน · bucket อื่น |
 | บันทึก | `private.audit_logs` ทุกไฟล์ที่ลบ (`reason` ขึ้นต้น `cleanup:`; ร่าง: แถวไฟล์เดิมทั้งแถว · ไฟล์ค้าง: เฉพาะที่หายจาก storage จริง) |
 | ล้มเหลวกลางทาง | ร่าง: ลบแถวก่อน แล้วลบไฟล์ — ไฟล์ที่ลบไม่สำเร็จกลายเป็น "ไฟล์ค้าง" และถูกลบคืนถัดไป · ข้อผิดพลาดของฐานข้อมูลหยุดก่อนลบไฟล์ใด ๆ |
@@ -115,3 +116,13 @@ $$);
 3. ตรวจว่ามี `SUPABASE_ANON_KEY` (หรือ `SUPABASE_PUBLISHABLE_KEY`) และ `SUPABASE_SERVICE_ROLE_KEY` ใน Secrets (Supabase ใส่ให้เอง)
 4. ลองกับภาระงานที่มีงานส่งไม่กี่ชิ้น → เปิด `folder_url` ตรวจโครงโฟลเดอร์ → กดซ้ำ ต้องได้ `copied: 0`
 5. ปิดการใช้งาน: ลบ secret `GOOGLE_SERVICE_ACCOUNT_JSON` (function ตอบ `not_configured`) หรือ disable key ที่ Google Cloud
+
+## `delete-account` — ลบบัญชี เก็บผลแบบไม่ระบุตัว (Phase 4a)
+
+| | |
+|---|---|
+| เรียกโดย | หน้าเว็บ เมื่อผู้ดูแลระบบลบบัญชี · `POST {"user_id", "confirm_email"}` · token ของผู้กดเอง |
+| ลำดับ | (1) `admin_delete_account` **ในนามผู้กด** — ฐานข้อมูลตัดสินสิทธิ์และลบข้อมูลส่วนตัวในธุรกรรมเดียว บัญชีถูกปิดทุกทางทันที (สถานะ `deleted`) · (2) soft delete ใน Supabase Auth ด้วยกุญแจ server — อีเมลและการผูก Google ถูกแทนด้วยค่าแฮช session ถูกตัด แถวยังอยู่เพื่อให้ผลผูกกับโปรไฟล์ที่ไม่ระบุตัว · (3) ลบรูปใน `avatars/<id>/` |
+| กดซ้ำ | ปลอดภัย: ฐานข้อมูลตอบ `already_deleted` แล้วทำขั้น 2–3 ซ้ำ (ใช้เมื่อได้ 502) |
+| ทดสอบ | `tests/functions/delete-account.test.js` — สมัครผ่าน Auth จริง อัปโหลดรูป ลบ แล้วยืนยันว่าเข้าสู่ระบบไม่ได้ อีเมล/ข้อมูลเพิ่มเติมหาย รูปหาย กดซ้ำได้ อีเมลเดิมสมัครใหม่ได้ |
+| ติดตั้ง | `npx supabase functions deploy delete-account --project-ref <ref>` (ต้องมี `ALLOWED_ORIGINS`) |

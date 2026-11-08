@@ -50,16 +50,18 @@
 | `avatar_path` | text |  |  | Storage object path (private bucket) — ไม่ใช่ public URL |
 | `contact_email` | text |  |  | อีเมลติดต่อ — ไม่ GRANT SELECT ให้ client; อ่านผ่าน get_profile_contact() |
 | `requested_org_id` | uuid |  |  | สถานศึกษาที่ผู้สมัครขอสังกัด ใช้กำหนดผู้มีสิทธิ์อนุมัติ; แก้ได้เฉพาะช่วง pending |
-| `status` | text | ✓ | `'pending'::text` | pending\|active\|suspended — เปลี่ยนได้ผ่าน admin_set_profile_status() เท่านั้น |
+| `status` | text | ✓ | `'pending'::text` | pending\|active\|suspended\|deleted — deleted = ลบบัญชีแล้ว (ไม่ระบุตัว ย้อนคืนไม่ได้) · เปลี่ยนสถานะอื่นผ่าน admin_set_profile_status |
 | `created_at` | timestamp with time zone | ✓ | `now()` |  |
 | `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+| `user_code` | text |  |  | รหัสประจำตัว (เช่น รหัสครู) ไม่ซ้ำ ไม่สนตัวพิมพ์ · ผู้ดูแลกำหนด (admin_update_profile) หรือมาจากการนำเข้ารายชื่อ · ไม่ใช้เข้าสู่ระบบ |
 
 **Constraints**
 
 - `profiles_avatar_path_own_folder`: `CHECK (((avatar_path IS NULL) OR (avatar_path ~~ ((id)::text \|\| '/%'::text))))`
 - `profiles_display_name_len`: `CHECK (((display_name IS NULL) OR (char_length(display_name) <= 100)))`
 - `profiles_full_name_len`: `CHECK ((char_length(full_name) <= 200))`
-- `profiles_status_check`: `CHECK ((status = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text])))`
+- `profiles_status_check`: `CHECK ((status = ANY (ARRAY['pending'::text, 'active'::text, 'suspended'::text, 'deleted'::text])))`
+- `profiles_user_code_format`: `CHECK (((user_code IS NULL) OR (user_code ~ '^[0-9A-Za-zก-๙._-]{1,50}$'::text)))`
 - `profiles_id_fkey`: `FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE`
 - `profiles_requested_org_fk`: `FOREIGN KEY (requested_org_id) REFERENCES organizations(id) ON DELETE SET NULL`
 - `profiles_pkey`: `PRIMARY KEY (id)`
@@ -68,6 +70,7 @@
 
 - `CREATE INDEX profiles_requested_org_idx ON public.profiles USING btree (requested_org_id)`
 - `CREATE INDEX profiles_status_idx ON public.profiles USING btree (status)`
+- `CREATE UNIQUE INDEX profiles_user_code_unique ON public.profiles USING btree (lower(user_code)) WHERE (user_code IS NOT NULL)`
 
 ## organizations
 
@@ -469,6 +472,7 @@
 | `created_at` | timestamp with time zone | ✓ | `now()` |  |
 | `claimed_by` | uuid |  |  |  |
 | `claimed_at` | timestamp with time zone |  |  |  |
+| `user_code` | text |  |  | รหัสประจำตัวจากไฟล์นำเข้า · ใส่ให้โปรไฟล์ตอนผูกบัญชี ถ้าโปรไฟล์ยังไม่มีรหัสและรหัสนี้ยังไม่ถูกใช้ |
 
 **Constraints**
 
@@ -477,6 +481,7 @@
 - `prereg_email_format`: `CHECK (((email ~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'::text) AND (char_length(email) <= 254)))`
 - `prereg_email_normalised`: `CHECK ((email = lower(btrim(email))))`
 - `prereg_name_len`: `CHECK ((char_length(full_name) <= 200))`
+- `prereg_user_code_format`: `CHECK (((user_code IS NULL) OR (user_code ~ '^[0-9A-Za-zก-๙._-]{1,50}$'::text)))`
 - `preregistrations_cohort_role_check`: `CHECK ((cohort_role = ANY (ARRAY['trainee'::text, 'trainer'::text, 'mentor'::text, 'coordinator'::text])))`
 - `preregistrations_org_role_check`: `CHECK ((org_role = ANY (ARRAY['district_admin'::text, 'supervisor'::text, 'school_admin'::text, 'teacher'::text])))`
 - `preregistrations_status_check`: `CHECK ((status = ANY (ARRAY['pending'::text, 'claimed'::text, 'cancelled'::text])))`

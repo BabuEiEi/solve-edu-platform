@@ -38,6 +38,8 @@ function sql(text) {
     { input: text, encoding: 'utf8' }
   ).trim()
 }
+const mediaCount = (path) =>
+  sql(`select count(*) from storage.objects where bucket_id = 'assessment-media' and name = '${path}';`)
 const exists = (path) =>
   sql(`select count(*) from storage.objects where bucket_id = 'task-files' and name = '${path}';`) === '1'
 
@@ -107,6 +109,16 @@ update storage.objects set created_at = now() - interval '40 days'
  where bucket_id = 'task-files' and name in ('${p.old}', '${p.lost}', '${p.sent}');
 commit;`)
     p.d1 = d1
+
+    // Phase 4a: a quiz that nobody used is deleted; its image becomes media of a deleted owner
+    p.media = 'a1000000-0000-4000-a000-000000000002/afl-cycle.png'
+    const del = await supabaseAs(env, 'district_admin').rpc('delete_instrument', {
+      p_instrument: 'a1000000-0000-4000-a000-000000000002',
+      p_confirm: 'AFL-102-TYPES',
+    })
+    expect(del.error).toBeNull()
+    sql(`update storage.objects set created_at = now() - interval '2 days'
+          where bucket_id = 'assessment-media' and name = '${p.media}';`)
   })
 
   it('refuses callers without the secret, and other methods', async () => {
@@ -121,8 +133,14 @@ commit;`)
   it('dry run lists exactly the old orphan and the idle draft file, and removes nothing', async () => {
     const res = await call({ dry_run: true })
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ dry_run: true, orphans: [p.lost], stale_draft_files: [p.old] })
+    expect(await res.json()).toEqual({
+      dry_run: true,
+      orphans: [p.lost],
+      stale_draft_files: [p.old],
+      media: [`assessment-media/${p.media}`],
+    })
     expect([p.old, p.lost, p.uploading, p.active, p.sent].every(exists)).toBe(true)
+    expect(mediaCount(p.media)).toBe('1') // the image too stays until the real run
   })
 
   it('the real run removes them through the Storage API and keeps everything else', async () => {
@@ -133,9 +151,12 @@ commit;`)
       stale_draft_files_removed: 1,
       orphans_removed: 1,
       orphans_logged: 1,
+      media_removed: 1,
+      media_logged: 1,
       failed: [],
     })
     expect(exists(p.old)).toBe(false)
+    expect(mediaCount(p.media)).toBe('0') // the deleted quiz's image is gone from Storage
     expect(exists(p.lost)).toBe(false)
     expect(exists(p.uploading)).toBe(true) // fresh upload, row may still come
     expect(exists(p.active)).toBe(true)
