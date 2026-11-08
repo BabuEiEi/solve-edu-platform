@@ -14,6 +14,8 @@ import {
   renderReviewView,
 } from '../../src/features/reviews/views.js'
 import { AppError } from '../../src/core/errors.js'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { confirmDialog } from '../../src/shared/ui/dialog.js'
 
 const XSS = '<img src=x onerror=alert(1)>'
 const settle = async () => {
@@ -361,12 +363,12 @@ describe('pages', () => {
     expect(el.querySelector('[data-work]').textContent).toContain(XSS)
     pick(el, 'c1', 'b')
     el.querySelector('input[name=outcome][value=passed]').checked = true
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('button[data-intent=release]').click()
     await settle()
     expect(el.querySelector('[data-form-error]').textContent).toContain('ยังไม่ได้เลือกระดับของเกณฑ์')
     expect(services.reviews.saveReview).not.toHaveBeenCalled()
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('save stores a draft (no release); release saves first, then releases that review', async () => {
@@ -386,7 +388,7 @@ describe('pages', () => {
     pick(el, 'c1', 'b')
     pick(el, 'c2', 'y')
     el.querySelector('input[name=outcome][value=revise]').checked = true
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('button[data-intent=release]').click()
     await settle()
     expect(services.reviews.release).toHaveBeenCalledWith('R9')
@@ -394,7 +396,7 @@ describe('pages', () => {
       services.reviews.release.mock.invocationCallOrder[0]
     )
     expect(el.textContent).toContain('ส่งผลให้ผู้เรียนแล้ว')
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('my draft is shown again and can be discarded', async () => {
@@ -418,11 +420,11 @@ describe('pages', () => {
     expect(el.querySelector('input[name="level:c1"][value=b]').checked).toBe(true)
     expect(el.querySelector('input[name="comment:c1"]').value).toBe('ความเห็นเดิม')
     expect(el.querySelector('textarea[name=feedback]').value).toBe('ร่างเดิม')
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('[data-action=discard]').click()
     await settle()
     expect(services.reviews.discard).toHaveBeenCalledWith('d1')
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('a released review: listed with its earlier one, the form starts from it and a re-grade needs the reason', async () => {
@@ -459,12 +461,12 @@ describe('pages', () => {
     expect(el.querySelector('input[name="level:c1"][value=a]').checked).toBe(true) // starts from the review in force
     expect(el.querySelector('textarea[name=reason]')).not.toBeNull()
     pick(el, 'c2', 'x')
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('button[data-intent=release]').click()
     await settle()
     expect(el.querySelector('[data-form-error]').textContent).toContain('ระบุเหตุผลที่ตรวจใหม่')
     expect(services.reviews.saveReview).not.toHaveBeenCalled()
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('your own work cannot be reviewed; a work that is not visible shows a Thai page; server refusals keep the form', async () => {
@@ -502,11 +504,11 @@ describe('pages', () => {
     })
     expect(services.reviews.release).not.toHaveBeenCalled() // a draft only
     expect(discard.hidden).toBe(false)
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     discard.click()
     await vi.advanceTimersByTimeAsync(10)
     expect(services.reviews.discard).toHaveBeenCalledWith('R9') // the draft autosave created
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
     vi.useRealTimers()
   })
 })

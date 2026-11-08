@@ -15,6 +15,7 @@ import { PURPOSE_LABELS } from '../assessments/logic.js'
 import { moveId, nextOrder } from '../builder/service.js'
 import { acceptAttr } from '../lessons/media.js'
 import { downloadText, downloadBytes } from '../../shared/ui/download.js'
+import { confirmDialog } from '../../shared/ui/dialog.js'
 import { readTableFile, TABLE_FILE_ACCEPT } from '../../shared/utils/tableFile.js'
 import { XLSX_MIME } from '../../shared/utils/xlsx.js'
 import {
@@ -750,7 +751,14 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
       tone = 'success'
       return draw()
     }
-    if (!window.confirm(`ลบรูปที่ไม่มีข้อใดใช้ ${candidates.length} ไฟล์? ลบแล้วกู้คืนไม่ได้`))
+    if (
+      !(await confirmDialog({
+        title: `ลบรูปที่ไม่มีข้อใดใช้ ${candidates.length} ไฟล์?`,
+        text: 'ลบแล้วกู้คืนไม่ได้',
+        confirmText: 'ลบรูป',
+        danger: true,
+      }))
+    )
       return undefined
     return run(
       () => services.assessmentMedia.remove(candidates),
@@ -761,7 +769,7 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     )
   }
 
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     const picture = e.target.closest('[data-label-image]')
     if (picture) {
       const form = picture.closest('form')
@@ -860,10 +868,16 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
           'จัดลำดับข้อแล้ว'
         )
       case 'delete-item':
-        if (!window.confirm('ลบข้อนี้?')) return undefined
+        if (!(await confirmDialog({ title: 'ลบข้อนี้?', confirmText: 'ลบ', danger: true }))) return undefined
         return run(() => services.quizzes.deleteItem(targetId), 'ลบข้อแล้ว')
       case 'publish':
-        if (!window.confirm('เผยแพร่ฉบับนี้? เมื่อเผยแพร่แล้วจะแก้ไขข้อสอบและเฉลยของฉบับนี้ไม่ได้อีก'))
+        if (
+          !(await confirmDialog({
+            title: 'เผยแพร่ฉบับนี้?',
+            text: 'เมื่อเผยแพร่แล้วจะแก้ไขข้อสอบและเฉลยของฉบับนี้ไม่ได้อีก',
+            confirmText: 'เผยแพร่',
+          }))
+        )
           return undefined
         return run(async () => {
           await services.quizzes.publish(version.id)

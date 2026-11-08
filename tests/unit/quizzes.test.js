@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { confirmDialog } from '../../src/shared/ui/dialog.js'
 import {
   nextOptionId,
   buildItemDraft,
@@ -321,16 +323,22 @@ describe('quiz editor view', () => {
     const el = document.createElement('div')
     const services = makeServices(draft)
     await renderQuizEditorView(el, { services }, { id: 'K', quizId: 'I1' })
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true)
+    confirmDialog.mockResolvedValueOnce(false).mockResolvedValueOnce(true)
     el.querySelector('[data-action=clean-media]').click()
     await settle()
-    expect(confirm).toHaveBeenLastCalledWith('ลบรูปที่ไม่มีข้อใดใช้ 2 ไฟล์? ลบแล้วกู้คืนไม่ได้')
+    expect(confirmDialog).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: 'ลบรูปที่ไม่มีข้อใดใช้ 2 ไฟล์?',
+        text: 'ลบแล้วกู้คืนไม่ได้',
+        danger: true,
+      })
+    )
     expect(services.assessmentMedia.remove).not.toHaveBeenCalled() // cancelled
     el.querySelector('[data-action=clean-media]').click()
     await settle()
     expect(services.assessmentMedia.remove).toHaveBeenCalledWith(['I1/a.png', 'I1/b.png'])
     expect(el.textContent).toContain('ลบแล้ว 1 จาก 2 ไฟล์ — ที่เหลือถูกใช้อยู่ ระบบจึงไม่ลบ')
-    confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('clean unused images: nothing to remove → says so without asking', async () => {
@@ -340,12 +348,12 @@ describe('quiz editor view', () => {
       { path: 'I1/used.png', created_at: '2026-01-01T00:00:00Z' },
     ])
     await renderQuizEditorView(el, { services }, { id: 'K', quizId: 'I1' })
-    const confirm = vi.spyOn(window, 'confirm')
+    confirmDialog.mockClear()
     el.querySelector('[data-action=clean-media]').click()
     await settle()
-    expect(confirm).not.toHaveBeenCalled()
+    expect(confirmDialog).not.toHaveBeenCalled()
     expect(el.textContent).toContain('ไม่มีรูปที่ไม่ได้ใช้ให้ลบ')
-    confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('denies users who cannot manage the course', async () => {

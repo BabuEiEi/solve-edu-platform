@@ -1,6 +1,7 @@
 import { html, render, safeUrl } from '../../shared/ui/html.js'
 import { pageHeader, emptyState, alertBox, loading } from '../../shared/ui/components.js'
 import { createAutosave } from '../../shared/ui/autosave.js'
+import { confirmDialog } from '../../shared/ui/dialog.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { downloadTable, exportButtons } from '../../shared/ui/download.js'
@@ -177,9 +178,11 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
   const runDriveExport = async () => {
     if (drive.busy) return
     if (
-      !window.confirm(
-        'ส่งสำเนาไฟล์งานของภาระงานนี้ไป Google Drive ส่วนกลาง?\nชื่อผู้เรียนจะปรากฏในชื่อโฟลเดอร์ ผู้ที่เข้าถึง Drive ส่วนกลางได้จะเห็นไฟล์เหล่านี้'
-      )
+      !(await confirmDialog({
+        title: 'ส่งสำเนาไฟล์งานของภาระงานนี้ไป Google Drive ส่วนกลาง?',
+        text: 'ชื่อผู้เรียนจะปรากฏในชื่อโฟลเดอร์ ผู้ที่เข้าถึง Drive ส่วนกลางได้จะเห็นไฟล์เหล่านี้',
+        confirmText: 'ส่งไป Drive',
+      }))
     )
       return
     Object.assign(drive, { busy: true, result: null, error: '' })
@@ -533,7 +536,7 @@ export async function renderReviewView(el, { services, session }, { submissionId
     }
   }
 
-  el.onsubmit = (e) => {
+  el.onsubmit = async (e) => {
     e.preventDefault()
     const form = e.target
     if (form.dataset.form !== 'review' || busy) return undefined
@@ -548,7 +551,11 @@ export async function renderReviewView(el, { services, session }, { submissionId
     }
     if (
       intent === 'release' &&
-      !window.confirm('ส่งผลให้ผู้เรียน? ส่งแล้วแก้ไม่ได้ (ตรวจใหม่ได้โดยระบุเหตุผล)')
+      !(await confirmDialog({
+        title: 'ส่งผลให้ผู้เรียน?',
+        text: 'ส่งแล้วแก้ไม่ได้ (ตรวจใหม่ได้โดยระบุเหตุผล)',
+        confirmText: 'ส่งผล',
+      }))
     )
       return undefined
     busy = true
@@ -574,11 +581,12 @@ export async function renderReviewView(el, { services, session }, { submissionId
     return undefined
   }
 
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     const b = e.target.closest('button[data-action=discard]')
     const draftId = myDraft()?.id ?? autoDraftId
     if (!b || !draftId) return undefined
-    if (!window.confirm('ทิ้งร่างการตรวจนี้?')) return undefined
+    if (!(await confirmDialog({ title: 'ทิ้งร่างการตรวจนี้?', confirmText: 'ทิ้งร่าง', danger: true })))
+      return undefined
     autoDraftId = null
     return run(() => services.reviews.discard(draftId), 'ทิ้งร่างการตรวจแล้ว')
   }

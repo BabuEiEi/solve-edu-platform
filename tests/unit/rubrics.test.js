@@ -9,6 +9,8 @@ import {
 import { renderCourseRubricsView, renderRubricEditorView } from '../../src/features/rubrics/views.js'
 import { createQuizBuilderService } from '../../src/features/quizzes/service.js'
 import { AppError } from '../../src/core/errors.js'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { confirmDialog } from '../../src/shared/ui/dialog.js'
 
 const XSS = '<img src=x onerror=alert(1)>'
 const settle = async () => {
@@ -280,7 +282,7 @@ describe('rubric views', () => {
         ]),
       ],
     })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     const el = await open(services)
     el.querySelector('[data-criterion-id=c1] [data-action=edit-criterion]').click()
     const form = el.querySelector('form[data-form=criterion]')
@@ -307,6 +309,6 @@ describe('rubric views', () => {
     published.querySelector('[data-action=clone]').click()
     await settle()
     expect(published.textContent).toContain('สร้างฉบับร่างใหม่แล้ว')
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 })

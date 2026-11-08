@@ -4,6 +4,7 @@ import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { downloadTable, exportButtons } from '../../shared/ui/download.js'
+import { confirmDialog } from '../../shared/ui/dialog.js'
 import { PURPOSE_LABELS, attemptPercent } from '../assessments/logic.js'
 import { purposeChip, resultBadge, windowText, timeLimitText } from '../assessments/views.js'
 import {
@@ -595,7 +596,7 @@ export async function renderAssignmentDetailView(el, { services, caps, context }
     }
   }
 
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return undefined
     switch (b.dataset.action) {
@@ -640,9 +641,12 @@ export async function renderAssignmentDetailView(el, { services, caps, context }
         )
       case 'close-now':
         if (
-          !window.confirm(
-            'ปิดรับคำตอบตอนนี้? ผู้ที่กำลังทำจะถูกส่งคำตอบที่บันทึกไว้อัตโนมัติหลังช่วงผ่อนผัน (แก้เวลาปิดเพื่อเปิดใหม่ได้)'
-          )
+          !(await confirmDialog({
+            title: 'ปิดรับคำตอบตอนนี้?',
+            text: 'ผู้ที่กำลังทำจะถูกส่งคำตอบที่บันทึกไว้อัตโนมัติหลังช่วงผ่อนผัน (แก้เวลาปิดเพื่อเปิดใหม่ได้)',
+            confirmText: 'ปิดรับตอนนี้',
+            danger: true,
+          }))
         )
           return undefined
         return run(
@@ -650,11 +654,18 @@ export async function renderAssignmentDetailView(el, { services, caps, context }
           'ปิดรับคำตอบแล้ว'
         )
       case 'archive':
-        if (!window.confirm('เก็บถาวร? ผู้เรียนจะไม่เห็นแบบทดสอบนี้ในรายการ (ผลยังเก็บไว้ครบ)'))
+        if (
+          !(await confirmDialog({
+            title: 'เก็บถาวร?',
+            text: 'ผู้เรียนจะไม่เห็นแบบทดสอบนี้ในรายการ (ผลยังเก็บไว้ครบ)',
+            confirmText: 'เก็บถาวร',
+          }))
+        )
           return undefined
         return run(() => services.assignments.update(id, { status: 'archived' }), 'เก็บถาวรแล้ว')
       case 'delete':
-        if (!window.confirm('ลบการมอบหมายนี้?')) return undefined
+        if (!(await confirmDialog({ title: 'ลบการมอบหมายนี้?', confirmText: 'ลบ', danger: true })))
+          return undefined
         busy = true
         return services.assignments.remove(id).then(
           () => navigate(LIST_PATH),

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { confirmDialog } from '../../src/shared/ui/dialog.js'
 import {
   createBuilderService,
   moveId,
@@ -265,7 +267,7 @@ describe('lesson editor view', () => {
   it('deleting a media block also removes its file', async () => {
     const services = builderServices()
     const el = await open(services)
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('[data-action=delete-block][data-id=B1]').click()
     await flush()
     expect(services.builder.deleteBlock).toHaveBeenCalledWith('B1')

@@ -8,6 +8,7 @@ import {
   bindFilePickers,
 } from '../../shared/ui/components.js'
 import { createAutosave } from '../../shared/ui/autosave.js'
+import { confirmDialog } from '../../shared/ui/dialog.js'
 import { toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { sortedLevels } from '../rubrics/logic.js'
@@ -448,7 +449,7 @@ export async function renderTaskPageView(el, { services, session, refreshNotices
     })
   }
 
-  el.onsubmit = (e) => {
+  el.onsubmit = async (e) => {
     e.preventDefault()
     const form = e.target
     if (form.dataset.form !== 'draft' || busy) return
@@ -467,7 +468,11 @@ export async function renderTaskPageView(el, { services, session, refreshNotices
         )
       )
     }
-    if (intent === 'submit' && !window.confirm('ส่งงานรอบนี้? ส่งแล้วแก้ไขไม่ได้')) return undefined
+    if (
+      intent === 'submit' &&
+      !(await confirmDialog({ title: 'ส่งงานรอบนี้?', text: 'ส่งแล้วแก้ไขไม่ได้', confirmText: 'ส่งงาน' }))
+    )
+      return undefined
     busy = true
     ;(async () => {
       try {

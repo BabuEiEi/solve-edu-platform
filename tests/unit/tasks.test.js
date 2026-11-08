@@ -8,6 +8,8 @@ import {
 import { createTaskService } from '../../src/features/tasks/service.js'
 import { renderCourseTasksView, renderTaskDetailView } from '../../src/features/tasks/views.js'
 import { toUserMessage, AppError } from '../../src/core/errors.js'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { confirmDialog } from '../../src/shared/ui/dialog.js'
 
 const XSS = '<img src=x onerror=alert(1)>'
 const settle = async () => {
@@ -296,7 +298,7 @@ describe('task pages', () => {
   it('published: open to a cohort with dates (Bangkok time), change the dates, withdraw', async () => {
     const t = task({ status: 'published' })
     const services = makeServices(t)
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     const el = await open(services)
     const form = el.querySelector('form[data-form=new-allocation]')
     expect(form.querySelectorAll('select[name=cohort_id] option')).toHaveLength(2)
@@ -324,7 +326,7 @@ describe('task pages', () => {
     el.querySelector('[data-action=remove-allocation]').click()
     await settle()
     expect(services.tasks.removeAllocation).toHaveBeenCalledWith('AC1')
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('a refusal from the server is shown in Thai (rubric frozen after submissions)', async () => {

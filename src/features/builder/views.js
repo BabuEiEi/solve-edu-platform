@@ -8,6 +8,7 @@ import {
   filePicker,
 } from '../../shared/ui/components.js'
 import { richTextEditorMarkup } from '../../shared/ui/richTextEditor.js'
+import { confirmDialog } from '../../shared/ui/dialog.js'
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
 import { watchDeleteZones } from '../deletion/zone.js'
@@ -262,7 +263,7 @@ export async function renderCourseBuilderView(el, { services }, { id }) {
       .find((l) => l.id === lessonId)
   const flip = (s) => (s === 'published' ? 'draft' : 'published')
 
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return
     const { action, id: itemId, unit, delta } = b.dataset
@@ -320,10 +321,24 @@ export async function renderCourseBuilderView(el, { services }, { id }) {
           'จัดลำดับบทเรียนแล้ว'
         )
       case 'delete-unit':
-        if (!window.confirm(`ลบหน่วย “${unitOf(itemId).title}” และบทเรียนทั้งหมดในหน่วยนี้?`)) return
+        if (
+          !(await confirmDialog({
+            title: `ลบหน่วย “${unitOf(itemId).title}” และบทเรียนทั้งหมดในหน่วยนี้?`,
+            confirmText: 'ลบหน่วย',
+            danger: true,
+          }))
+        )
+          return
         return run(() => services.builder.deleteUnit(itemId), 'ลบหน่วยแล้ว')
       case 'delete-lesson':
-        if (!window.confirm(`ลบบทเรียน “${lessonOf(itemId).title}” และเนื้อหาทั้งหมด?`)) return
+        if (
+          !(await confirmDialog({
+            title: `ลบบทเรียน “${lessonOf(itemId).title}” และเนื้อหาทั้งหมด?`,
+            confirmText: 'ลบบทเรียน',
+            danger: true,
+          }))
+        )
+          return
         return run(() => services.builder.deleteLesson(itemId), 'ลบบทเรียนแล้ว')
     }
   }
@@ -641,7 +656,7 @@ export async function renderLessonEditorView(el, { services }, { id: courseId, l
     }
   }
 
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return
     const { action, id: blockId, delta, type } = b.dataset
@@ -674,7 +689,7 @@ export async function renderLessonEditorView(el, { services }, { id: courseId, l
           'จัดลำดับเนื้อหาแล้ว'
         )
       case 'delete-block': {
-        if (!window.confirm('ลบเนื้อหานี้?')) return
+        if (!(await confirmDialog({ title: 'ลบเนื้อหานี้?', confirmText: 'ลบ', danger: true }))) return
         const path = blocks().find((x) => x.id === blockId)?.content_json?.object_path
         return run(async () => {
           await services.builder.deleteBlock(blockId)

@@ -1,4 +1,5 @@
 import { html, render } from '../../shared/ui/html.js'
+import { confirmDialog } from '../../shared/ui/dialog.js'
 import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../shared/ui/components.js'
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
@@ -359,7 +360,7 @@ export async function renderRubricEditorView(el, { services }, { id: courseId, r
     else await services.quizzes.addItem(version.id, item, nextOrder(criteria))
   }
 
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return
     const { action, id: targetId, delta } = b.dataset
@@ -426,10 +427,17 @@ export async function renderRubricEditorView(el, { services }, { id: courseId, r
           'นำ Rubric กลับมาใช้แล้ว'
         )
       case 'delete-criterion':
-        if (!window.confirm('ลบเกณฑ์นี้?')) return undefined
+        if (!(await confirmDialog({ title: 'ลบเกณฑ์นี้?', confirmText: 'ลบ', danger: true })))
+          return undefined
         return run(() => services.quizzes.deleteItem(targetId), 'ลบเกณฑ์แล้ว')
       case 'publish':
-        if (!window.confirm('เผยแพร่ฉบับนี้? เมื่อเผยแพร่แล้วจะแก้ไขเกณฑ์ของฉบับนี้ไม่ได้อีก'))
+        if (
+          !(await confirmDialog({
+            title: 'เผยแพร่ฉบับนี้?',
+            text: 'เมื่อเผยแพร่แล้วจะแก้ไขเกณฑ์ของฉบับนี้ไม่ได้อีก',
+            confirmText: 'เผยแพร่',
+          }))
+        )
           return undefined
         return run(async () => {
           await services.quizzes.publish(version.id)
