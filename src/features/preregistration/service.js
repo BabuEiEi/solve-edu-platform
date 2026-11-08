@@ -1,20 +1,43 @@
 import { unwrap, AppError } from '../../core/errors.js'
 import { parseCsv } from '../../shared/utils/csv.js'
+import { toXlsx } from '../../shared/utils/xlsx.js'
 
 export const MAX_ROWS = 500
 
 /** Column headers of the roster CSV — the single source for the template and the parser. */
 export const TEMPLATE_HEADER = ['email', 'full_name', 'user_code']
 export const TEMPLATE_FILENAME = 'roster-template.csv'
+export const TEMPLATE_XLSX_FILENAME = 'roster-template.xlsx'
 
-/** Template content: BOM (so Excel reads Thai as UTF-8) + header + fictitious example rows. */
-export function rosterTemplateCsv() {
-  const rows = [
+/** Template rows: header + fictitious example rows. */
+export function rosterTemplateRows() {
+  return [
     TEMPLATE_HEADER,
     ['teacher.one@example.test', 'ครู ตัวอย่าง หนึ่ง', 'T-0001'],
     ['teacher.two@example.test', 'ครู ตัวอย่าง สอง', 'T-0002'],
   ]
-  return '\uFEFF' + rows.map((r) => r.join(',')).join('\r\n') + '\r\n'
+}
+
+/** Template as CSV: BOM (so Excel reads Thai as UTF-8) + header + example rows. */
+export function rosterTemplateCsv() {
+  return (
+    '\uFEFF' +
+    rosterTemplateRows()
+      .map((r) => r.join(','))
+      .join('\r\n') +
+    '\r\n'
+  )
+}
+
+/**
+ * Template as an Excel file (bytes). The user_code column is formatted as
+ * Text so a code such as 00123 keeps its leading zeros when typed in Excel.
+ */
+export function rosterTemplateXlsx() {
+  return toXlsx(rosterTemplateRows(), {
+    sheetName: 'รายชื่อ',
+    textColumns: [TEMPLATE_HEADER.indexOf('user_code')],
+  })
 }
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/
 // the same rule as profiles.user_code in the database
@@ -42,7 +65,11 @@ function columnIndex(header, key) {
  * where every row has { line, email, full_name, errors[] }.
  */
 export function analyzeRoster(text, { existing = [] } = {}) {
-  const table = parseCsv(text)
+  return analyzeRosterRows(parseCsv(text), { existing })
+}
+
+/** The same for rows already read from a CSV or Excel file (header first). */
+export function analyzeRosterRows(table, { existing = [] } = {}) {
   if (table.length === 0) throw new AppError('ไฟล์ว่าง — ต้องมีหัวตาราง email และอย่างน้อย 1 แถว')
   const [header, ...body] = table
   const iEmail = columnIndex(header, 'email')

@@ -7,21 +7,23 @@ import {
   loading,
   filePicker,
 } from '../../shared/ui/components.js'
-import { toUserMessage } from '../../core/errors.js'
+import { toUserMessage, AppError } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
 import { watchDeleteZones } from '../deletion/zone.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
 import { PURPOSE_LABELS } from '../assessments/logic.js'
 import { moveId, nextOrder } from '../builder/service.js'
 import { acceptAttr } from '../lessons/media.js'
-import { downloadText } from '../../shared/ui/download.js'
+import { downloadText, downloadBytes } from '../../shared/ui/download.js'
+import { readTableFile, TABLE_FILE_ACCEPT } from '../../shared/utils/tableFile.js'
+import { XLSX_MIME } from '../../shared/utils/xlsx.js'
 import {
-  analyzeQuizImport,
-  decodeCsvBytes,
+  analyzeQuizImportRows,
   importTemplateCsv,
+  importTemplateXlsx,
   IMPORT_TEMPLATE_FILENAME,
+  IMPORT_TEMPLATE_XLSX_FILENAME,
   MAX_IMPORT_ROWS,
-  MAX_IMPORT_BYTES,
 } from './importFile.js'
 import { itemMediaPaths } from '../assessments/logic.js'
 import {
@@ -500,17 +502,17 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
   }
   const SHOWN_ERRORS = 50
 
-  /** Import from a CSV file: template, choose, preview every row (or every problem), confirm. */
+  /** Import from an Excel or CSV file: template, choose, preview every row (or every problem), confirm. */
   const importPanel = () => {
     const a = importing.analysis
     const ok = a && a.errors.length === 0
     return html`<section class="space-y-3 rounded-xl border-2 border-brand-200 bg-white p-5 text-sm" data-import-panel>
       <div class="flex flex-wrap items-center justify-between gap-2">
-        <h2 class="font-semibold text-brand-700">นำเข้าข้อสอบจากไฟล์ CSV</h2>
+        <h2 class="font-semibold text-brand-700">นำเข้าข้อสอบจากไฟล์ Excel หรือ CSV</h2>
         <button type="button" class="${secondary}" data-action="close-import">ปิด</button>
       </div>
       <ol class="list-decimal space-y-1 pl-5 text-ink-600">
-        <li>ดาวน์โหลดแม่แบบ แล้วกรอกใน Excel หรือ Google Sheets (บันทึกเป็น CSV)</li>
+        <li>ดาวน์โหลดแม่แบบ แล้วกรอกใน Excel หรือ Google Sheets (บันทึกเป็น .xlsx หรือ CSV ก็ได้)</li>
         <li>เลือกไฟล์ — ระบบแสดงตัวอย่างทุกข้อให้ตรวจก่อน ยังไม่มีอะไรถูกบันทึก</li>
         <li>กด “นำเข้า” เมื่อไม่มีแถวที่ผิด — ข้อจะถูกเพิ่มต่อท้ายฉบับร่างนี้ทั้งหมด หรือไม่เพิ่มเลย</li>
       </ol>
@@ -519,12 +521,15 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         ครั้งละไม่เกิน ${MAX_IMPORT_ROWS} ข้อ · ทุกข้อต้องมีเฉลย
       </p>
       <div class="flex flex-wrap items-center gap-3">
-        <button type="button" class="${secondary}" data-action="download-import-template">ดาวน์โหลดแม่แบบ (CSV)</button>
+        <span class="inline-flex flex-wrap gap-2">
+          <button type="button" class="${secondary}" data-action="download-import-template-xlsx">ดาวน์โหลดแม่แบบ (Excel)</button>
+          <button type="button" class="${secondary}" data-action="download-import-template">ดาวน์โหลดแม่แบบ (CSV)</button>
+        </span>
         ${filePicker({
           name: 'import_file',
-          accept: '.csv,text/csv',
-          button: a ? 'เลือกไฟล์อื่น…' : 'เลือกไฟล์ CSV…',
-          label: 'ไฟล์ CSV ข้อสอบ',
+          accept: TABLE_FILE_ACCEPT,
+          button: a ? 'เลือกไฟล์อื่น…' : 'เลือกไฟล์ Excel หรือ CSV…',
+          label: 'ไฟล์ข้อสอบ (Excel หรือ CSV)',
           none: a ? '' : undefined, // the file name is shown below once one is read
         })}
       </div>
@@ -611,7 +616,7 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
                         </button>`
                     )}
                     <span class="flex-1"></span>
-                    <button type="button" class="${secondary}" data-action="open-import">นำเข้าจากไฟล์ (CSV)</button>
+                    <button type="button" class="${secondary}" data-action="open-import">นำเข้าจากไฟล์ (Excel/CSV)</button>
                   </div>`
               : ''
           }
@@ -783,6 +788,8 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
         return draw()
       case 'download-import-template':
         return downloadText(IMPORT_TEMPLATE_FILENAME, importTemplateCsv())
+      case 'download-import-template-xlsx':
+        return downloadBytes(IMPORT_TEMPLATE_XLSX_FILENAME, importTemplateXlsx(), XLSX_MIME)
       case 'confirm-import': {
         const toImport = importing?.analysis
         if (!toImport || toImport.errors.length) return undefined
@@ -892,26 +899,17 @@ export async function renderQuizEditorView(el, { services }, { id: courseId, qui
     if (e.target?.name === 'import_file' && importing) {
       const file = e.target.files?.[0]
       if (!file) return
-      if (file.size > MAX_IMPORT_BYTES) {
+      try {
+        importing = { fileName: file.name, analysis: analyzeQuizImportRows(await readTableFile(file)) }
+      } catch (err) {
+        // readTableFile explains size, old .xls, password-protected and broken files in Thai
         importing = {
           fileName: file.name,
           analysis: {
             items: [],
             total: 0,
-            errors: [{ row: 0, message: 'ไฟล์ใหญ่เกิน 5 MB — ไม่ใช่ไฟล์ข้อสอบ CSV หรือแบ่งเป็นหลายไฟล์' }],
+            errors: [{ row: 0, message: err instanceof AppError ? err.message : 'อ่านไฟล์นี้ไม่ได้' }],
           },
-        }
-        return draw()
-      }
-      try {
-        importing = {
-          fileName: file.name,
-          analysis: analyzeQuizImport(decodeCsvBytes(await file.arrayBuffer())),
-        }
-      } catch {
-        importing = {
-          fileName: file.name,
-          analysis: { items: [], total: 0, errors: [{ row: 0, message: 'อ่านไฟล์นี้ไม่ได้' }] },
         }
       }
       return draw()

@@ -1,4 +1,5 @@
-import { parseCsv, toCsv } from '../../shared/utils/csv.js'
+import { toXlsx } from '../../shared/utils/xlsx.js'
+import { parseCsv, toCsv, decodeCsvBytes } from '../../shared/utils/csv.js'
 import { buildItemDraft } from './logic.js'
 import { AppError } from '../../core/errors.js'
 
@@ -14,10 +15,8 @@ import { AppError } from '../../core/errors.js'
  */
 export const MAX_IMPORT_ROWS = 200
 export const MAX_IMPORT_OPTIONS = 6
-// 200 rows of at most 5,000-character prompts stay far below this; anything
-// bigger is the wrong file, and reading it whole would freeze the tab.
-export const MAX_IMPORT_BYTES = 5 * 1024 * 1024
 export const IMPORT_TEMPLATE_FILENAME = 'quiz-import-template.csv'
+export const IMPORT_TEMPLATE_XLSX_FILENAME = 'quiz-import-template.xlsx'
 
 const OPTION_COLUMNS = Array.from({ length: MAX_IMPORT_OPTIONS }, (_, i) => `ตัวเลือก${i + 1}`)
 export const IMPORT_HEADER = [
@@ -71,20 +70,10 @@ function normalize(v) {
 
 const arabic = (s) => String(s).replace(/[๐-๙]/g, (d) => String(THAI_DIGITS.indexOf(d)))
 
-/**
- * File bytes → text. UTF-8 when it is valid UTF-8 (Google Sheets, Excel's
- * "CSV UTF-8"); otherwise Windows-874, which Thai Excel writes by default.
- */
-export function decodeCsvBytes(buffer) {
-  try {
-    return new TextDecoder('utf-8', { fatal: true }).decode(buffer)
-  } catch {
-    return new TextDecoder('windows-874').decode(buffer)
-  }
-}
+export { decodeCsvBytes }
 
-/** The template: header, one fictitious example per type, and a note row-free layout. */
-export function importTemplateCsv() {
+/** The template as rows: header, then one fictitious example per type. */
+export function importTemplateRows() {
   const blank = (n) => Array(n).fill('')
   const rows = [
     IMPORT_HEADER,
@@ -136,8 +125,13 @@ export function importTemplateCsv() {
       '',
     ],
   ]
-  return toCsv(rows)
+  return rows
 }
+
+export const importTemplateCsv = () => toCsv(importTemplateRows())
+
+/** The same template as an Excel file (bytes). */
+export const importTemplateXlsx = () => toXlsx(importTemplateRows(), { sheetName: 'ข้อสอบ' })
 
 function mapHeader(header) {
   const names = header.map(normalize)
@@ -229,14 +223,20 @@ function buildRow(cells, columns) {
 }
 
 /**
- * CSV text → { items, errors, total }.
+ * CSV text → { items, errors, total } (see analyzeQuizImportRows).
+ */
+export function analyzeQuizImport(text) {
+  return analyzeQuizImportRows(parseCsv(text))
+}
+
+/**
+ * Table rows (header first; from CSV or Excel) → { items, errors, total }.
  *   items  rows ready for import_instrument_items (only when errors is empty)
  *   errors [{ row, message }]  row = the row number in the spreadsheet (header = 1)
  *   total  data rows read
  * Never throws: a file-level problem is reported as an error with row 0.
  */
-export function analyzeQuizImport(text) {
-  const rows = parseCsv(text)
+export function analyzeQuizImportRows(rows) {
   if (rows.length === 0) return { items: [], errors: [{ row: 0, message: 'ไฟล์ว่าง' }], total: 0 }
   const { columns, missing } = mapHeader(rows[0])
   if (missing.length)

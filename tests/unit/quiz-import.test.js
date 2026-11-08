@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest'
 import {
   analyzeQuizImport,
+  analyzeQuizImportRows,
   importTemplateCsv,
+  importTemplateRows,
+  importTemplateXlsx,
   decodeCsvBytes,
   IMPORT_HEADER,
   MAX_IMPORT_ROWS,
 } from '../../src/features/quizzes/importFile.js'
 import { toCsv } from '../../src/shared/utils/csv.js'
+import { readXlsxRows, toXlsx, XLSX_MIME } from '../../src/shared/utils/xlsx.js'
 
 const row = (o = {}) => {
   const base = {
@@ -42,6 +46,21 @@ describe('template', () => {
     expect(r.items.map((i) => i.item_type)).toEqual(['mcq_single', 'mcq_multiple', 'true_false', 'numeric'])
     expect(r.total).toBe(4)
     expect(importTemplateCsv()).toMatch(/example|ตัวอย่าง/)
+  })
+})
+
+describe('Excel template', () => {
+  it('is the same table as the CSV template and imports as-is', () => {
+    const rows = readXlsxRows(importTemplateXlsx())
+    expect(rows[0]).toEqual(IMPORT_HEADER)
+    const viaExcel = analyzeQuizImportRows(rows)
+    expect(viaExcel.errors).toEqual([])
+    expect(viaExcel).toEqual(analyzeQuizImport(importTemplateCsv()))
+    expect(viaExcel.total).toBe(importTemplateRows().length - 1)
+  })
+  it('numbers typed in Excel (answer 2, score 1, 0.5) read like the same text in CSV', () => {
+    const table = [IMPORT_HEADER, row({ ตัวเลือก1: 'ก', ตัวเลือก2: 'ข', คำตอบ: 2, คะแนน: 1 })]
+    expect(analyzeQuizImportRows(readXlsxRows(toXlsx(table)))).toEqual(analyzeQuizImport(toCsv(table)))
   })
 })
 
@@ -263,6 +282,47 @@ describe('import panel', () => {
     await settle()
   }
 
+  const chooseFile = async (el, file) => {
+    el.querySelector('[data-action=open-import]')?.click() // already open on a second file
+    const input = el.querySelector('input[name=import_file]')
+    Object.defineProperty(input, 'files', { value: [file], configurable: true })
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await settle()
+  }
+
+  it('reads an Excel file: preview of every item, then the import', async () => {
+    const services = makeServices()
+    const el = await open(services)
+    await chooseFile(el, new File([importTemplateXlsx()], 'ข้อสอบ.xlsx', { type: XLSX_MIME }))
+    expect(el.querySelector('input[name=import_file]').accept).toContain('.xlsx')
+    expect(el.querySelector('[data-import-file]').textContent).toContain('ข้อสอบ.xlsx')
+    expect(el.querySelector('[data-import-file]').textContent).toContain('4 แถว')
+    expect(el.querySelector('[data-import-errors]')).toBeNull()
+    el.querySelector('[data-action=confirm-import]').click()
+    await settle()
+    expect(services.quizzes.importItems).toHaveBeenCalledTimes(1)
+    expect(services.quizzes.importItems.mock.calls[0][1].map((i) => i.item_type)).toEqual([
+      'mcq_single',
+      'mcq_multiple',
+      'true_false',
+      'numeric',
+    ])
+  })
+
+  it('an old .xls and a broken .xlsx are explained in Thai and nothing can be imported', async () => {
+    const el = await open(makeServices())
+    await chooseFile(
+      el,
+      new File([new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])], 'a.xls')
+    )
+    expect(el.querySelector('[data-import-errors]').textContent).toContain('.xls')
+    expect(el.querySelector('[data-action=confirm-import]')).toBeNull()
+    const broken = importTemplateXlsx().slice(0, 40) // a zip cut short
+    await chooseFile(el, new File([broken], 'b.xlsx'))
+    expect(el.querySelector('[data-import-errors]').textContent).toContain('ไม่ใช่ไฟล์ Excel')
+    expect(el.querySelector('[data-action=confirm-import]')).toBeNull()
+  })
+
   it('only a draft offers the import', async () => {
     expect((await open(makeServices())).querySelector('[data-action=open-import]')).not.toBeNull()
     expect(
@@ -344,6 +404,9 @@ describe('import panel', () => {
     el.querySelector('[data-action=download-import-template]').click()
     expect(created).toHaveLength(1)
     expect(await created[0].text()).toContain('ประเภท,โจทย์,คะแนน')
+    el.querySelector('[data-action=download-import-template-xlsx]').click()
+    expect(created[1].type).toBe(XLSX_MIME)
+    expect(readXlsxRows(new Uint8Array(await created[1].arrayBuffer()))[0]).toEqual(IMPORT_HEADER)
     el.querySelector('[data-action=close-import]').click()
     expect(el.querySelector('[data-action=new-item]')).not.toBeNull()
     spy.mockRestore()

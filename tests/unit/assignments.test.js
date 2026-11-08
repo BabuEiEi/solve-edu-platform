@@ -24,6 +24,7 @@ import {
   renderAssignmentDetailView,
 } from '../../src/features/assignments/views.js'
 import { toCsv, parseCsv } from '../../src/shared/utils/csv.js'
+import { readXlsxRows } from '../../src/shared/utils/xlsx.js'
 import { AppError, toUserMessage } from '../../src/core/errors.js'
 
 const XSS = '<img src=x onerror=alert(1)>'
@@ -510,6 +511,41 @@ describe('assignment views', () => {
     expect(el.textContent).toContain('ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ครู ข แล้ว')
     expect(el.querySelector('input[name=time_limit_minutes]').disabled).toBe(true) // frozen with attempts
     prompt.mockRestore()
+  })
+
+  it('detail (trainer): results and item analysis download as Excel and as CSV', async () => {
+    const created = []
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => (created.push(b), 'blob:x'))
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const el = document.createElement('div')
+    await renderAssignmentDetailView(el, ctx(makeServices(), trainer), { id: 'A1' })
+    const labels = [...el.querySelectorAll('[data-export-buttons] button')].map((b) => b.textContent.trim())
+    expect(labels).toEqual([
+      'ดาวน์โหลด (Excel)',
+      'ดาวน์โหลด (CSV)',
+      'ดาวน์โหลดผลวิเคราะห์ (Excel)',
+      'ดาวน์โหลดผลวิเคราะห์ (CSV)',
+    ])
+    el.querySelector('[data-action=export-xlsx]').click()
+    el.querySelector('[data-action=export-csv]').click()
+    el.querySelector('[data-action=export-items-xlsx]').click()
+    el.querySelector('[data-action=export-items-csv]').click()
+    expect(created).toHaveLength(4)
+    const results = readXlsxRows(new Uint8Array(await created[0].arrayBuffer()))
+    // the same table in both formats (the Excel reader, like Excel, ends a row at its last filled cell)
+    const trimmed = (rows) =>
+      rows.map((r) => {
+        const out = r.map(String)
+        while (out.length && out.at(-1) === '') out.pop()
+        return out
+      })
+    expect(results).toEqual(trimmed(parseCsv(await created[1].text())))
+    expect(results[0][0]).toBe('ชื่อ')
+    const items = readXlsxRows(new Uint8Array(await created[2].arrayBuffer()))
+    expect(items).toEqual(trimmed(parseCsv(await created[3].text())))
+    expect(items[0][0]).toBe('ข้อ')
+    URL.createObjectURL.mockRestore()
+    URL.revokeObjectURL.mockRestore()
   })
 
   it('detail (trainer): item analysis with labels, escaped prompts, no key', async () => {
