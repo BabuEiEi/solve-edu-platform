@@ -116,3 +116,13 @@ $$);
 3. ตรวจว่ามี `SUPABASE_ANON_KEY` (หรือ `SUPABASE_PUBLISHABLE_KEY`) และ `SUPABASE_SERVICE_ROLE_KEY` ใน Secrets (Supabase ใส่ให้เอง)
 4. ลองกับภาระงานที่มีงานส่งไม่กี่ชิ้น → เปิด `folder_url` ตรวจโครงโฟลเดอร์ → กดซ้ำ ต้องได้ `copied: 0`
 5. ปิดการใช้งาน: ลบ secret `GOOGLE_SERVICE_ACCOUNT_JSON` (function ตอบ `not_configured`) หรือ disable key ที่ Google Cloud
+
+## `delete-account` — ลบบัญชี เก็บผลแบบไม่ระบุตัว (Phase 4a)
+
+| | |
+|---|---|
+| เรียกโดย | หน้าเว็บ เมื่อผู้ดูแลระบบลบบัญชี · `POST {"user_id", "confirm_email"}` · token ของผู้กดเอง |
+| ลำดับ | (1) `admin_delete_account` **ในนามผู้กด** — ฐานข้อมูลตัดสินสิทธิ์และลบข้อมูลส่วนตัวในธุรกรรมเดียว บัญชีถูกปิดทุกทางทันที (สถานะ `deleted`) · (2) soft delete ใน Supabase Auth ด้วยกุญแจ server — อีเมลและการผูก Google ถูกแทนด้วยค่าแฮช session ถูกตัด แถวยังอยู่เพื่อให้ผลผูกกับโปรไฟล์ที่ไม่ระบุตัว · (3) ลบรูปใน `avatars/<id>/` |
+| กดซ้ำ | ปลอดภัย: ฐานข้อมูลตอบ `already_deleted` แล้วทำขั้น 2–3 ซ้ำ (ใช้เมื่อได้ 502) |
+| ทดสอบ | `tests/functions/delete-account.test.js` — สมัครผ่าน Auth จริง อัปโหลดรูป ลบ แล้วยืนยันว่าเข้าสู่ระบบไม่ได้ อีเมล/ข้อมูลเพิ่มเติมหาย รูปหาย กดซ้ำได้ อีเมลเดิมสมัครใหม่ได้ |
+| ติดตั้ง | `npx supabase functions deploy delete-account --project-ref <ref>` (ต้องมี `ALLOWED_ORIGINS`) |

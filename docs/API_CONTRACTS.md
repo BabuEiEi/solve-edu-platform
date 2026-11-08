@@ -182,6 +182,7 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | นำเข้ารายชื่อพร้อมรหัส | `from('preregistrations').insert({…, user_code})` | ใส่ให้โปรไฟล์ตอนผูกบัญชี ถ้ายังไม่มีรหัสและรหัสยังว่าง |
 | ลบได้ไหม / เพราะอะไร | `rpc('deletion_usage', {p_kind: 'course'\|'instrument'\|'task', p_id})` → `{can_delete, reasons: {enrollments?, attempts?, submissions?, drive_exports?, rubric_tasks?, rubric_tasks_elsewhere?, reviews?}}` | นับเฉพาะเหตุที่มี · 42501 = ไม่ใช่ผู้จัดการ |
 | ลบ | `rpc('delete_course', {p_course, p_confirm: code})` · `rpc('delete_instrument', {p_instrument, p_confirm: code})` · `rpc('delete_task', {p_task, p_confirm: title})` → `{deleted, removed: {…}}` | SE009 = มีผู้ใช้แล้ว (ให้เก็บถาวรแทน; รายละเอียดใน detail) · 22023 = ยืนยันไม่ตรง · 23503 = มีผู้เริ่มใช้ระหว่างลบ (ลองใหม่จะได้ SE009) |
+| ลบบัญชี (หน้าเว็บ) | `functions.invoke('delete-account', {body: {user_id, confirm_email}})` → `{deleted, already_deleted, sign_in: removed\|already_removed, avatars_removed}` | ผู้ดูแลระบบเท่านั้น · 400 `confirm_mismatch` · 403 `forbidden` · 404 `not_found` · 502 `sign_in_not_removed` (ข้อมูลส่วนตัวหายแล้ว กดอีกครั้ง) · กดซ้ำได้ |
 
 ## 3. Error mapping (`src/core/errors.js`)
 
