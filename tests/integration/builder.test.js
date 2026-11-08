@@ -100,7 +100,12 @@ run('Course Builder (Supabase Local)', () => {
     const lessons = createLessonService(supabaseAs(env, 'teacher_a1'))
     expect(await lessons.getLesson(IDS.draft_lesson)).toBeNull()
     await builderAs('trainer').updateLesson(IDS.draft_lesson, { status: 'published' })
-    expect((await lessons.getLesson(IDS.draft_lesson)).id).toBe(IDS.draft_lesson)
+    try {
+      expect((await lessons.getLesson(IDS.draft_lesson)).id).toBe(IDS.draft_lesson)
+    } finally {
+      // Other files (storage, lessons) rely on this lesson being a draft: put it back.
+      await builderAs('trainer').updateLesson(IDS.draft_lesson, { status: 'draft' })
+    }
   })
 
   it('a lesson with learner progress cannot be deleted (archive instead)', async () => {

@@ -13,12 +13,21 @@ import Swal from 'sweetalert2/dist/sweetalert2.esm.min.js'
  * The library's stylesheet is imported in styles/main.css, inside a cascade layer
  * (see the note there), so that the Tailwind classes below can override it.
  *
- * Security: SweetAlert2 treats `title`, `html`, button texts and labels as
- * HTML (the input label and the placeholder are text). Text that may come from users (a unit title in "delete this unit?")
- * must never reach it as HTML, so this wrapper only ever passes plain-text
- * options (`titleText`, `text`) and HTML-escapes the strings that
- * SweetAlert2 insists on reading as HTML (the button texts).
+ * Security: SweetAlert2 reads `title`, `html`, the button texts and the
+ * validation message as HTML (the input label and the placeholder are text).
+ * Text that may come from users (a unit title in "delete this unit?") must
+ * never reach it as HTML, so this wrapper only ever passes plain-text options
+ * (`titleText`, `text`, `inputLabel`) and HTML-escapes the strings that
+ * SweetAlert2 insists on reading as HTML (the button texts, the validation
+ * message).
  */
+
+// A dialog belongs to the page that opened it. If the page changes underneath (the Back
+// button, a link in another tab of the app), close it as "cancelled": answering it afterwards
+// would act on a page that is no longer on screen (window.confirm blocked this by itself).
+window.addEventListener('hashchange', () => {
+  if (Swal.getPopup()) Swal.close() // getPopup, not isVisible: isVisible measures layout
+})
 
 const escapeHtml = (s) =>
   String(s ?? '')
@@ -103,7 +112,14 @@ export async function promptDialog({
     inputPlaceholder: placeholder,
     inputValue: defaultValue,
     inputAttributes: { maxlength: String(maxLength), autocapitalize: 'off', autocomplete: 'off' },
-    inputValidator: validate ? (value) => validate(String(value ?? '')) || undefined : undefined,
+    // SweetAlert2 shows the validator's message as HTML (setInnerHtml), so escape it: a message
+    // may one day quote what the person typed.
+    inputValidator: validate
+      ? (value) => {
+          const problem = validate(String(value ?? ''))
+          return problem ? escapeHtml(problem) : undefined
+        }
+      : undefined,
     showCancelButton: true,
     confirmButtonText: escapeHtml(confirmText),
     cancelButtonText: escapeHtml(cancelText),

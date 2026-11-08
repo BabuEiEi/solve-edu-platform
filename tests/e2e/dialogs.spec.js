@@ -5,7 +5,9 @@ import { signIn, answerDialog, IDS } from './helpers.js'
 // Runs on the desktop and on the iPhone project (see playwright.config.js).
 
 const YOUTUBE = 'https://www.youtube.com/watch?v=gxyBiCWiQ_8'
-const LESSON = `/#/courses/${IDS.course}/builder/lessons/${IDS.lesson2}`
+// The draft lesson: no other spec reads it, so a test that stops half-way cannot upset them
+const DRAFT_LESSON = '60000000-0000-4000-a000-000000000004'
+const LESSON = `/#/courses/${IDS.course}/builder/lessons/${DRAFT_LESSON}`
 
 async function addVideoBlock(page) {
   await page.locator('[data-action=new-block][data-type=video]').click()
@@ -72,6 +74,17 @@ test('a delete question: Cancel has the focus, the buttons are in order, and onl
   await expect(popup).toBeHidden()
   await expect(blocks).toHaveCount(before)
 
+  // The page changes while the question is open (the Back button, or the address): the question
+  // goes with the page it belongs to. location.hash fires the same hashchange as Back, without
+  // depending on the browser's history list.
+  await ask()
+  await page.evaluate(() => {
+    window.location.hash = '#/courses'
+  })
+  await expect(popup).toHaveCount(0)
+  await page.goto(LESSON)
+  await expect(blocks).toHaveCount(before)
+
   await ask()
   await answerDialog(page, 'confirm')
   await expect(page.getByText('ลบเนื้อหาแล้ว')).toBeVisible()
@@ -114,4 +127,14 @@ test('a typed answer: the link box starts with https://, refuses a wrong link in
   }
   await page.keyboard.press('Escape')
   await expect(popup).toBeHidden()
+
+  // The answer now arrives later (the dialog is not blocking like window.prompt): the link must
+  // still land on the text that was selected before the dialog opened.
+  const editor = page.getByRole('textbox', { name: 'เนื้อหาบทเรียน' })
+  await editor.click()
+  await page.keyboard.type('อ่านเพิ่มเติม')
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.locator('[data-cmd=link]').click()
+  await answerDialog(page, 'confirm', { text: 'https://docs.example.test/afl' })
+  await expect(editor.locator('a[href="https://docs.example.test/afl"]')).toHaveText('อ่านเพิ่มเติม')
 })

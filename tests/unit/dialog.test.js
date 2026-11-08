@@ -88,6 +88,18 @@ describe('confirmDialog', () => {
     await p
   })
 
+  it('the page changing underneath closes the dialog as not confirmed', async () => {
+    const p = confirmDialog({ title: 'ลบข้อนี้?', danger: true })
+    await tick()
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    expect(await p).toBe(false)
+    expect(isOpen()).toBe(false)
+    const q = promptDialog({ title: 'เหตุผล' })
+    await tick()
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    expect(await q).toBeNull()
+  })
+
   it('a second dialog replaces the first, which counts as not confirmed', async () => {
     const first = confirmDialog({ title: 'ก' })
     await tick()
@@ -151,6 +163,21 @@ describe('promptDialog', () => {
     type('https://x.test')
     Swal.clickConfirm()
     expect(await p).toBe('https://x.test')
+  })
+
+  it('a validation message that quotes what was typed stays text (SweetAlert2 reads it as HTML)', async () => {
+    const evil = '<img src=x onerror="window.__pwned=3"><b>x</b>'
+    const p = promptDialog({ title: 'x', validate: (v) => `“${v}” ใช้ไม่ได้` })
+    await tick()
+    type(evil)
+    Swal.clickConfirm()
+    await tick()
+    await tick()
+    expect(Swal.getValidationMessage().textContent).toBe(`“${evil}” ใช้ไม่ได้`)
+    expect(injected()).toBeNull()
+    expect(window.__pwned).toBeUndefined()
+    Swal.clickCancel()
+    expect(await p).toBeNull()
   })
 
   it('shows the label exactly as given (no visible &lt;), and the same for the buttons', async () => {
