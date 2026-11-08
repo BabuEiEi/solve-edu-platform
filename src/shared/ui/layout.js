@@ -30,6 +30,7 @@ export const NAV_ITEMS = [
     badgeLabel: 'งานรอตรวจ',
   },
   { path: '/admin/approvals', label: 'อนุมัติผู้ใช้', icon: '✓', show: (c) => c.canApproveUsers },
+  { path: '/admin/accounts', label: 'จัดการบัญชี', icon: '☰', show: (c) => c.canApproveUsers },
   { path: '/admin/import', label: 'นำเข้ารายชื่อ', icon: '⇪', show: (c) => c.canApproveUsers },
   { path: '/profile', label: 'โปรไฟล์ของฉัน', icon: '◉', show: () => true },
 ]
