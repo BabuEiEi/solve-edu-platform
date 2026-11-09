@@ -8,7 +8,7 @@
 | ส่วน | ที่อยู่ | สถานะ |
 |---|---|---|
 | ฐานข้อมูล / Auth / Storage | Supabase `solve-edu-platform` · ref `hcudarobowuwsmmyoyrd` · Singapore (ap-southeast-1) | ✅ migration 39 ไฟล์ (ถึง `20261109090000`, Phase 4d) ไม่มีข้อมูลสาธิต · ตรวจ RLS/สิทธิ์แล้ว |
-| Edge Functions | `cleanup-task-files` (v3), `drive-export-task` (v2), `delete-account` (v1) | ✅ ติดตั้งแล้ว (ตรงกับโค้ดล่าสุด) · `delete-account` ใช้งานได้ · ⏸ `cleanup-task-files` และ `drive-export-task` ยังไม่มี secret จึงปฏิเสธทุกคำขอ (`not_configured`) |
+| Edge Functions | `cleanup-task-files` (v3), `drive-export-task` (v2), `delete-account` (v1) | ✅ ติดตั้งแล้ว (ตรงกับโค้ดล่าสุด) · `delete-account` ใช้งานได้ · ✅ `cleanup-task-files` มี `CRON_SECRET` แล้ว ทำงานทุกคืน 02:30 น. (2569-11-09) · ⏸ `drive-export-task` ยังไม่มี secret ของ Google จึงตอบ `not_configured` |
 | หน้าเว็บ | Vercel โปรเจกต์ `solve-edu-platform` (ทีม `babueieis-projects`) | ✅ **production** https://solve-edu-platform.vercel.app (ล่าสุด Phase 4d, 2569-11-09) · preview ต้องล็อกอิน Vercel · ตรวจแล้ว: ชี้ `hcudarobowuwsmmyoyrd`, header ครบ, ไฟล์ภายในเป็น 404 |
 | Auth URL | Site URL + Redirect URLs (production และ preview) | ✅ ตั้งแล้ว (เจ้าของระบบ) |
 | ผู้ดูแลระบบคนแรก | ด้วย SQL ด้านล่าง | ✅ 1 คน |
@@ -16,7 +16,8 @@
 | Google login | Google Cloud โปรเจกต์ "SolveEdu" (บัญชีส่วนตัวของเจ้าของระบบ, External) | ✅ เปิดใช้แล้ว · ⏸ ต้องกด Publish app (ใส่ลิงก์หน้าแรกและนโยบายใน Branding แล้ว) จึงใช้ได้ทุกคน |
 | นโยบายความเป็นส่วนตัว | https://solve-edu-platform.vercel.app/privacy.html | ✅ ลิงก์จากหน้าเข้าสู่ระบบ |
 | SMTP | Gmail + App Password ของเจ้าของระบบ · จำกัด 100 ฉบับ/ชม. | ✅ ทดสอบแล้ว (2569-11-08) อีเมลยืนยันถึงกล่องจดหมาย |
-| ผู้ดูแลเขต, ล้างไฟล์ทุกคืน, Google Drive | — | ⏸ เจ้าของระบบ (ดูด้านล่างและ `docs/DEPLOY_PHASE3B.md`) |
+| ล้างไฟล์ทุกคืน | pg_cron `cleanup-task-files-nightly` (`30 19 * * *` UTC = 02:30 น.) → pg_net → `cleanup-task-files` · Vault `project_url`, `cleanup_task_files_secret` | ✅ 2569-11-09 · ลองแบบไม่ลบแล้ว: 200, ไม่มีไฟล์ค้าง · ⚠ `pg_net` ยังลงทะเบียนใน schema `public` (advisor 0014) — ย้ายด้วย `drop extension pg_net; create extension pg_net with schema extensions;` |
+| ผู้ดูแลเขต, Google Drive | — | ⏸ เจ้าของระบบ (ดูด้านล่างและ `docs/DEPLOY_PHASE3B.md`) |
 
 ## หน้าเว็บบน Vercel
 
