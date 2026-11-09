@@ -1,4 +1,5 @@
 import { html, render } from '../../shared/ui/html.js'
+import { promptDialog } from '../../shared/ui/dialog.js'
 import {
   pageHeader,
   emptyState,
@@ -145,7 +146,14 @@ export async function renderApprovalsView(el, { services, session }) {
       const status = b.dataset.status
       let reason = ''
       if (status === 'suspended') {
-        reason = window.prompt('ระบุเหตุผลในการระงับ/ปฏิเสธ (บันทึกใน Audit Log)') ?? ''
+        reason =
+          (await promptDialog({
+            title: 'ระงับ/ปฏิเสธบัญชีนี้?',
+            label: 'เหตุผล (บันทึกใน Audit Log)',
+            confirmText: 'ยืนยัน',
+            danger: true,
+            validate: (v) => (v.trim() ? undefined : 'กรุณาระบุเหตุผล'),
+          })) ?? ''
         if (!reason.trim()) return
       }
       b.disabled = true

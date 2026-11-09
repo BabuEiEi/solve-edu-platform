@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, IDS } from './helpers.js'
+import { signIn, watchCsp, IDS, answerDialog } from './helpers.js'
 
 test('trainer builds ordering + matching items, publishes, assigns; a trainee scores 2/2', async ({
   browser,
@@ -45,9 +45,9 @@ test('trainer builds ordering + matching items, publishes, assigns; a trainee sc
   await menus.nth(1).selectOption({ label: 'บอกว่าควรปรับอะไร' })
   await form.getByRole('button', { name: 'บันทึกข้อ' }).click()
   await expect(trainer.getByText('พร้อมเผยแพร่ (2 ข้อ)')).toBeVisible() // both keys valid (stored order does not give them away)
-
-  trainer.once('dialog', (d) => d.accept())
   await trainer.locator('[data-action=publish]').click()
+
+  await answerDialog(trainer)
   await expect(trainer.getByText(/เผยแพร่แล้ว/).first()).toBeVisible()
 
   await trainer.locator('a[data-action-link=assign]').click()

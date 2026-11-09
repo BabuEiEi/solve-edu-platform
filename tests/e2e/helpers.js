@@ -14,6 +14,25 @@ export async function signIn(page, email) {
   await page.locator('#view').waitFor()
 }
 
+/**
+ * Answer the app's SweetAlert2 dialog (confirmDialog / promptDialog).
+ *   answer  'confirm' | 'cancel'
+ *   text    typed into the prompt's input first (prompt dialogs only)
+ * Returns what the dialog said, so a test can assert on it.
+ */
+export async function answerDialog(page, answer = 'confirm', { text } = {}) {
+  const popup = page.locator('.swal2-popup')
+  await popup.waitFor({ state: 'visible' })
+  const said = {
+    title: (await popup.locator('.swal2-title').textContent()) ?? '',
+    text: (await popup.locator('.swal2-html-container').textContent()) ?? '',
+  }
+  if (text !== undefined) await popup.locator('.swal2-input').fill(text)
+  await popup.locator(answer === 'confirm' ? '.swal2-confirm' : '.swal2-cancel').click()
+  await popup.waitFor({ state: 'hidden' })
+  return said
+}
+
 /** Collect Content-Security-Policy violations reported to the console. */
 export function watchCsp(page) {
   const violations = []
@@ -103,8 +122,8 @@ export async function reviewInUi(page, personName, fields) {
   if (fields.outcome) await form.locator(`input[name=outcome][value=${fields.outcome}]`).check()
   if (fields.reason) await form.locator('[name=reason]').fill(fields.reason)
   if (fields.release) {
-    page.once('dialog', (d) => d.accept())
     await form.getByRole('button', { name: 'ส่งผลให้ผู้เรียน' }).click()
+    await answerDialog(page)
     await page.getByText('ส่งผลให้ผู้เรียนแล้ว').waitFor()
   } else {
     await form.getByRole('button', { name: 'บันทึกร่างการตรวจ' }).click()

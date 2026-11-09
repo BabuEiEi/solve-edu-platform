@@ -15,6 +15,8 @@ import {
 import { createSubmissionService } from '../../src/features/submissions/service.js'
 import { renderMyTasksView, renderTaskPageView } from '../../src/features/submissions/views.js'
 import { AppError } from '../../src/core/errors.js'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { confirmDialog } from '../../src/shared/ui/dialog.js'
 
 const XSS = '<img src=x onerror=alert(1)>'
 const settle = async () => {
@@ -323,7 +325,7 @@ describe('pages', () => {
     expect(form.querySelector('[data-form-error]').textContent).toContain('https://')
     expect(el.querySelector('[name=text]').value).toBe('งานของฉัน')
     form.querySelector('[name=link_url]').value = 'https://ok.example.test'
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     form.querySelector('button[data-intent=submit]').click()
     await settle()
     expect(services.submissions.saveDraft).toHaveBeenCalledWith('s1', {
@@ -335,7 +337,7 @@ describe('pages', () => {
       services.submissions.submit.mock.invocationCallOrder[0]
     )
     expect(el.textContent).toContain('ส่งงานแล้ว')
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('a refused submit keeps the form with the server message', async () => {
@@ -345,13 +347,13 @@ describe('pages', () => {
     services.submissions.submit = vi.fn(async () => {
       throw new AppError('ส่งงานรอบนี้ไปแล้ว')
     })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('button[data-intent=submit]').click()
     await settle()
     expect(el.querySelector('form[data-form=draft] [data-form-error]').textContent).toContain(
       'ส่งงานรอบนี้ไปแล้ว'
     )
-    window.confirm.mockRestore()
+    confirmDialog.mockReset()
   })
 
   it('files: attached list with remove, the picker uploads, five files fill it, orphans are cleaned on open', async () => {

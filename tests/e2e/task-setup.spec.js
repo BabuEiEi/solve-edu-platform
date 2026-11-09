@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, IDS } from './helpers.js'
+import { signIn, watchCsp, IDS, answerDialog } from './helpers.js'
 
 test('trainer sets up a task: published rubric, publish, open to the cohort with a due date, change it, withdraw', async ({
   page,
@@ -17,8 +17,8 @@ test('trainer sets up a task: published rubric, publish, open to the cohort with
   await page.locator('form[data-form=criterion] [name=prompt]').fill('การกำหนดเป้าหมาย')
   await page.getByRole('button', { name: 'บันทึกเกณฑ์' }).click()
   await expect(page.locator('[data-criterion-id]')).toHaveCount(1)
-  page.once('dialog', (d) => d.accept())
   await page.getByRole('button', { name: 'เผยแพร่ฉบับนี้' }).click()
+  await answerDialog(page)
   await expect(page.getByText('เผยแพร่แล้ว — นำไปใช้กับภาระงานได้')).toBeVisible()
 
   // The task: reached from the course page, created as a draft
@@ -57,8 +57,8 @@ test('trainer sets up a task: published rubric, publish, open to the cohort with
   await expect(page.getByText('บันทึกวันที่แล้ว')).toBeVisible()
 
   // Withdraw (nobody has started), then the task can go back to a draft
-  page.once('dialog', (d) => d.accept())
   await page.getByRole('button', { name: 'เลิกเปิด' }).click()
+  await answerDialog(page)
   await expect(page.getByText('เลิกเปิดให้รุ่นแล้ว')).toBeVisible()
   await expect(page.locator('form[data-form=allocation]')).toHaveCount(0)
   expect(csp).toEqual([])

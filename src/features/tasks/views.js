@@ -1,4 +1,5 @@
 import { html, render } from '../../shared/ui/html.js'
+import { confirmDialog } from '../../shared/ui/dialog.js'
 import { pageHeader, emptyState, alertBox, statusBadge, loading } from '../../shared/ui/components.js'
 import { toUserMessage } from '../../core/errors.js'
 import { navigate } from '../../core/router.js'
@@ -303,7 +304,7 @@ export async function renderTaskDetailView(el, { services, caps, context }, { id
     return undefined
   }
 
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     const b = e.target.closest('button[data-action]')
     if (!b || b.disabled) return undefined
     const { action, status, id } = b.dataset
@@ -314,8 +315,13 @@ export async function renderTaskDetailView(el, { services, caps, context }, { id
       )
     }
     if (action === 'remove-allocation') {
-      if (!window.confirm('เลิกเปิดภาระงานนี้ให้รุ่นนี้? (ทำได้เฉพาะเมื่อยังไม่มีผู้เริ่มส่งงาน)'))
-        return undefined
+      const ok = await confirmDialog({
+        title: 'เลิกเปิดภาระงานนี้ให้รุ่นนี้?',
+        text: 'ทำได้เฉพาะเมื่อยังไม่มีผู้เริ่มส่งงาน',
+        confirmText: 'เลิกเปิดให้รุ่น',
+        danger: true,
+      })
+      if (!ok) return undefined
       return run(() => services.tasks.removeAllocation(id), 'เลิกเปิดให้รุ่นแล้ว')
     }
     return undefined

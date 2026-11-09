@@ -1,6 +1,16 @@
 import { readFile } from 'node:fs/promises'
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, sqlAs, submitAs, reviewInUi, resetTaskWork, DEMO, PEOPLE } from './helpers.js'
+import {
+  signIn,
+  watchCsp,
+  sqlAs,
+  submitAs,
+  reviewInUi,
+  resetTaskWork,
+  DEMO,
+  PEOPLE,
+  answerDialog,
+} from './helpers.js'
 import { xlsxTexts } from './xlsx-text.js'
 
 // psql also prints SET / COMMIT: the count is the one line that is only digits
@@ -75,8 +85,8 @@ test('trainer reviews with the rubric: queue, draft hidden from the trainee, rel
     'ระบุเหตุผลที่ตรวจใหม่'
   )
   await page.locator('[name=reason]').fill('ทบทวนตามเกณฑ์แล้ว')
-  page.once('dialog', (d) => d.accept())
   await page.locator('form[data-form=review]').getByRole('button', { name: 'ส่งผลให้ผู้เรียน' }).click()
+  await answerDialog(page)
   await expect(page.getByText('ส่งผลให้ผู้เรียนแล้ว')).toBeVisible()
   await expect(page.locator('[data-released]')).toHaveCount(2)
   await expect(page.locator('[data-released-reviews]')).toContainText('ผลก่อนหน้า')

@@ -6,6 +6,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createDriveService } from '../../src/features/drive/service.js'
 import { explainError, historyLine, resultMessage, resultTone } from '../../src/features/drive/logic.js'
 import { renderTaskPeopleView } from '../../src/features/reviews/views.js'
+vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
+import { confirmDialog } from '../../src/shared/ui/dialog.js'
 
 const XSS = '<img src=x onerror=alert(1)>'
 const settle = async () => {
@@ -233,10 +235,10 @@ describe('page', () => {
   it('pressing asks first; declining sends nothing', async () => {
     const { el, services, open } = setup()
     await open()
-    const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    confirmDialog.mockResolvedValue(false)
     el.querySelector('[data-action=drive-export]').click()
     await settle()
-    expect(confirm.mock.calls[0][0]).toContain('ชื่อผู้เรียนจะปรากฏในชื่อโฟลเดอร์')
+    expect(confirmDialog.mock.calls[0][0].text).toContain('ชื่อผู้เรียนจะปรากฏในชื่อโฟลเดอร์')
     expect(services.drive.exportTask).not.toHaveBeenCalled()
   })
 
@@ -246,7 +248,7 @@ describe('page', () => {
       drive: { exportTask: vi.fn(() => new Promise((r) => (finish = r))) },
     })
     await open()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('[data-action=drive-export]').click()
     await settle()
     const busy = el.querySelector('[data-action=drive-export]')
@@ -256,7 +258,7 @@ describe('page', () => {
     busy.click() // a disabled button sends no click at all …
     el.onclick({ target: busy }) // … and even a click that reaches the handler is ignored while busy
     expect(services.drive.exportTask).toHaveBeenCalledTimes(1)
-    expect(window.confirm).toHaveBeenCalledTimes(1)
+    expect(confirmDialog).toHaveBeenCalledTimes(1)
     services.drive.history.mockResolvedValue([run({ id: 'r2', files_copied: 2, files_skipped: 1 }), run()])
     finish({
       run_id: 'r2',
@@ -289,7 +291,7 @@ describe('page', () => {
       },
     })
     await open()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('[data-action=drive-export]').click()
     await settle()
     expect(el.querySelector('[data-drive-status] [role=alert]').textContent).toContain(
@@ -314,7 +316,7 @@ describe('page', () => {
       },
     })
     await open()
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    confirmDialog.mockResolvedValue(true)
     el.querySelector('[data-action=drive-export]').click()
     await settle()
     expect(el.querySelector('[data-drive-status]').textContent).toContain('เหลืออีก 3 ไฟล์')

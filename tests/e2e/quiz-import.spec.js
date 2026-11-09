@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, IDS } from './helpers.js'
+import { signIn, watchCsp, IDS, answerDialog } from './helpers.js'
 
 // Thai Excel's default "CSV (Comma delimited)": Windows-874 bytes, not UTF-8
 const tis620 = (text) =>
@@ -80,9 +80,9 @@ test('trainer imports a Windows-874 CSV: errors first, then preview, import, pub
   await expect(trainer.locator('[data-import-panel]')).toHaveCount(0)
   await expect(trainer.locator('li[data-item-id]')).toHaveCount(4)
   await expect(trainer.getByText('พร้อมเผยแพร่ (4 ข้อ)')).toBeVisible() // every imported item has a valid key
-
-  trainer.once('dialog', (d) => d.accept())
   await trainer.locator('[data-action=publish]').click()
+
+  await answerDialog(trainer)
   await expect(trainer.getByText(/เผยแพร่แล้ว/).first()).toBeVisible()
   await trainer.locator('a[data-action-link=assign]').click()
   const a = trainer.locator('form[data-form=assignment]')

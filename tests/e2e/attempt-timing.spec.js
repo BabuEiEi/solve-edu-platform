@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, IDS } from './helpers.js'
+import { signIn, watchCsp, IDS, answerDialog } from './helpers.js'
 
 const QUIZ = 'a1000000-0000-4000-a000-000000000001'
 const TITLE = 'แบบฝึกจับเวลา (E2E)'
@@ -52,8 +52,8 @@ test('timed test: countdown, answers saved on the server follow the trainee to a
   await trainer.reload()
   const row = trainer.locator('[data-results] tbody tr', { hasText: 'ครู ก1' })
   await expect(row).toContainText('1 / 1')
-  trainer.once('dialog', (d) => d.accept('สัญญาณขาด'))
   await row.locator('[data-action=grant-extra]').click()
+  await answerDialog(trainer, 'confirm', { text: 'สัญญาณขาด' })
   await expect(trainer.getByText('ให้สิทธิ์ทำเพิ่ม 1 ครั้งแก่ ครู ก1 (สมมติ) แล้ว')).toBeVisible()
   await expect(trainer.locator('[data-results] tbody tr', { hasText: 'ครู ก1' })).toContainText('(เพิ่ม 1)')
   await expect(trainer.locator('form[data-form=assignment] [name=time_limit_minutes]')).toBeDisabled()

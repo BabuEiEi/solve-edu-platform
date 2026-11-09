@@ -1,4 +1,9 @@
+/* SweetAlert2's stylesheet goes into its own cascade layer, below Tailwind's utilities.
+   Unlayered CSS beats every layered utility, so without this our classes (title size,
+   alignment, radius, colours) in shared/ui/dialog.js would lose to the library's defaults. */
+@layer theme, base, swal2, components, utilities;
 @import 'tailwindcss';
+@import 'sweetalert2/dist/sweetalert2.min.css' layer(swal2);
 
 @theme {
   --font-sans: 'IBM Plex Sans Thai', 'Noto Sans Thai', ui-sans-serif, system-ui, sans-serif;

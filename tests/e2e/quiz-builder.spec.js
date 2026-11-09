@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures.js'
-import { signIn, watchCsp, IDS } from './helpers.js'
+import { signIn, watchCsp, IDS, answerDialog } from './helpers.js'
 
 const FORMATIVE = 'a4000000-0000-4000-a000-000000000002'
 
@@ -42,9 +42,9 @@ test('trainer builds and publishes a quiz with an image choice', async ({ page }
   await page.locator('form[data-form=item] [name=correct_tf][value=true]').check()
   await page.locator('form[data-form=item]').getByRole('button', { name: 'บันทึกข้อ' }).click()
   await expect(page.getByText('พร้อมเผยแพร่ (2 ข้อ)')).toBeVisible()
-
-  page.once('dialog', (d) => d.accept())
   await page.locator('[data-action=publish]').click()
+
+  await answerDialog(page)
   await expect(page.getByText(/เผยแพร่แล้ว/).first()).toBeVisible()
   await expect(page.locator('[data-action=clone]')).toBeVisible()
   await expect(page.locator('[data-action=edit-item]')).toHaveCount(0)
