@@ -10,7 +10,7 @@
 |---|---|---|
 | บันทึกร่างอัตโนมัติ (ขั้น 1) | หน้าเว็บเท่านั้น | ✅ |
 | ป้ายแจ้งเตือนในเมนู (ขั้น 2) | migration `20261105090600` | ✅ |
-| ล้างไฟล์ค้างทุกคืน (ขั้น 3) | migration `20261105090700` + function `cleanup-task-files` + `CRON_SECRET` + ตัวตั้งเวลา | ❌ ต้องทำข้อ 3 |
+| ล้างไฟล์ค้างทุกคืน (ขั้น 3) | migration `20261105090700` + function `cleanup-task-files` + `CRON_SECRET` + ตัวตั้งเวลา | ✅ 2569-11-09 (ดูวิธีที่ใช้จริงในข้อ 3) |
 | ส่งสำเนาไป Google Drive (ขั้น 4–5) | migration `20261105090800` + function `drive-export-task` + Google + secrets | ❌ ต้องทำข้อ 4–5 (ก่อนนั้นปุ่มตอบ "ยังไม่ได้ตั้งค่า Google Drive") |
 
 ทุก migration เป็นการ **เพิ่ม** (ตาราง ฟังก์ชัน สิทธิ์) ไม่แก้หรือลบข้อมูลเดิม
@@ -28,6 +28,13 @@
 - [ ] ตรวจ: ผู้เรียนเห็นป้ายที่ "ภาระงาน" เมื่อมีผลตรวจใหม่ · ผู้ตรวจเห็นตัวเลขที่ "ตรวจงาน"
 
 ## 3. ล้างไฟล์ค้างทุกคืน — ต้องอนุมัติ
+
+> วิธีที่ใช้จริงบน `hcudarobowuwsmmyoyrd` (2569-11-09) — secret ไม่ผ่านแชท Terminal หรือผู้ช่วย:
+> 1. `create extension pg_net with schema extensions;` · `vault.create_secret(encode(extensions.gen_random_bytes(32), 'hex'), 'cleanup_task_files_secret')` · `vault.create_secret('https://<ref>.supabase.co', 'project_url')`
+> 2. เจ้าของระบบอ่านค่าใน SQL Editor (`select decrypted_secret from vault.decrypted_secrets where name = 'cleanup_task_files_secret'`) แล้ววางเป็น Edge Functions → Secrets → `CRON_SECRET` (ไม่มีบรรทัดว่างต่อท้าย)
+> 3. ตรวจว่าตรงกันโดยไม่เปิดค่า: SHA-256 ของค่าใน Vault ต้องขึ้นต้นเหมือน digest ที่หน้า Secrets แสดง
+> 4. ลองแบบไม่ลบด้วย `net.http_post(…, body := '{"dry_run": true}')` แล้วอ่าน `net._http_response` (ได้ 200)
+> 5. `cron.schedule('cleanup-task-files-nightly', '30 19 * * *', …)` ตาม SQL ใน `docs/EDGE_FUNCTIONS.md`
 
 - [ ] สร้าง secret: `openssl rand -hex 32` (เก็บในที่ปลอดภัย)
 - [ ] Edge Functions → Secrets: `CRON_SECRET`
