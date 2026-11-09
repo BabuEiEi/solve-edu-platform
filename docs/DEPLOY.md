@@ -3,13 +3,13 @@
 > ทุกคำสั่งที่แตะบริการจริงต้องได้รับอนุมัติจากเจ้าของระบบ · ห้ามใช้โปรเจกต์ Supabase ของระบบเดิม (`ioeqyonmpjbesrzyrhgw` "SolveEdu LMS Database")
 > ขั้นเฉพาะของ Phase 3b (ล้างไฟล์ทุกคืน, Google Drive): `docs/DEPLOY_PHASE3B.md`
 
-## สถานะ (2569-11-08)
+## สถานะ (2569-11-09)
 
 | ส่วน | ที่อยู่ | สถานะ |
 |---|---|---|
-| ฐานข้อมูล / Auth / Storage | Supabase `solve-edu-platform` · ref `hcudarobowuwsmmyoyrd` · Singapore (ap-southeast-1) | ✅ migration 34 ไฟล์ (ถึง `20261105090800`) ไม่มีข้อมูลสาธิต · ตรวจ RLS/สิทธิ์แล้ว |
-| Edge Functions | `cleanup-task-files`, `drive-export-task` (v1) | ✅ ติดตั้งแล้ว · ⏸ ยังไม่มี secret จึงปฏิเสธทุกคำขอ (`not_configured`) |
-| หน้าเว็บ | Vercel โปรเจกต์ `solve-edu-platform` (ทีม `babueieis-projects`) | ✅ **production** https://solve-edu-platform.vercel.app (2569-11-08) · preview ต้องล็อกอิน Vercel · ตรวจแล้ว: ชี้ `hcudarobowuwsmmyoyrd`, header ครบ, ไฟล์ภายในเป็น 404 |
+| ฐานข้อมูล / Auth / Storage | Supabase `solve-edu-platform` · ref `hcudarobowuwsmmyoyrd` · Singapore (ap-southeast-1) | ✅ migration 39 ไฟล์ (ถึง `20261109090000`, Phase 4d) ไม่มีข้อมูลสาธิต · ตรวจ RLS/สิทธิ์แล้ว |
+| Edge Functions | `cleanup-task-files` (v3), `drive-export-task` (v2), `delete-account` (v1) | ✅ ติดตั้งแล้ว (ตรงกับโค้ดล่าสุด) · `delete-account` ใช้งานได้ · ⏸ `cleanup-task-files` และ `drive-export-task` ยังไม่มี secret จึงปฏิเสธทุกคำขอ (`not_configured`) |
+| หน้าเว็บ | Vercel โปรเจกต์ `solve-edu-platform` (ทีม `babueieis-projects`) | ✅ **production** https://solve-edu-platform.vercel.app (ล่าสุด Phase 4d, 2569-11-09) · preview ต้องล็อกอิน Vercel · ตรวจแล้ว: ชี้ `hcudarobowuwsmmyoyrd`, header ครบ, ไฟล์ภายในเป็น 404 |
 | Auth URL | Site URL + Redirect URLs (production และ preview) | ✅ ตั้งแล้ว (เจ้าของระบบ) |
 | ผู้ดูแลระบบคนแรก | ด้วย SQL ด้านล่าง | ✅ 1 คน |
 | หน่วยงาน | สพม.พิษณุโลก อุตรดิตถ์ + โรงเรียน 57 แห่ง (รหัส 10 หลักทางการ) | ✅ (รหัสเขตเป็นรหัสชั่วคราว — ปรับเป็นรหัสทางการเมื่อขยายระดับ สพฐ.) |
