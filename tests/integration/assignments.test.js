@@ -120,6 +120,40 @@ run('Assignments and cohort results (Supabase Local)', () => {
     await expect(as('trainer').remove(assignmentId)).rejects.toThrow() // published: not deletable
   })
 
+  it('an archived quiz cannot be assigned (SE010, Thai message); bringing it back lifts the block', async () => {
+    // AFL-102-TYPES: no other integration file uses it (files run in parallel on one database)
+    const TYPES_QUIZ = 'a1000000-0000-4000-a000-000000000002'
+    const TYPES_VERSION = 'a2000000-0000-4000-a000-000000000002'
+    const client = supabaseAs(env, 'trainer')
+    const setStatus = async (status) => {
+      const { error } = await client.from('instruments').update({ status }).eq('id', TYPES_QUIZ)
+      expect(error).toBeNull()
+    }
+    const draft = () =>
+      as('trainer').create({
+        versionId: TYPES_VERSION,
+        cohortId: COHORT,
+        courseId: IDS.course,
+        status: 'draft',
+        title: 'ร่างจากแบบทดสอบที่เก็บถาวร (ทดสอบ)',
+        purpose: 'formative',
+        attempt_limit: 1,
+        passing_percent: null,
+        open_at: null,
+        close_at: null,
+        instructions: null,
+      })
+    await setStatus('archived')
+    try {
+      expect((await as('trainer').getVersion(TYPES_VERSION)).instruments.status).toBe('archived')
+      await expect(draft()).rejects.toMatchObject({ code: 'SE010', message: expect.stringContaining('นำกลับมาใช้') })
+    } finally {
+      await setStatus('active')
+    }
+    const created = await draft()
+    await as('trainer').remove(created.id) // a draft nobody used: deletable, so the data ends as it began
+  })
+
   it('outsiders see nothing', async () => {
     expect(await as('school_admin_b').get(assignmentId)).toBeNull()
     expect(await as('school_admin_b').listAttempts(assignmentId)).toEqual([])

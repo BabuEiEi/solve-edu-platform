@@ -82,6 +82,18 @@ commit;
 | 4 | `vercel deploy --prod` | หน้า "จัดการบัญชี" ปุ่มลบ/เก็บถาวร และนโยบายความเป็นส่วนตัวฉบับปรับปรุง |
 | 5 | ตรวจ | security advisor · หน้า "จัดการบัญชี" ในฐานะผู้ดูแลระบบ · ลบหลักสูตรทดลองที่ไม่มีผู้ใช้ 1 รายการ |
 
+## ขึ้น Phase 4d บนระบบจริง (กันใช้แบบทดสอบ/Rubric ที่เก็บถาวร) — ต้องอนุมัติทีละข้อ
+
+| ลำดับ | ทำอะไร | หมายเหตุ |
+|---|---|---|
+| 1 | `npx supabase db push --dry-run` แล้ว `db push` | migration `20261109090000_archived_instrument_guard.sql` อย่างเดียว · เพิ่ม trigger + ฟังก์ชันใน `private` ไม่แก้ข้อมูลเดิม · การมอบหมาย/ภาระงานที่ใช้ของที่เก็บถาวรอยู่แล้วไม่ถูกกระทบ |
+| 2 | `vercel deploy --prod` | ข้อความไทยของ SE010 และหน้า "มอบหมายให้รุ่น" บอกว่าเก็บถาวรแล้ว |
+| 3 | ตรวจ | security advisor (ไม่ควรมีคำเตือนใหม่) · ตรวจว่ามี trigger 2 ตัวบนระบบจริง |
+
+ลำดับ 1 ก่อน 2: หน้าเว็บรุ่นเก่ากับฐานข้อมูลรุ่นใหม่ทำงานด้วยกันได้ (จะเห็นข้อความทั่วไปแทนข้อความ SE010 ชั่วคราว)
+
+ย้อนกลับ: `drop trigger assessment_assignments_validate_active on public.assessment_assignments; drop trigger tasks_validate_rubric_active on public.tasks;` (ไม่มีข้อมูลที่ต้องย้อน)
+
 ## ขึ้น Phase 4c บนระบบจริง (กล่องยืนยัน SweetAlert2) — ต้องอนุมัติ
 
 Phase 4c ไม่มี migration ไม่มี Edge Function และไม่มี secret ใหม่ — เปลี่ยนเฉพาะหน้าเว็บ (เพิ่ม dependency `sweetalert2` ในตัวหน้าเว็บ) · CSP เดิมพอ (`style-src 'unsafe-inline'` มีอยู่แล้ว)

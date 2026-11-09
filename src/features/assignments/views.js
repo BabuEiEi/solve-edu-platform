@@ -241,6 +241,14 @@ export async function renderNewAssignmentView(el, { services, caps, context }, {
       el,
       html`${back}${pageHeader('ยังมอบหมายไม่ได้')}${emptyState('มอบหมายได้เฉพาะฉบับที่เผยแพร่แล้ว')}`
     )
+  // the database refuses it too (SE010); say so before the form is filled in
+  if (instrument.status === 'archived')
+    return render(
+      el,
+      html`${back}${pageHeader('ยังมอบหมายไม่ได้')}${emptyState(
+        'แบบทดสอบนี้ถูกเก็บถาวรแล้ว กด “นำกลับมาใช้” ที่หน้าแบบทดสอบก่อนจึงจะมอบหมายได้'
+      )}`
+    )
 
   let message = null
   let values = { title: instrument.title, purpose: 'pretest', attempt_limit: 1, passing_percent: null }

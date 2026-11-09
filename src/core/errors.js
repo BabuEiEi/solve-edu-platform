@@ -19,6 +19,8 @@ const BY_CODE = {
   SE007: 'รอบล่าสุดรอผลตรวจหรือผ่านแล้ว จึงส่งรอบใหม่ไม่ได้',
   // Google Drive copy (begin_task_drive_export): one run per task-cohort at a time
   SE008: 'กำลังส่งสำเนาไป Google Drive อยู่ กรุณารอสักครู่แล้วลองใหม่',
+  // an archived quiz or rubric cannot be assigned or chosen again until it is brought back (Phase 4d)
+  SE010: 'แบบทดสอบหรือ Rubric นี้ถูกเก็บถาวรแล้ว กรุณากด “นำกลับมาใช้” ที่หน้าของมันก่อน',
   PGRST116: 'ไม่พบข้อมูลที่ต้องการ',
   PGRST301: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
 }

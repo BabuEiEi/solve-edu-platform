@@ -696,4 +696,20 @@ describe('assignment views', () => {
     expect(el.textContent).toContain('มอบหมายได้เฉพาะฉบับที่เผยแพร่แล้ว')
     expect(el.querySelector('form')).toBeNull()
   })
+
+  it('new: an archived quiz cannot be assigned (opened by its address)', async () => {
+    const el = document.createElement('div')
+    const services = makeServices({
+      getVersion: vi.fn(async () => ({
+        id: 'V3',
+        version_no: 1,
+        status: 'published',
+        instruments: { id: 'I1', title: 'แบบทดสอบเก่า', course_id: 'C1', status: 'archived' },
+      })),
+    })
+    await renderNewAssignmentView(el, ctx(services, trainer), { versionId: 'V3' })
+    expect(el.textContent).toContain('ถูกเก็บถาวรแล้ว')
+    expect(el.textContent).toContain('นำกลับมาใช้')
+    expect(el.querySelector('form')).toBeNull()
+  })
 })
