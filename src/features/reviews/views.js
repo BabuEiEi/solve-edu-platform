@@ -164,25 +164,33 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
     if (zip.busy) return
     Object.assign(zip, { busy: true, progress: null, error: '', done: null })
     draw()
+    // This page stays in memory while the person browses on: once the address has
+    // changed, stop downloading and do not draw over (or save a file from) another page.
+    const startedAt = window.location.hash
+    const gone = () => window.location.hash !== startedAt
     const status = () => render(el.querySelector('[data-zip-status]'), zipStatus())
     try {
       const data = await services.reviews.zipData(allocationId)
+      if (gone()) return
       if (!data) throw new AppError('ไม่พบภาระงานนี้ หรือท่านไม่มีสิทธิ์')
       const plan = planZip(data)
       if (!plan.folders.length) throw new AppError('ยังไม่มีงานที่ส่งแล้วให้ดาวน์โหลด')
       checkZipLimits(plan) // too big for the browser: say so before downloading anything
       const out = await buildZip(plan, {
-        signedUrls: (paths) => services.reviews.signedUrls(paths, 600),
+        signedUrls: (paths) => services.reviews.signedUrls(paths), // an hour: a big download may be slow
         fetchBytes: async (url) => {
           const res = await fetch(url)
           if (!res.ok) throw new Error(`HTTP ${res.status}`)
           return new Uint8Array(await res.arrayBuffer())
         },
+        isCancelled: gone,
         onProgress: (p) => {
+          if (gone()) return
           zip.progress = p
           status()
         },
       })
+      if (!out || gone()) return
       downloadBytes(out.name, out.bytes, 'application/zip')
       zip.done = out.failed.length
         ? {
@@ -196,6 +204,7 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
     } catch (err) {
       zip.error = toUserMessage(err)
     }
+    if (gone()) return
     zip.busy = false
     draw()
   }

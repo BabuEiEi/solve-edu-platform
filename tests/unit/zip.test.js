@@ -3,6 +3,8 @@ import { unzipSync, strFromU8, strToU8 } from 'fflate'
 import {
   safeSegment,
   uniqueName,
+  fitName,
+  MAX_PATH_CHARS,
   personFolderName,
   attemptFolderName,
   answerText,
@@ -69,13 +71,51 @@ describe('safeSegment: names from users become one harmless path segment', () =>
 
   it('keeps long Thai names inside the file-system limit and keeps the extension', () => {
     const s = safeSegment(`${'แผนการจัดการเรียนรู้'.repeat(20)}.pdf`)
-    expect(utf8(s)).toBeLessThanOrEqual(150)
+    expect(utf8(s)).toBeLessThanOrEqual(100)
     expect(s.endsWith('.pdf')).toBe(true)
     expect(s.startsWith('แผนการจัดการเรียนรู้')).toBe(true)
   })
 
   it('keeps an ordinary name as it is', () => {
     expect(safeSegment('แผนการสอน AfL (ฉบับแก้).pdf')).toBe('แผนการสอน AfL (ฉบับแก้).pdf')
+  })
+})
+
+describe('fitName: every path stays inside the 260 characters of older Windows tools', () => {
+  it('cuts the name before its extension; a short name is left alone', () => {
+    const folder = `${'ก'.repeat(100)}/${'ข'.repeat(45)}`
+    const cut = fitName(folder, `${'ค'.repeat(120)}.pdf`)
+    expect(cut.endsWith('.pdf')).toBe(true)
+    expect([...`${folder}/${cut}`].length).toBeLessThanOrEqual(MAX_PATH_CHARS)
+    expect(fitName('a/b', 'แผน.pdf')).toBe('แผน.pdf')
+  })
+
+  it('in a whole plan: even the longest names give paths ≤ the limit (plus the " (n)" of a duplicate)', () => {
+    // ASCII on purpose: one byte per character, so only the path limit (not the byte limit) can cut it
+    const long = `${'plan-'.repeat(60)}.pdf`
+    const plan = planZip({
+      task: { title: 't' },
+      cohort: { name: 'c' },
+      submissions: [
+        {
+          id: 's',
+          user_id: 'U',
+          attempt_no: 1,
+          status: 'submitted',
+          submitted_at: '2026-11-01T00:00:00Z',
+          profiles: { full_name: 'n'.repeat(300), user_code: '9'.repeat(30) },
+        },
+      ],
+      files: [
+        { id: 'f1', submission_id: 's', object_path: 's/1', file_name: long, size_bytes: 1, created_at: '1' },
+        { id: 'f2', submission_id: 's', object_path: 's/2', file_name: long, size_bytes: 1, created_at: '2' },
+      ],
+    })
+    const paths = plan.entries.filter((e) => e.objectPath).map((e) => e.path)
+    expect(paths).toHaveLength(2)
+    expect(new Set(paths).size).toBe(2) // still two different files
+    for (const p of paths) expect([...p].length).toBeLessThanOrEqual(MAX_PATH_CHARS + 4)
+    expect(paths.every((p) => /\.pdf$/.test(p))).toBe(true)
   })
 })
 
@@ -302,6 +342,18 @@ describe('buildZip', () => {
     expect(strFromU8(files[FAILED_FILE])).toContain('_CON.docx')
     expect(calls['u/sa2/1.bin']).toBe(2)
     expect(Object.keys(files).some((n) => n.endsWith('_fdp.exe'))).toBe(true)
+  })
+
+  it('once cancelled (the person left the page): fetching stops and nothing is built', async () => {
+    let left = false
+    const fetchBytes = vi.fn(async () => {
+      left = true // the first file arrives, then the page is left
+      return strToU8('ok')
+    })
+    const signedUrls = async (paths) => Object.fromEntries(paths.map((p) => [p, `u/${p}`]))
+    const out = await buildZip(plan, { signedUrls, fetchBytes, concurrency: 1, isCancelled: () => left })
+    expect(out).toBeNull()
+    expect(fetchBytes).toHaveBeenCalledTimes(1) // the other 4 files were never requested
   })
 
   it('a file the person may not open (no signed URL) is listed, not fetched', async () => {

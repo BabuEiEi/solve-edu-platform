@@ -603,6 +603,93 @@ describe('pages', () => {
       }
     })
 
+    it('leaving the page during the download: no file is saved and the new page is not drawn over', async () => {
+      const blobs = []
+      vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => (blobs.push(b), 'blob:zip'))
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      let release
+      const gate = new Promise((r) => (release = r))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          await gate
+          return { ok: true, arrayBuffer: async () => new TextEncoder().encode('%PDF').buffer }
+        })
+      )
+      const before = window.location.hash
+      try {
+        const el = await open(zipServices())
+        el.querySelector('[data-action=zip-download]').click()
+        await settle()
+        expect(el.querySelector('[data-zip-status]').textContent).toContain('กำลังดาวน์โหลดไฟล์')
+        window.location.hash = '#/somewhere-else' // the person opens another page
+        el.textContent = 'ANOTHER PAGE' // which the router has drawn into the same element
+        release()
+        await settle()
+        expect(blobs).toHaveLength(0)
+        expect(el.textContent).toBe('ANOTHER PAGE')
+      } finally {
+        window.location.hash = before
+        vi.unstubAllGlobals()
+        URL.createObjectURL.mockRestore()
+        URL.revokeObjectURL.mockRestore()
+      }
+    })
+
+    it('leaving the page: the files not yet requested are never requested; an error after leaving draws nothing', async () => {
+      let release
+      const gate = new Promise((r) => (release = r))
+      const fetched = []
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url) => {
+          fetched.push(url)
+          await gate
+          return { ok: true, arrayBuffer: async () => new TextEncoder().encode('%PDF').buffer }
+        })
+      )
+      const before = window.location.hash
+      try {
+        const services = zipServices()
+        const base = await zipServices().reviews.zipData()
+        services.reviews.zipData = vi.fn(async () => ({
+          ...base,
+          files: Array.from({ length: 6 }, (_, n) => ({
+            id: `f${n}`,
+            submission_id: 's1',
+            object_path: `s1/${n}.pdf`,
+            file_name: `ไฟล์${n}.pdf`,
+            size_bytes: 5,
+            created_at: `2026-11-01T00:00:0${n}Z`,
+          })),
+        }))
+        const el = await open(services)
+        el.querySelector('[data-action=zip-download]').click()
+        await settle()
+        expect(fetched).toHaveLength(4) // four at a time
+        window.location.hash = '#/somewhere-else'
+        release()
+        await settle()
+        expect(fetched).toHaveLength(4) // the other two were never requested
+
+        // an error that arrives after the person has left must not draw over the new page
+        const late = zipServices()
+        let fail
+        late.reviews.zipData = vi.fn(() => new Promise((_, reject) => (fail = reject)))
+        const el2 = await open(late)
+        el2.querySelector('[data-action=zip-download]').click()
+        await settle()
+        window.location.hash = '#/another-page'
+        el2.textContent = 'ANOTHER PAGE'
+        fail(new AppError('boom'))
+        await settle()
+        expect(el2.textContent).toBe('ANOTHER PAGE')
+      } finally {
+        window.location.hash = before
+        vi.unstubAllGlobals()
+      }
+    })
+
     it('too big: refused with the size, nothing is downloaded; nobody submitted: said so', async () => {
       vi.stubGlobal('fetch', vi.fn())
       try {

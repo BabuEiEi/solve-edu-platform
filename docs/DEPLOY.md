@@ -18,7 +18,8 @@
 | SMTP | Gmail + App Password ของเจ้าของระบบ · จำกัด 100 ฉบับ/ชม. | ✅ ทดสอบแล้ว (2569-11-08) อีเมลยืนยันถึงกล่องจดหมาย |
 | ล้างไฟล์ทุกคืน | pg_cron `cleanup-task-files-nightly` (`30 19 * * *` UTC = 02:30 น.) → pg_net → `cleanup-task-files` · Vault `project_url`, `cleanup_task_files_secret` | ✅ 2569-11-09 · ลองแบบไม่ลบแล้ว: 200, ไม่มีไฟล์ค้าง · `pg_net` อยู่ใน schema `extensions` (ย้ายจาก `public` แล้ว) · ฟังก์ชันใน schema `net` เรียกผ่าน API ไม่ได้ (REST เปิดเฉพาะ `public`, `graphql_public` — ตรวจแล้วได้ PGRST106; ไม่ได้เปิด pg_graphql) |
 | Security advisor | — | คำเตือนที่เหลือ: 0029 ฟังก์ชัน RPC 23 ตัวที่ตั้งใจให้ผู้ใช้เรียก · ป้องกันรหัสผ่านที่รั่ว (HaveIBeenPwned) ใช้ได้เฉพาะแพ็กเกจ Pro — ข้ามไว้ |
-| ผู้ดูแลเขต, Google Drive | — | ⏸ เจ้าของระบบ (ดูด้านล่างและ `docs/DEPLOY_PHASE3B.md`) |
+| ผู้ดูแลเขต | — | ⏸ เจ้าของระบบ (นำเข้ารายชื่อ บทบาท `district_admin`) |
+| สำเนาไป Google Drive | Edge Function `drive-export-task` + secret ของ Google | ⏸ ยังไม่ใช้: ต้องมี Shared Drive ของ Google Workspace (บัญชี Gmail ส่วนตัวใช้ไม่ได้ — service account ไม่มีพื้นที่เก็บใน My Drive) · ระหว่างนี้ใช้ปุ่มดาวน์โหลด .zip (4e) · เปิดปุ่มกลับด้วย `VITE_DRIVE_EXPORT=true` |
 
 ## หน้าเว็บบน Vercel
 
@@ -83,6 +84,19 @@ commit;
 | 3 | `npx supabase functions deploy cleanup-task-files --project-ref hcudarobowuwsmmyoyrd` | รุ่นใหม่ลบรูปของบทเรียน/แบบทดสอบที่ถูกลบด้วย (ยังต้องมี `CRON_SECRET` + ตัวตั้งเวลา จึงจะทำงานทุกคืน) |
 | 4 | `vercel deploy --prod` | หน้า "จัดการบัญชี" ปุ่มลบ/เก็บถาวร และนโยบายความเป็นส่วนตัวฉบับปรับปรุง |
 | 5 | ตรวจ | security advisor · หน้า "จัดการบัญชี" ในฐานะผู้ดูแลระบบ · ลบหลักสูตรทดลองที่ไม่มีผู้ใช้ 1 รายการ |
+
+## ขึ้น Phase 4e บนระบบจริง (ดาวน์โหลดงานทั้งรุ่นเป็น .zip) — ต้องอนุมัติ
+
+Phase 4e ไม่มี migration ไม่มี Edge Function และไม่มี secret ใหม่ — เปลี่ยนเฉพาะหน้าเว็บ (ใช้ `fflate` ที่มีอยู่แล้ว)
+
+| ลำดับ | ทำอะไร | หมายเหตุ |
+|---|---|---|
+| 1 | `vercel deploy --prod` | หน้าตรวจงานของแต่ละรุ่นมีปุ่ม "ดาวน์โหลดงานทั้งหมด (.zip)" · กล่อง "ส่งสำเนาไป Google Drive" หายไป |
+| 2 | ตรวจ | ใช้บัญชี trainer เปิด `#/staff/tasks/<รุ่น>` กดปุ่มกับภาระงานที่มีงานส่งแล้ว → ได้ .zip · แตกแล้วดูโฟลเดอร์ ชื่อไฟล์ไทย `สรุป.xlsx` และ `คำตอบ.txt` |
+
+ตรวจก่อน deploy: Vercel Production ต้อง **ไม่มี** `VITE_DRIVE_EXPORT` (ไม่ตั้ง = ซ่อนปุ่ม Drive) — ค่านี้ใช้เฉพาะตอนมี Shared Drive ขององค์กรและตั้งค่า Google ตาม `docs/DEPLOY_PHASE3B.md` ข้อ 4–5
+
+ย้อนกลับ: ใน Vercel เลือก deployment ก่อนหน้าแล้ว Promote (ไม่มีข้อมูลในฐานข้อมูลที่ต้องย้อน)
 
 ## ขึ้น Phase 4d บนระบบจริง (กันใช้แบบทดสอบ/Rubric ที่เก็บถาวร) — ต้องอนุมัติทีละข้อ
 

@@ -28,9 +28,11 @@ export const ANSWER_FILE = 'คำตอบ.txt'
 export const SUMMARY_FILE = 'สรุป.xlsx'
 export const FAILED_FILE = 'ไฟล์ที่ดาวน์โหลดไม่สำเร็จ.txt'
 
-// a name stays well inside the 255-byte limit of common file systems, and a full
-// path inside the 260-character limit of older Windows tools
-const MAX_SEGMENT_BYTES = 150
+// a name stays well inside the 255-byte limit of common file systems ...
+const MAX_SEGMENT_BYTES = 100
+// ... and a whole path inside the 260-character limit of older Windows tools (the
+// archive is extracted under the person's own folders, which take room too)
+export const MAX_PATH_CHARS = 200
 const MAX_EXT_CHARS = 16
 const RESERVED = /^(con|prn|aux|nul|com[0-9]|lpt[0-9])$/i
 // C0/C1 controls, and the characters that change text direction (a name like
@@ -66,6 +68,18 @@ export function safeSegment(name, fallback = 'ไฟล์') {
     base = cutToBytes(base, MAX_SEGMENT_BYTES - utf8Length(ext)).replace(/[.\s]+$/, '') || '_'
   }
   return base + ext
+}
+
+/** `name` cut (before its extension) so that `${folder}/${name}` has at most `max` characters. */
+export function fitName(folder, name, max = MAX_PATH_CHARS) {
+  const room = max - [...folder].length - 1
+  if ([...name].length <= room) return name
+  const dot = name.lastIndexOf('.')
+  const ext = dot > 0 && name.length - dot <= MAX_EXT_CHARS + 1 ? name.slice(dot) : ''
+  const stem = [...name.slice(0, name.length - ext.length)]
+    .slice(0, Math.max(room - [...ext].length, 8))
+    .join('')
+  return `${stem.replace(/[.\s]+$/, '') || '_'}${ext}`
 }
 
 /** Give `name` a " (2)", " (3)" … before its extension until no other name in `used` matches it (any case). */
@@ -205,7 +219,7 @@ export function planZip({ task, cohort, submissions = [], files = [], reviews = 
       for (const f of mineFiles) {
         const size = Number(f.size_bytes) || 0
         entries.push({
-          path: `${folder}/${uniqueName(safeSegment(f.file_name), used)}`,
+          path: `${folder}/${uniqueName(fitName(folder, safeSegment(f.file_name)), used)}`,
           objectPath: f.object_path,
           size,
         })
@@ -264,11 +278,19 @@ export function checkZipLimits(plan, { maxBytes = ZIP_MAX_BYTES, maxFiles = ZIP_
  *   onProgress({ done, total })
  * A file that cannot be downloaded (after one retry) is left out and listed in
  * ไฟล์ที่ดาวน์โหลดไม่สำเร็จ.txt, so one broken file does not lose the rest.
- * → { bytes, name, failed: [path] }
+ *   isCancelled()     → true once the person has left the page: stop fetching, build nothing
+ * → { bytes, name, failed: [path] }, or null when cancelled
  */
 export async function buildZip(
   plan,
-  { signedUrls, fetchBytes, onProgress = () => {}, concurrency = 4, signChunk = 100 }
+  {
+    signedUrls,
+    fetchBytes,
+    onProgress = () => {},
+    isCancelled = () => false,
+    concurrency = 4,
+    signChunk = 100,
+  }
 ) {
   const fileEntries = plan.entries.filter((e) => e.objectPath)
   const urls = {}
@@ -299,10 +321,11 @@ export async function buildZip(
   }
   let next = 0
   const worker = async () => {
-    while (next < fileEntries.length) await fetchOne(fileEntries[next++])
+    while (next < fileEntries.length && !isCancelled()) await fetchOne(fileEntries[next++])
   }
   await Promise.all(Array.from({ length: Math.min(concurrency, fileEntries.length) }, worker))
 
+  if (isCancelled()) return null // the person left the page: nothing is built or saved
   for (const e of plan.entries) if (e.text != null) tree[e.path] = strToU8(e.text)
   tree[SUMMARY_FILE] = toXlsx(plan.summaryRows, { sheetName: 'สรุป', textColumns: [0] })
   if (failed.length) {
