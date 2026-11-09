@@ -146,7 +146,10 @@ run('Assignments and cohort results (Supabase Local)', () => {
     await setStatus('archived')
     try {
       expect((await as('trainer').getVersion(TYPES_VERSION)).instruments.status).toBe('archived')
-      await expect(draft()).rejects.toMatchObject({ code: 'SE010', message: expect.stringContaining('นำกลับมาใช้') })
+      await expect(draft()).rejects.toMatchObject({
+        code: 'SE010',
+        message: expect.stringContaining('นำกลับมาใช้'),
+      })
     } finally {
       await setStatus('active')
     }

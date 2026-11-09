@@ -67,30 +67,32 @@ run('REST + RLS integration (local)', () => {
     expect(programs[0].cohorts.map((c) => c.code)).toEqual(['C1'])
   })
 
-  it('approval queue is scoped by requested organization', async () => {
-    const a = await createAdminService(clientAs('school_admin_a')).listProfilesByStatus('pending')
-    expect(a.map((p) => p.id)).toEqual([U.newcomer])
-    expect(a[0].organizations.name).toBe('โรงเรียนสาธิต ก (สมมติ)')
-    const b = await createAdminService(clientAs('school_admin_b')).listProfilesByStatus('pending')
-    expect(b).toEqual([])
+  it('approval queue: Staff sees the newcomer and the school asked for; a former school admin sees nobody (4f)', async () => {
+    const staff = await createAdminService(clientAs('staff')).listProfilesByStatus('pending')
+    expect(staff.map((p) => p.id)).toEqual([U.newcomer])
+    expect(staff[0].organizations.name).toBe('โรงเรียนสาธิต ก (สมมติ)')
+    expect(await createAdminService(clientAs('school_admin_a')).listProfilesByStatus('pending')).toEqual([])
   })
 
-  it('active list embeds only current, in-scope memberships', async () => {
-    const rows = await createAdminService(clientAs('school_admin_a')).listProfilesByStatus('active')
+  it('active list embeds only current memberships (Staff)', async () => {
+    const rows = await createAdminService(clientAs('staff')).listProfilesByStatus('active')
     const a1 = rows.find((p) => p.id === U.teacher_a1)
     expect(a1.organization_memberships.map((m) => [m.org_role, m.organizations.name])).toEqual([
       ['teacher', 'โรงเรียนสาธิต ก (สมมติ)'],
     ])
-    expect(rows.some((p) => p.id === U.school_admin_b)).toBe(false)
+    expect(rows.some((p) => p.id === U.platform_admin)).toBe(false) // a platform role holder is not Staff's to manage
   })
 
-  it('out-of-scope approval is denied; in-scope approval succeeds', async () => {
+  it('a teacher cannot approve; Staff approves and the person joins the school they asked for', async () => {
     await expect(
-      createAdminService(clientAs('school_admin_b')).setProfileStatus(U.newcomer, 'active')
+      createAdminService(clientAs('school_admin_a')).setProfileStatus(U.newcomer, 'active')
     ).rejects.toThrow('ไม่มีสิทธิ์')
-    await createAdminService(clientAs('school_admin_a')).setProfileStatus(U.newcomer, 'active')
-    const after = await createAdminService(clientAs('school_admin_a')).listProfilesByStatus('active')
-    expect(after.some((p) => p.id === U.newcomer)).toBe(true)
+    await createAdminService(clientAs('staff')).setProfileStatus(U.newcomer, 'active')
+    const after = await createAdminService(clientAs('staff')).listProfilesByStatus('active')
+    const newcomer = after.find((p) => p.id === U.newcomer)
+    expect(newcomer.organization_memberships.map((m) => [m.org_role, m.organizations.name])).toEqual([
+      ['teacher', 'โรงเรียนสาธิต ก (สมมติ)'],
+    ])
   })
 
   it('trainee cannot call the admin RPC on anyone', async () => {

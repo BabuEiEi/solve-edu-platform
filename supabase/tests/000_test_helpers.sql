@@ -25,6 +25,7 @@ as $$
     when 'teacher_a2'     then '00000000-0000-4000-a000-000000000009'
     when 'teacher_b1'     then '00000000-0000-4000-a000-000000000010'
     when 'newcomer'       then '00000000-0000-4000-a000-000000000011'
+    when 'staff'          then '00000000-0000-4000-a000-000000000012'
     -- organizations / program objects
     when 'district'       then '10000000-0000-4000-a000-000000000001'
     when 'school_a'       then '10000000-0000-4000-a000-000000000002'

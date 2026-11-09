@@ -22,10 +22,29 @@ describe('deriveCapabilities (UI only)', () => {
     expect(c.isPlatformAdmin).toBe(false)
     expect(c.canApproveUsers).toBe(false)
   })
-  it('school admin can approve users but not manage programs', () => {
+  it('4f: a former school admin approves nothing (the role grants nothing any more)', () => {
     const c = deriveCapabilities(ctx({ orgMemberships: [{ org_role: 'school_admin' }] }))
-    expect(c.canApproveUsers).toBe(true)
+    expect(c.canApproveUsers).toBe(false)
+    expect(c.canImportRoster).toBe(false)
     expect(c.canManagePrograms).toBe(false)
+  })
+  it('4f: Staff approves and manages accounts but does not import rosters', () => {
+    const c = deriveCapabilities(ctx({ platformRoles: [{ role: 'platform_support' }] }))
+    expect(c.isPlatformSupport).toBe(true)
+    expect(c.isPlatformAdmin).toBe(false)
+    expect(c.canApproveUsers).toBe(true)
+    expect(c.canImportRoster).toBe(false)
+    expect(c.canManagePrograms).toBe(false)
+  })
+  it('4f: a district admin approves and imports', () => {
+    const c = deriveCapabilities(ctx({ orgMemberships: [{ org_role: 'district_admin' }] }))
+    expect(c.canApproveUsers && c.canImportRoster).toBe(true)
+  })
+  it('4f: a suspended Staff member has no rights', () => {
+    const c = deriveCapabilities(
+      ctx({ profile: { status: 'suspended' }, platformRoles: [{ role: 'platform_support' }] })
+    )
+    expect(c.isPlatformSupport || c.canApproveUsers).toBe(false)
   })
   it('supervisor manages programs but does not approve users', () => {
     const c = deriveCapabilities(ctx({ orgMemberships: [{ org_role: 'supervisor' }] }))

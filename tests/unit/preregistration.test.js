@@ -154,10 +154,18 @@ describe('import view helpers', () => {
     { id: 'A', parent_id: 'D' },
     { id: 'B', parent_id: 'D' },
   ]
-  it('school admins see only their school and may offer only teacher', () => {
+  it('4f: a former school admin is offered nothing to import into; nobody is offered school_admin', () => {
     const context = { orgMemberships: [{ organization_id: 'A', org_role: 'school_admin' }] }
-    expect(importableOrgs(orgs, context, { isPlatformAdmin: false }).map((o) => o.id)).toEqual(['A'])
-    expect(grantableRoles({ isPlatformAdmin: false, orgRoles: ['school_admin'] })).toEqual(['teacher'])
+    expect(importableOrgs(orgs, context, { isPlatformAdmin: false })).toEqual([])
+    expect(grantableRoles({ isPlatformAdmin: true, orgRoles: [] })).toEqual([
+      'teacher',
+      'supervisor',
+      'district_admin',
+    ])
+    expect(grantableRoles({ isPlatformAdmin: false, orgRoles: ['district_admin'] })).toEqual([
+      'teacher',
+      'supervisor',
+    ])
   })
   it('district admins see the district and its schools', () => {
     const context = { orgMemberships: [{ organization_id: 'D', org_role: 'district_admin' }] }
@@ -178,7 +186,7 @@ describe('import view', () => {
     const importRows = vi.fn(async (rows) => ({ count: rows.length }))
     const services = {
       organizations: {
-        listActiveOrganizations: async () => [{ id: 'A', name: 'โรงเรียน ก', parent_id: null }],
+        listActiveOrganizations: async () => [{ id: 'A', name: 'โรงเรียน ก', parent_id: 'D' }],
       },
       programs: {
         listVisiblePrograms: async () => [{ name: 'โครงการ', cohorts: [{ id: 'C', name: 'รุ่น 1' }] }],
@@ -190,11 +198,11 @@ describe('import view', () => {
         cancel: async () => {},
       },
     }
-    const context = { orgMemberships: [{ organization_id: 'A', org_role: 'school_admin' }] }
+    const context = { orgMemberships: [{ organization_id: 'D', org_role: 'district_admin' }] }
     await renderImportView(el, {
       services,
       context,
-      caps: { isPlatformAdmin: false, orgRoles: ['school_admin'] },
+      caps: { isPlatformAdmin: false, orgRoles: ['district_admin'] },
     })
 
     const file = new File(['email,full_name\nok@example.test,ครู\nbroken,x\n'], 'r.csv', { type: 'text/csv' })
@@ -282,11 +290,11 @@ describe('import view template download', () => {
   it('downloads roster-template.xlsx as an Excel file', async () => {
     const el = document.createElement('div')
     const services = {
-      organizations: { listActiveOrganizations: async () => [{ id: 'A', name: 'ก', parent_id: null }] },
+      organizations: { listActiveOrganizations: async () => [{ id: 'A', name: 'ก', parent_id: 'D' }] },
       programs: { listVisiblePrograms: async () => [] },
       preregistration: { list: async () => [] },
     }
-    const context = { orgMemberships: [{ organization_id: 'A', org_role: 'school_admin' }] }
+    const context = { orgMemberships: [{ organization_id: 'D', org_role: 'district_admin' }] }
     const made = []
     URL.createObjectURL = vi.fn((b) => (made.push(b), 'blob:test'))
     URL.revokeObjectURL = vi.fn()
@@ -297,7 +305,7 @@ describe('import view template download', () => {
     await renderImportView(el, {
       services,
       context,
-      caps: { isPlatformAdmin: false, orgRoles: ['school_admin'] },
+      caps: { isPlatformAdmin: false, orgRoles: ['district_admin'] },
     })
     el.querySelector('[data-action=download-template-xlsx]').click()
     expect(downloaded).toBe('roster-template.xlsx')
@@ -308,11 +316,11 @@ describe('import view template download', () => {
   it('downloads roster-template.csv from a blob URL', async () => {
     const el = document.createElement('div')
     const services = {
-      organizations: { listActiveOrganizations: async () => [{ id: 'A', name: 'ก', parent_id: null }] },
+      organizations: { listActiveOrganizations: async () => [{ id: 'A', name: 'ก', parent_id: 'D' }] },
       programs: { listVisiblePrograms: async () => [] },
       preregistration: { list: async () => [] },
     }
-    const context = { orgMemberships: [{ organization_id: 'A', org_role: 'school_admin' }] }
+    const context = { orgMemberships: [{ organization_id: 'D', org_role: 'district_admin' }] }
     URL.createObjectURL = vi.fn(() => 'blob:test')
     URL.revokeObjectURL = vi.fn()
     let downloaded = null
@@ -322,7 +330,7 @@ describe('import view template download', () => {
     await renderImportView(el, {
       services,
       context,
-      caps: { isPlatformAdmin: false, orgRoles: ['school_admin'] },
+      caps: { isPlatformAdmin: false, orgRoles: ['district_admin'] },
     })
     el.querySelector('[data-action=download-template]').click()
     expect(downloaded).toEqual({ name: 'roster-template.csv', href: 'blob:test' })
@@ -337,7 +345,7 @@ describe('import view with an Excel file', () => {
     const importRows = vi.fn(async (rows) => ({ count: rows.length }))
     const services = {
       organizations: {
-        listActiveOrganizations: async () => [{ id: 'A', name: 'โรงเรียน ก', parent_id: null }],
+        listActiveOrganizations: async () => [{ id: 'A', name: 'โรงเรียน ก', parent_id: 'D' }],
       },
       programs: { listVisiblePrograms: async () => [] },
       preregistration: {
@@ -347,11 +355,11 @@ describe('import view with an Excel file', () => {
         cancel: async () => {},
       },
     }
-    const context = { orgMemberships: [{ organization_id: 'A', org_role: 'school_admin' }] }
+    const context = { orgMemberships: [{ organization_id: 'D', org_role: 'district_admin' }] }
     await renderImportView(el, {
       services,
       context,
-      caps: { isPlatformAdmin: false, orgRoles: ['school_admin'] },
+      caps: { isPlatformAdmin: false, orgRoles: ['district_admin'] },
     })
     expect(el.querySelector('input[name=file]').accept).toContain('.xlsx')
 

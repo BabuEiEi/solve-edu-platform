@@ -4,7 +4,9 @@
  * IMPORTANT: these flags only decide what to SHOW. Every read/write is still
  * enforced by Postgres RLS / trusted RPCs. Hiding a menu is not security.
  */
-export const ORG_ADMIN_ROLES = ['district_admin', 'school_admin']
+// Phase 4f: no school admins any more; accounts are approved by the platform admin,
+// Staff (platform_support) and district admins
+export const ORG_ADMIN_ROLES = ['district_admin']
 export const PROGRAM_MANAGER_ROLES = ['district_admin', 'supervisor']
 
 export function deriveCapabilities(context) {
@@ -17,6 +19,7 @@ export function deriveCapabilities(context) {
   const orgRoles = new Set(orgMemberships.map((m) => m.org_role))
   const cohortRoles = new Set(cohortMemberships.map((m) => m.cohort_role))
   const isPlatformAdmin = active && platformRoles.some((r) => r.role === 'platform_admin')
+  const isPlatformSupport = active && platformRoles.some((r) => r.role === 'platform_support')
 
   return {
     isActive: active,
@@ -24,7 +27,12 @@ export function deriveCapabilities(context) {
     isSuspended: profile?.status === 'suspended',
     isDeleted: profile?.status === 'deleted',
     isPlatformAdmin,
-    canApproveUsers: active && (isPlatformAdmin || ORG_ADMIN_ROLES.some((r) => orgRoles.has(r))),
+    isPlatformSupport,
+    // mirrors authz.can_admin_user: platform admin, Staff, district admin
+    canApproveUsers:
+      active && (isPlatformAdmin || isPlatformSupport || ORG_ADMIN_ROLES.some((r) => orgRoles.has(r))),
+    // roster import (e-mails): platform admin and district admins only — not Staff
+    canImportRoster: active && (isPlatformAdmin || ORG_ADMIN_ROLES.some((r) => orgRoles.has(r))),
     canManagePrograms: active && (isPlatformAdmin || PROGRAM_MANAGER_ROLES.some((r) => orgRoles.has(r))),
     // mirrors authz.can_create_course_in_org (platform admin, district admin/supervisor)
     canCreateCourses: active && (isPlatformAdmin || PROGRAM_MANAGER_ROLES.some((r) => orgRoles.has(r))),
@@ -39,10 +47,9 @@ export function deriveCapabilities(context) {
 
 export const ROLE_LABELS = {
   platform_admin: 'ผู้ดูแลระบบ',
-  platform_support: 'ผู้สนับสนุนระบบ',
+  platform_support: 'ผู้ช่วยดูแลระบบ (Staff)',
   district_admin: 'ผู้ดูแลเขตพื้นที่',
   supervisor: 'ศึกษานิเทศก์',
-  school_admin: 'ผู้บริหารสถานศึกษา',
   teacher: 'ครู',
   trainee: 'ผู้เข้ารับการอบรม',
   trainer: 'วิทยากร',

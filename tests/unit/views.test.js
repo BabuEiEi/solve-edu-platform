@@ -17,7 +17,7 @@ const context = {
     updated_at: '2026-11-02T08:00:00Z',
   },
   platformRoles: [],
-  orgMemberships: [{ org_role: 'school_admin', organizations: { name: 'โรงเรียนสาธิต ก' } }],
+  orgMemberships: [{ org_role: 'district_admin', organizations: { name: 'เขตสาธิต' } }],
   cohortMemberships: [{ cohort_role: 'trainee', cohorts: { code: 'C1' } }],
 }
 const caps = deriveCapabilities(context)
@@ -36,7 +36,7 @@ describe('views render (smoke + XSS)', () => {
   it('dashboard renders role chips', () => {
     const el = document.createElement('div')
     renderDashboard(el, { context, caps })
-    expect(el.textContent).toContain('ผู้บริหารสถานศึกษา')
+    expect(el.textContent).toContain('ผู้ดูแลเขตพื้นที่')
     expect(el.textContent).toContain('ผู้เข้ารับการอบรม')
     expect(el.querySelector('img')).toBeNull()
   })
@@ -147,7 +147,7 @@ describe('views render (smoke + XSS)', () => {
         status: 'active',
         created_at: '2026-11-02T08:00:00Z',
         organization_memberships: [
-          { org_role: 'school_admin', ended_at: null, organizations: { name: 'โรงเรียน ก' } },
+          { org_role: 'supervisor', ended_at: null, organizations: { name: 'โรงเรียน ก' } },
         ],
       },
       {
@@ -174,7 +174,7 @@ describe('views render (smoke + XSS)', () => {
     const [mine, other] = el.querySelectorAll('tbody tr')
     expect(mine.querySelector('[data-action=set-status]')).toBeNull()
     expect(mine.textContent).toContain('บัญชีของท่าน')
-    expect(mine.textContent).toContain('ผู้บริหารสถานศึกษา')
+    expect(mine.textContent).toContain('ศึกษานิเทศก์')
     expect(mine.textContent).toContain('โรงเรียน ก')
     expect(other.querySelector('[data-action=set-status][data-id=other]')).not.toBeNull()
     expect(other.textContent).toContain('ยังไม่มีสังกัด')

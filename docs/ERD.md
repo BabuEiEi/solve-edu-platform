@@ -49,7 +49,7 @@ erDiagram
         uuid id PK
         uuid user_id FK
         uuid organization_id FK
-        text org_role "district_admin|supervisor|school_admin|teacher"
+        text org_role "district_admin|supervisor|teacher"
         timestamptz ended_at "NULL = active; one-way"
         uuid granted_by "default auth.uid()"
     }

@@ -4,9 +4,9 @@
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
-import { promptDialog } from '../../src/shared/ui/dialog.js'
+import { confirmDialog, promptDialog } from '../../src/shared/ui/dialog.js'
 import { createAdminService } from '../../src/features/admin/service.js'
-import { renderAccountsView } from '../../src/features/admin/accounts.js'
+import { renderAccountsView, choosableSchools, schoolOf } from '../../src/features/admin/accounts.js'
 import { deriveCapabilities } from '../../src/core/permissions.js'
 
 const XSS = '<img src=x onerror=alert(1)>'
@@ -97,7 +97,18 @@ describe('page', () => {
     document.body.replaceChildren()
     vi.restoreAllMocks()
   })
-  const open = async ({ rows = [row()], total, caps = { isPlatformAdmin: false }, over = {} } = {}) => {
+  const SCHOOLS = [
+    { id: 'A', name: 'โรงเรียน ก', org_type: 'school', parent_id: 'D' },
+    { id: 'B', name: 'โรงเรียน ข', org_type: 'school', parent_id: 'D' },
+    { id: 'X', name: 'โรงเรียนเขตอื่น', org_type: 'school', parent_id: 'E' },
+  ]
+  const open = async ({
+    rows = [row()],
+    total,
+    caps = { isPlatformAdmin: false },
+    over = {},
+    context = {},
+  } = {}) => {
     const admin = {
       listAccounts: vi.fn(async () => ({ total: total ?? rows.length, rows })),
       updateAccount: vi.fn(async () => ({})),
@@ -107,8 +118,9 @@ describe('page', () => {
     }
     const el = document.createElement('div')
     document.body.append(el)
-    await renderAccountsView(el, { services: { admin }, caps })
-    return { el, admin }
+    const organizations = { listActiveOrganizations: vi.fn(async () => SCHOOLS) }
+    await renderAccountsView(el, { services: { admin, organizations }, caps, context })
+    return { el, admin, organizations }
   }
 
   it('lists people as text, with code, affiliation, status; only allowed actions are offered', async () => {
@@ -179,6 +191,121 @@ describe('page', () => {
       user_code: 'T-1',
     })
     expect(el.textContent).toContain('บันทึกข้อมูลบัญชีแล้ว')
+  })
+
+  it('4f school: the edit form offers the schools when the row allows it, and saves a change only', async () => {
+    const setSchool = vi.fn(async () => [])
+    const r = row({
+      can_set_school: true,
+      orgs: [{ id: 'A', name: 'โรงเรียน ก', role: 'teacher' }],
+      requested_org: 'โรงเรียน ข',
+    })
+    const { el, admin, organizations } = await open({
+      rows: [r],
+      caps: { isPlatformSupport: true },
+      over: { setSchool },
+    })
+    el.querySelector('[data-action=edit]').click()
+    await settle()
+    expect(organizations.listActiveOrganizations).toHaveBeenCalledWith({ orgType: 'school' })
+    const select = el.querySelector('[data-school-select]')
+    expect([...select.options].map((o) => o.value)).toEqual(['', 'A', 'B', 'X']) // Staff: every school
+    expect(select.value).toBe('A')
+    expect(el.querySelector('form[data-form=account-edit]').textContent).toContain(
+      'ขอสังกัดไว้ตอนสมัคร: โรงเรียน ข'
+    )
+
+    el.querySelector('form[data-form=account-edit]').dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true })
+    )
+    await settle()
+    expect(admin.updateAccount).toHaveBeenCalledTimes(1)
+    expect(setSchool).not.toHaveBeenCalled() // the same school: nothing to change
+
+    el.querySelector('[data-action=edit]').click()
+    await settle()
+    el.querySelector('[data-school-select]').value = 'B'
+    el.querySelector('form[data-form=account-edit]').dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true })
+    )
+    await settle()
+    expect(setSchool).toHaveBeenCalledWith('u1', 'B')
+    expect(admin.updateAccount.mock.invocationCallOrder[1]).toBeLessThan(
+      setSchool.mock.invocationCallOrder[0]
+    )
+
+    el.querySelector('[data-action=edit]').click()
+    await settle()
+    el.querySelector('[data-school-select]').value = ''
+    el.querySelector('form[data-form=account-edit]').dispatchEvent(
+      new Event('submit', { bubbles: true, cancelable: true })
+    )
+    await settle()
+    expect(setSchool).toHaveBeenLastCalledWith('u1', null) // no school
+  })
+
+  it('4f school: no school field when the row does not allow it; a district admin sees the schools of the district', async () => {
+    const { el, organizations } = await open({ rows: [row({ can_set_school: false })] })
+    el.querySelector('[data-action=edit]').click()
+    await settle()
+    expect(el.querySelector('[data-school-select]')).toBeNull()
+    expect(organizations.listActiveOrganizations).not.toHaveBeenCalled()
+
+    const context = { orgMemberships: [{ organization_id: 'D', org_role: 'district_admin' }] }
+    expect(choosableSchools(SCHOOLS, context, { isPlatformAdmin: false }).map((o) => o.id)).toEqual([
+      'A',
+      'B',
+    ])
+    expect(choosableSchools(SCHOOLS, {}, { isPlatformAdmin: true }).map((o) => o.id)).toEqual(['A', 'B', 'X'])
+    expect(
+      schoolOf(
+        row({
+          orgs: [
+            { id: 'S', name: 'x', role: 'supervisor' },
+            { id: 'A', name: 'ก', role: 'teacher' },
+          ],
+        })
+      )
+    ).toBe('A')
+    expect(schoolOf(row({ orgs: [] }))).toBe('')
+  })
+
+  it('4f Staff: only the platform admin is offered appoint / remove, never on self or another platform admin', async () => {
+    const appointStaff = vi.fn(async () => {})
+    const revokeStaff = vi.fn(async () => {})
+    const rows = [
+      row({ id: 'plain' }),
+      row({ id: 'staff', platform_roles: ['platform_support'] }),
+      row({ id: 'boss', platform_roles: ['platform_admin'], can_manage: false }),
+      row({ id: 'me', is_self: true }),
+      row({ id: 'waiting', status: 'pending' }),
+    ]
+    const { el } = await open({ rows, caps: { isPlatformAdmin: true }, over: { appointStaff, revokeStaff } })
+    const btn = (id, action) => el.querySelector(`[data-account-id="${id}"] [data-action=${action}]`)
+    expect(btn('plain', 'appoint-staff')).not.toBeNull()
+    expect(btn('staff', 'revoke-staff')).not.toBeNull()
+    expect(btn('staff', 'appoint-staff')).toBeNull()
+    expect(btn('boss', 'appoint-staff') ?? btn('boss', 'revoke-staff')).toBeNull()
+    expect(btn('me', 'appoint-staff')).toBeNull()
+    expect(btn('waiting', 'appoint-staff')).toBeNull() // approve first
+
+    confirmDialog.mockResolvedValueOnce(false)
+    btn('plain', 'appoint-staff').click()
+    await settle()
+    expect(appointStaff).not.toHaveBeenCalled()
+    confirmDialog.mockResolvedValueOnce(true)
+    el.querySelector('[data-account-id="plain"] [data-action=appoint-staff]').click()
+    await settle()
+    expect(appointStaff).toHaveBeenCalledWith('plain')
+    expect(el.textContent).toContain('แต่งตั้งเป็น Staff แล้ว')
+    confirmDialog.mockResolvedValueOnce(true)
+    el.querySelector('[data-account-id="staff"] [data-action=revoke-staff]').click()
+    await settle()
+    expect(revokeStaff).toHaveBeenCalledWith('staff')
+    expect(confirmDialog.mock.calls.at(-1)[0].danger).toBe(true)
+
+    const asStaff = await open({ rows, caps: { isPlatformSupport: true } })
+    expect(asStaff.el.querySelector('[data-action=appoint-staff], [data-action=revoke-staff]')).toBeNull()
   })
 
   it('suspending asks for a reason; cancelling the question changes nothing', async () => {

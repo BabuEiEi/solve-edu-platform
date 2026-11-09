@@ -2,7 +2,7 @@ import './styles/main.css'
 import { supabase, isConfigured, restConfig } from './core/supabaseClient.js'
 import { createAuthService } from './core/auth.js'
 import { deriveCapabilities } from './core/permissions.js'
-import { compileRoutes, resolveRoute } from './core/router.js'
+import { compileRoutes, createNavigationGuard, resolveRoute } from './core/router.js'
 import { toUserMessage } from './core/errors.js'
 import { html, render } from './shared/ui/html.js'
 import { appShell, centeredCard, updateNavBadges } from './shared/ui/layout.js'
@@ -95,7 +95,7 @@ const routes = compileRoutes([
   { path: '/staff/assessments/:id', view: renderAssignmentDetailView, allow: (c) => c.isActive },
   { path: '/admin/approvals', view: renderApprovalsView, allow: (c) => c.canApproveUsers },
   { path: '/admin/accounts', view: renderAccountsView, allow: (c) => c.canApproveUsers },
-  { path: '/admin/import', view: renderImportView, allow: (c) => c.canApproveUsers },
+  { path: '/admin/import', view: renderImportView, allow: (c) => c.canImportRoster },
 ])
 
 function renderConfigMissing() {
@@ -173,11 +173,14 @@ async function boot() {
     route()
   }
 
+  const navigation = createNavigationGuard()
   const route = async () => {
     if (!state.caps?.isActive) return
+    const ticket = navigation.begin()
     const hit = resolveRoute(routes, window.location.hash, state.caps, '/')
     const currentPath = (window.location.hash || '#/').slice(1)
     const notices = await services.notices.counts() // never throws: a failure shows no badge
+    if (!navigation.isCurrent(ticket)) return // a newer page was opened meanwhile: it draws, not us
     render(
       root,
       appShell({
@@ -195,7 +198,7 @@ async function boot() {
       { ...state, services, auth, refresh: () => refresh(), refreshNotices },
       hit.params
     )
-    view.focus({ preventScroll: true })
+    if (navigation.isCurrent(ticket)) view.focus({ preventScroll: true })
   }
 
   root.addEventListener('click', async (e) => {
