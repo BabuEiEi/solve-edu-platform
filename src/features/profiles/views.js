@@ -128,7 +128,7 @@ export async function renderPendingScreen(root, { context, services, auth, refre
         </div>
         <p class="mt-3 text-sm leading-relaxed text-ink-600">
           สวัสดี ${profile.full_name || 'ผู้ใช้งานใหม่'} —
-          ผู้บริหารสถานศึกษาหรือผู้ดูแลเขตพื้นที่จะตรวจสอบและอนุมัติบัญชีของท่าน
+          ผู้ดูแลระบบหรือผู้ดูแลเขตพื้นที่จะตรวจสอบและอนุมัติบัญชีของท่าน แล้วท่านจะเป็นครูของโรงเรียนที่เลือกไว้
           กรุณาเลือกสถานศึกษาที่สังกัดเพื่อส่งคำขอไปยังผู้อนุมัติที่ถูกต้อง
         </p>
         <div class="mt-4">${msg ? alertBox(msg, tone) : ''}</div>
@@ -194,7 +194,7 @@ export function renderSuspendedScreen(root, { auth, refresh }) {
     root,
     centeredCard(html`
       <h1 class="text-xl font-semibold text-ink-900">บัญชีถูกระงับการใช้งาน</h1>
-      <p class="mt-3 text-sm text-ink-600">กรุณาติดต่อผู้ดูแลเขตพื้นที่หรือผู้บริหารสถานศึกษาของท่าน</p>
+      <p class="mt-3 text-sm text-ink-600">กรุณาติดต่อผู้ดูแลระบบหรือผู้ดูแลเขตพื้นที่ของท่าน</p>
       <button data-action="sign-out" class="${primaryBtn} mt-6">ออกจากระบบ</button>
     `)
   )

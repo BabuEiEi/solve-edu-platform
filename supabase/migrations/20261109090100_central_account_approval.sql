@@ -166,9 +166,13 @@ declare
 begin
   select p.requested_org_id into v_org from public.profiles p where p.id = p_target;
   if v_org is null
+     -- only an active SCHOOL: a person still pending may point requested_org_id at any
+     -- organization (a district, a closed school) — never make them a "teacher" of that
+     or not exists (select 1 from public.organizations o
+                     where o.id = v_org and o.org_type = 'school' and o.active)
      or exists (select 1 from public.organization_memberships m
                  where m.user_id = p_target and m.ended_at is null) then
-    return null; -- nothing asked for, or already placed somewhere: leave it to a person
+    return null; -- nothing (usable) asked for, or already placed somewhere: leave it to a person
   end if;
   insert into public.organization_memberships (user_id, organization_id, org_role, granted_by)
   values (p_target, v_org, 'teacher', p_by)

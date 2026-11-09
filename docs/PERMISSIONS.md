@@ -6,8 +6,8 @@
 ## 1. ระดับของบทบาท
 
 ```
-platform_role_assignments   platform_admin, platform_support        (ดูแลระบบ — ไม่ใช่ผู้ดูแลข้อมูลเขต)
-organization_memberships     district_admin > supervisor, school_admin > teacher
+platform_role_assignments   platform_admin, platform_support (Staff) (ดูแลระบบ — ไม่ใช่ผู้ดูแลข้อมูลเขต)
+organization_memberships     district_admin > supervisor > teacher   (school_admin ยกเลิกใน Phase 4f)
                              สิทธิ์บน org ใดครอบคลุมหน่วยงานลูกทั้งหมด (district → schools)
 cohort_memberships           coordinator, trainer, mentor, trainee  (ต่อรุ่น; หนึ่งคนมีหลายบทบาทได้)
 mentor_assignments           mentor → trainee รายคน ภายในรุ่น
@@ -23,8 +23,9 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 |---|---|
 | `is_active_user()` | โปรไฟล์ผู้เรียก status = active |
 | `is_platform_admin()` | active + มี platform_admin ที่ยังไม่ถูกเพิกถอน |
+| `is_platform_support()` (4f) | active + มี platform_support (Staff) ที่ยังไม่ถูกเพิกถอน |
 | `has_org_role(org, roles[])` | มีบทบาทใน org นั้น **หรือ org บรรพบุรุษ** |
-| `can_grant_org_role(org, role)` | platform admin → ทุกบทบาท; district_admin → supervisor/school_admin/teacher; school_admin → teacher |
+| `can_grant_org_role(org, role)` | platform admin → ทุกบทบาท; district_admin → supervisor/teacher (4f: ไม่มี school_admin · Staff ให้โรงเรียนผ่าน `admin_set_school` เท่านั้น) |
 | `can_manage_org(org)` | platform admin หรือ district_admin เหนือ org |
 | `is_cohort_member(cohort, roles[])` | มีบทบาท active ในรุ่น |
 | `can_manage_program(program)` | platform admin หรือ district_admin/supervisor ของ owner org |
@@ -32,7 +33,8 @@ mentor_assignments           mentor → trainee รายคน ภายใน�
 | `can_manage_cohort(cohort)` | ผู้จัดการโครงการ หรือ coordinator ของรุ่น |
 | `can_grant_cohort_role(cohort, role)` | ผู้จัดการโครงการ → ทุกบทบาท; coordinator → trainee/trainer/mentor (ห้ามตั้ง coordinator) |
 | `is_mentor_of(trainee, cohort)` | มี mentor_assignment ที่ยัง active |
-| `can_admin_user(target)` | platform admin หรือ district/school admin เหนือ org ที่ target สังกัด **หรือ requested_org_id** |
+| `can_admin_user(target)` | platform admin · Staff (เป้าหมายไม่มีบทบาทระดับระบบ) · district_admin เหนือ org ที่ target สังกัด **หรือ requested_org_id** (4f) |
+| `may_manage_account(target)` | `can_admin_user` และ: ผู้มีบทบาทระดับระบบ/ผู้ดูแลเขต = ผู้ดูแลระบบเท่านั้น · ศึกษานิเทศก์ = ผู้ดูแลระบบ, Staff หรือผู้ดูแลเขตเหนือขึ้นไป (4f) |
 | `can_view_profile(target)` | ตนเอง · ผู้ดูแลตาม scope · supervisor ตาม scope · staff ของรุ่นเห็นสมาชิก · สมาชิกเห็น staff · mentor เห็นครูที่ดูแล · ผู้จัดการโครงการเห็นผู้เข้าร่วม — **trainee ไม่เห็น trainee คนอื่น** |
 | `can_manage_course(course)` | platform admin · district_admin/supervisor ของ owner org · trainer ของรุ่นที่ใช้หลักสูตรนั้น |
 | `can_view_course(course)` | ผู้จัดการ · หรือ (course **published** และ (ลงทะเบียนอยู่ หรือเป็น trainer/mentor/coordinator ของรุ่นที่ใช้)) |
@@ -138,9 +140,9 @@ Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (ส�
 |---|---|---|
 | Anonymous อ่านอีเมล/โปรไฟล์ | DENY | `020` #1–3, integration |
 | Trainee A อ่านข้อมูล Trainee B (รุ่นเดียวกัน/ต่างโรงเรียน) | DENY | `020` #5–6, `060` #2 |
-| Trainee แก้ status/role ตนเอง, มอบ platform_admin/school_admin ให้ตนเอง | DENY | `020` #11–14 |
+| Trainee แก้ status/role ตนเอง, มอบ platform_admin หรือบทบาทผู้ดูแลให้ตนเอง | DENY | `020` #11–14 |
 | Mentor อ่านครูนอกกลุ่มที่ดูแล | DENY | `040` #9–10, `060` #12 |
-| School Admin A อ่านข้อมูลโรงเรียน B / อนุมัติผู้สมัครโรงเรียนอื่น | DENY | `030` #1–2, `020` #18, integration |
+| ครูของโรงเรียน A (อดีตผู้บริหารโรงเรียน) อ่านข้อมูลโรงเรียน B / อนุมัติผู้สมัคร / นำเข้ารายชื่อ / แต่งตั้งบทบาท (4f) | DENY | `030`, `020`, `090`, `380`, integration |
 | ถอนสิทธิ์แล้วเข้าถึงใหม่ | DENY | `030` #13 |
 | ตั้ง ended_at กลับเป็น null (re-activate เงียบ ๆ) | DENY | `030` #14 |
 | เจ้าของเห็นข้อมูลของตน / Admin เปลี่ยนสถานะในขอบเขต + audit | ALLOW + AUDIT | `020` #4, #20, #24 |
@@ -188,6 +190,11 @@ Phase 2B: ทุกการเปลี่ยน `assessment_assignments` (ส�
 | ครู/ครูพี่เลี้ยงเรียกรายชื่อบัญชี · ค้นหาข้ามขอบเขต · เห็นอีเมลของบัญชีที่ลบแล้ว · หน้าเสนอปุ่มที่ฐานข้อมูลจะปฏิเสธ (4a) | DENY | `360`, `tests/unit/accounts.test.js`, `tests/e2e/accounts.spec.js` |
 | เห็นเหตุผลที่ลบไม่ได้ + ลบด้วยการพิมพ์รหัส/ชื่อ + เก็บถาวร/นำกลับมาใช้ แบบทดสอบ Rubric (ผู้จัดการหลักสูตร) (4a) | ALLOW | `340`, `tests/unit/deletion.test.js`, `tests/unit/delete-wiring.test.js`, `tests/e2e/delete-unused.spec.js` |
 | ปุ่มลบเปิดโดยไม่พิมพ์ยืนยันตรง · ส่งฟอร์มบังคับด้วยข้อความผิด · หน้าแสดงปุ่มลบให้รายการที่มีผู้ใช้ · ลบหลักสูตรที่มีผู้เรียน (E2E: เก็บถาวรได้ ลบไม่ได้ ข้อมูลผู้เรียนยังอยู่) (4a) | DENY | `deletion.test.js` (mutation test ยืนยัน 3 กรณี), E2E |
+| อนุมัติ ระงับ แก้ชื่อ/รหัส เปลี่ยนโรงเรียน ของบัญชีทั่วไป (ไม่มีบทบาทระดับระบบ ไม่ใช่ผู้ดูแลเขต) · เห็นรายชื่อบัญชีและอีเมล (`admin_list_accounts`, `get_profile_contact`) (4f) | ALLOW: Staff (`platform_support`) | `380`, `390`, `330`, `360`, `tests/integration/rest-rls.test.js`, `tests/e2e/accounts.spec.js` |
+| Staff: ลบบัญชี · แต่งตั้ง/ถอด Staff หรือบทบาทใด · แตะผู้ดูแลระบบ/Staff/ผู้ดูแลเขต · อ่านรายชื่อนำเข้า (อีเมล) · ใช้สิทธิ์หลังถูกถอด (4f) | DENY | `380`, `390`, `tests/unit/accounts.test.js` |
+| อนุมัติแล้วเป็นครูของโรงเรียนที่ขอ (ครั้งแรก pending → active, เฉพาะโรงเรียนที่เปิดอยู่, ไม่ย้ายคนที่มีสังกัดแล้ว) · เติมให้บัญชีที่อนุมัติก่อน 4f (4f) | ALLOW (server) | `380` |
+| ผู้สมัครชี้ "หน่วยงานที่ขอ" ไปที่เขตหรือโรงเรียนที่ปิด แล้วได้บทบาทที่นั่นเมื่ออนุมัติ · ผู้ดูแลเขตย้ายคนไปโรงเรียนนอกเขต · บันทึกบทบาท school_admin (4f) | DENY | `380`, `390` (mutation test ยืนยันทุกข้อ) |
+| แต่งตั้ง/ถอด Staff (4f) | ALLOW: ผู้ดูแลระบบเท่านั้น (RLS เดิมของ `platform_role_assignments`) | `380`, `tests/e2e/accounts.spec.js` |
 | มอบหมายแบบทดสอบที่เก็บถาวร (สร้าง เผยแพร่ร่าง เปิดการมอบหมายที่เก็บถาวรอีกครั้ง แม้ด้วยกุญแจ server ย้ายการมอบหมายไปฉบับนั้น) · เลือก Rubric ที่เก็บถาวรให้ภาระงาน (ใหม่หรือเปลี่ยน) (4d) | DENY (SE010) | `370` (mutation test: ถอด trigger แล้วตก 8 ข้อ), `tests/integration/assignments.test.js` |
 | การมอบหมายที่เปิดอยู่ของแบบทดสอบที่เก็บถาวร: แก้ไข ปิด เก็บถาวร ผู้เรียนเริ่มทำ · ภาระงานที่มี Rubric นั้นอยู่แล้ว: แก้ไข ถอด Rubric ออก · นำกลับมาใช้แล้วมอบหมายได้อีก (4d) | ALLOW | `370` |
 | แนบไฟล์เข้างานระหว่างที่งานนั้นกำลังถูกส่ง (race) · แนบพร้อมกันจนเกิน 5 ไฟล์ (3) | DENY (trigger ล็อกแถวของรอบก่อนตรวจ) | ทดลองสองเซสชันจริง (ดู TEST_REPORT_PHASE3 ขั้น 8) |

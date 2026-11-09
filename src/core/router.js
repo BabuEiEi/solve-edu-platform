@@ -34,3 +34,18 @@ export function resolveRoute(compiled, hash, caps, fallbackPath = '/') {
 export function navigate(path) {
   if (window.location.hash !== `#${path}`) window.location.hash = path
 }
+
+/**
+ * Only the latest navigation may draw. Each route() call takes a ticket; after
+ * every await it asks whether a newer navigation has started since. Without
+ * this, a slow earlier page (e.g. its menu badges still loading) finishes after
+ * a faster later one and draws the OLD page over it — the address says one
+ * page, the screen shows another (seen when moving quickly between pages).
+ */
+export function createNavigationGuard() {
+  let latest = 0
+  return {
+    begin: () => ++latest,
+    isCurrent: (ticket) => ticket === latest,
+  }
+}

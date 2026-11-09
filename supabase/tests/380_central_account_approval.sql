@@ -2,7 +2,7 @@
 -- approves and manages accounts without platform roles; approving adds the
 -- school that was asked for; Staff never deletes or appoints.
 begin;
-select plan(34);
+select plan(36);
 
 create or replace function pg_temp.err(p_sql text) returns text language plpgsql as $$
 declare v_state text;
@@ -144,6 +144,26 @@ select isnt(private.join_requested_school('99999999-0000-4000-a000-0000000000e6'
 select is(pg_temp.schools_of('99999999-0000-4000-a000-0000000000e6'), 'DEMO-SCH-B:teacher', '… as a teacher');
 select is(private.join_requested_school('99999999-0000-4000-a000-0000000000e6', null), null,
   'running it again adds nothing (safe to repeat)');
+
+-- ---------- only an active school is joined automatically ----------
+insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
+  ('99999999-0000-4000-a000-0000000000e7', 'asks.district@example.test', now(), '{}'),
+  ('99999999-0000-4000-a000-0000000000e8', 'asks.closed.school@example.test', now(), '{}');
+insert into public.organizations (id, code, name, org_type, parent_id, active) values
+  ('10000000-0000-4000-a000-0000000000c9', 'CLOSED-4F', 'โรงเรียนปิด (สมมติ)', 'school', tests.uid('district'), false);
+-- a pending person may point the request at anything (their own row, while pending)
+select tests.authenticate_as_id('99999999-0000-4000-a000-0000000000e7');
+update public.profiles set requested_org_id = tests.uid('district') where id = auth.uid();
+reset role;
+update public.profiles set requested_org_id = '10000000-0000-4000-a000-0000000000c9'
+ where id = '99999999-0000-4000-a000-0000000000e8';
+select tests.authenticate_as('platform_admin');
+select public.admin_set_profile_status('99999999-0000-4000-a000-0000000000e7', 'active', 'x');
+select public.admin_set_profile_status('99999999-0000-4000-a000-0000000000e8', 'active', 'x');
+reset role;
+select is(pg_temp.schools_of('99999999-0000-4000-a000-0000000000e7'), '',
+  'asking for a district does not make anyone a teacher of the district');
+select is(pg_temp.schools_of('99999999-0000-4000-a000-0000000000e8'), '', '… nor asking for a closed school');
 
 select * from finish();
 rollback;

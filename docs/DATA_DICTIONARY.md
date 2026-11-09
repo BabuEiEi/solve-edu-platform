@@ -108,7 +108,7 @@
 | `id` | uuid | ✓ | `gen_random_uuid()` |  |
 | `user_id` | uuid | ✓ |  |  |
 | `organization_id` | uuid | ✓ |  |  |
-| `org_role` | text | ✓ |  | district_admin\|supervisor\|school_admin\|teacher — สิทธิ์ครอบคลุมหน่วยงานลูกทั้งหมด |
+| `org_role` | text | ✓ |  | district_admin\|supervisor\|teacher — สิทธิ์ครอบคลุมหน่วยงานลูกทั้งหมด (school_admin ถูกยกเลิกใน Phase 4f) |
 | `started_at` | timestamp with time zone | ✓ | `now()` |  |
 | `ended_at` | timestamp with time zone |  |  |  |
 | `granted_by` | uuid |  | `auth.uid()` |  |
@@ -117,7 +117,7 @@
 **Constraints**
 
 - `org_memberships_period`: `CHECK (((ended_at IS NULL) OR (ended_at >= started_at)))`
-- `organization_memberships_org_role_check`: `CHECK ((org_role = ANY (ARRAY['district_admin'::text, 'supervisor'::text, 'school_admin'::text, 'teacher'::text])))`
+- `organization_memberships_org_role_check`: `CHECK ((org_role = ANY (ARRAY['district_admin'::text, 'supervisor'::text, 'teacher'::text])))`
 - `organization_memberships_granted_by_fkey`: `FOREIGN KEY (granted_by) REFERENCES profiles(id) ON DELETE SET NULL`
 - `organization_memberships_organization_id_fkey`: `FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE RESTRICT`
 - `organization_memberships_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE`
@@ -483,7 +483,7 @@
 - `prereg_name_len`: `CHECK ((char_length(full_name) <= 200))`
 - `prereg_user_code_format`: `CHECK (((user_code IS NULL) OR (user_code ~ '^[0-9A-Za-zก-๙._-]{1,50}$'::text)))`
 - `preregistrations_cohort_role_check`: `CHECK ((cohort_role = ANY (ARRAY['trainee'::text, 'trainer'::text, 'mentor'::text, 'coordinator'::text])))`
-- `preregistrations_org_role_check`: `CHECK ((org_role = ANY (ARRAY['district_admin'::text, 'supervisor'::text, 'school_admin'::text, 'teacher'::text])))`
+- `preregistrations_org_role_check`: `CHECK ((org_role = ANY (ARRAY['district_admin'::text, 'supervisor'::text, 'teacher'::text])))`
 - `preregistrations_status_check`: `CHECK ((status = ANY (ARRAY['pending'::text, 'claimed'::text, 'cancelled'::text])))`
 - `preregistrations_claimed_by_fkey`: `FOREIGN KEY (claimed_by) REFERENCES profiles(id) ON DELETE SET NULL`
 - `preregistrations_cohort_id_fkey`: `FOREIGN KEY (cohort_id) REFERENCES cohorts(id) ON DELETE RESTRICT`

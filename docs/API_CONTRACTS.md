@@ -10,7 +10,8 @@ Frontend คุยกับ Supabase Data API (PostgREST) ด้วย supabase-
 |---|---|
 | เรียกโดย | `authenticated` (ไม่มีสิทธิ์สำหรับ `anon`) |
 | `p_status` | `pending` \| `active` \| `suspended` |
-| สำเร็จ | อัปเดต `profiles.status` + เขียน `private.audit_logs` (`action = 'SET_STATUS'`, before/after, reason) |
+| สำเร็จ | อัปเดต `profiles.status` + เขียน `private.audit_logs` (`action = 'SET_STATUS'`, before/after, reason) · **4f:** ครั้งแรกที่ `pending → active` และผู้สมัครขอโรงเรียน (ที่ยังเปิด) และยังไม่มีสังกัด → เพิ่มเป็น `teacher` ของโรงเรียนนั้น (`granted_by` = ผู้อนุมัติ) |
+| ผู้เรียกได้ | ผู้ดูแลระบบ · Staff (`platform_support`) · ผู้ดูแลเขตสำหรับคนในเขต (`authz.may_manage_account`) — ไม่มีผู้บริหารโรงเรียนแล้ว (4f) |
 | `42501` | ไม่ได้ล็อกอิน · แก้ตนเอง · อยู่นอกขอบเขต · เป้าหมายเป็นผู้ถือบทบาทสูงกว่าที่ผู้เรียกจัดการได้ |
 | `22023` | status ไม่ถูกต้อง |
 | `P0002` | ไม่พบโปรไฟล์ |
@@ -178,8 +179,10 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 
 | งาน | เรียก | หมายเหตุ |
 |---|---|---|
-| รายชื่อบัญชี (หน้า จัดการบัญชี) | `rpc('admin_list_accounts', {p_search, p_status, p_limit: 50, p_offset})` → `{total, rows: [{id, full_name, display_name, user_code, email, status, created_at, last_sign_in_at, requested_org, orgs: [{name, role}], platform_roles, is_self, can_edit, can_manage, can_delete}]}` | เฉพาะคนในขอบเขต · 42501 = ไม่ใช่ผู้ดูแล · 22023 = สถานะ/ขนาดหน้าผิด |
+| รายชื่อบัญชี (หน้า จัดการบัญชี) | `rpc('admin_list_accounts', {p_search, p_status, p_limit: 50, p_offset})` → `{total, rows: [{id, full_name, display_name, user_code, email, status, created_at, last_sign_in_at, requested_org, orgs: [{id, name, role}], platform_roles, is_self, can_edit, can_manage, can_delete, can_set_school}]}` | เฉพาะคนในขอบเขต · 42501 = ไม่ใช่ผู้ดูแล · 22023 = สถานะ/ขนาดหน้าผิด |
 | แก้ชื่อ/รหัสประจำตัวของผู้ใช้ | `rpc('admin_update_profile', {p_target, p_full_name, p_display_name, p_user_code})` → `{id, full_name, display_name, user_code}` | ช่องว่าง = ล้างค่า · 42501 = นอกขอบเขต · 23505 = รหัสซ้ำ (ไม่สนตัวพิมพ์) · 23514 = รูปแบบรหัสผิด/ไม่มีชื่อ |
+| เปลี่ยนโรงเรียนของบัญชี (4f) | `rpc('admin_set_school', {p_target, p_school})` → `[{organization_id, name, org_role}]` (สังกัดปัจจุบันทั้งหมด) | หนึ่งคนหนึ่งโรงเรียน (บทบาท teacher) · สังกัดครูเดิมสิ้นสุด (เก็บประวัติ) · บทบาทอื่นไม่ถูกแตะ · `p_school = null` = ไม่มีโรงเรียน · 42501 = จัดการบัญชีนี้ไม่ได้ / ผู้ดูแลเขตเลือกโรงเรียนนอกเขต · 22023 = ไม่ใช่โรงเรียนที่เปิดอยู่ · 23514 = บัญชีถูกลบ |
+| แต่งตั้ง / ถอด Staff (4f) | `from('platform_role_assignments').insert({user_id, role: 'platform_support'})` · `.update({revoked_at}).eq('user_id', …).eq('role', 'platform_support').is('revoked_at', null)` | ผู้ดูแลระบบเท่านั้น (RLS) · ห้ามตนเอง · ถอดแล้วสิทธิ์หมดทันที (ประวัติเก็บไว้) |
 | อ่านรหัสประจำตัว | `from('profiles').select('id, full_name, display_name, user_code, status, …')` | เห็นเท่าที่เห็นโปรไฟล์ได้ (RLS เดิม) |
 | นำเข้ารายชื่อพร้อมรหัส | `from('preregistrations').insert({…, user_code})` | ใส่ให้โปรไฟล์ตอนผูกบัญชี ถ้ายังไม่มีรหัสและรหัสยังว่าง |
 | ลบได้ไหม / เพราะอะไร | `rpc('deletion_usage', {p_kind: 'course'\|'instrument'\|'task', p_id})` → `{can_delete, reasons: {enrollments?, attempts?, submissions?, drive_exports?, rubric_tasks?, rubric_tasks_elsewhere?, reviews?}}` | นับเฉพาะเหตุที่มี · 42501 = ไม่ใช่ผู้จัดการ |
