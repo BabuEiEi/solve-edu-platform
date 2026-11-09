@@ -95,7 +95,7 @@ const routes = compileRoutes([
   { path: '/staff/assessments/:id', view: renderAssignmentDetailView, allow: (c) => c.isActive },
   { path: '/admin/approvals', view: renderApprovalsView, allow: (c) => c.canApproveUsers },
   { path: '/admin/accounts', view: renderAccountsView, allow: (c) => c.canApproveUsers },
-  { path: '/admin/import', view: renderImportView, allow: (c) => c.canApproveUsers },
+  { path: '/admin/import', view: renderImportView, allow: (c) => c.canImportRoster },
 ])
 
 function renderConfigMissing() {

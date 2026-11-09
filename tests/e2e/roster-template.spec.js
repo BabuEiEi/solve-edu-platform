@@ -2,7 +2,7 @@ import { test, expect } from './fixtures.js'
 import { signIn } from './helpers.js'
 
 test('the downloaded roster template is accepted by the importer as-is', async ({ page }, testInfo) => {
-  await signIn(page, 'school.admin.a@example.test')
+  await signIn(page, 'district.admin@example.test') // 4f: no school admins; the district admin imports
   await page.goto('/#/admin/import')
 
   const [download] = await Promise.all([
@@ -22,7 +22,7 @@ test('the downloaded roster template is accepted by the importer as-is', async (
 test('the downloaded Excel roster template is accepted as-is, and so is a file made by another program', async ({
   page,
 }, testInfo) => {
-  await signIn(page, 'school.admin.a@example.test')
+  await signIn(page, 'district.admin@example.test') // 4f: no school admins; the district admin imports
   await page.goto('/#/admin/import')
 
   const [download] = await Promise.all([

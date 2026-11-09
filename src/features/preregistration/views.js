@@ -31,8 +31,8 @@ const secondary = 'rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm t
 
 /** Roles the UI offers; authz.can_grant_org_role is the real gate. */
 export function grantableRoles(caps) {
-  if (caps.isPlatformAdmin) return ['teacher', 'school_admin', 'supervisor', 'district_admin']
-  if (caps.orgRoles.includes('district_admin')) return ['teacher', 'school_admin', 'supervisor']
+  if (caps.isPlatformAdmin) return ['teacher', 'supervisor', 'district_admin']
+  if (caps.orgRoles.includes('district_admin')) return ['teacher', 'supervisor']
   return ['teacher']
 }
 
@@ -41,7 +41,7 @@ export function importableOrgs(orgs, context, caps) {
   if (caps.isPlatformAdmin) return orgs
   const mine = new Set(
     (context.orgMemberships ?? [])
-      .filter((m) => ['district_admin', 'school_admin'].includes(m.org_role))
+      .filter((m) => m.org_role === 'district_admin')
       .map((m) => m.organization_id)
   )
   return orgs.filter((o) => mine.has(o.id) || mine.has(o.parent_id))

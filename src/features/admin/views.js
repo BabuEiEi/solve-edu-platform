@@ -82,7 +82,7 @@ export async function renderApprovalsView(el, { services, session }) {
     render(
       el,
       html`
-        ${pageHeader('อนุมัติผู้ใช้', 'แสดงเฉพาะบุคคลในขอบเขตหน่วยงานที่ท่านมีสิทธิ์ ทุกการเปลี่ยนสถานะถูกบันทึกใน Audit Log')}
+        ${pageHeader('อนุมัติผู้ใช้', 'แสดงเฉพาะบุคคลในขอบเขตที่ท่านดูแล · อนุมัติแล้ว ผู้สมัครจะเป็นครูของโรงเรียนที่ขอไว้ (เปลี่ยนได้ที่หน้าจัดการบัญชี) · ทุกการเปลี่ยนแปลงถูกบันทึกใน Audit Log')}
         <div class="mb-4 flex gap-2" role="tablist">
           ${TABS.map(
             (t) =>

@@ -63,11 +63,11 @@ select tests.authenticate_as('platform_admin');
 select is((public.admin_list_accounts() ->> 'total')::int, (select count(*)::int from public.profiles), 'the platform admin sees everybody');
 select is((pg_temp.row_of(public.admin_list_accounts(), tests.uid('platform_admin')) ->> 'is_self')::boolean, true, 'their own row is marked');
 select is((pg_temp.row_of(public.admin_list_accounts(), tests.uid('platform_admin')) - array['id','full_name','display_name','user_code','email','status','created_at','last_sign_in_at','requested_org','orgs','platform_roles','is_self']),
-  '{"can_edit": true, "can_delete": false, "can_manage": false}'::jsonb,
+  '{"can_edit": true, "can_delete": false, "can_manage": false, "can_set_school": true}'::jsonb,
   'self: may edit own name/code, never manage or delete self');
 select is((pg_temp.row_of(public.admin_list_accounts(), tests.uid('teacher_b1')) ->> 'can_delete')::boolean, true, 'may delete a teacher');
 select is(pg_temp.row_of(public.admin_list_accounts(), tests.uid('district_admin')) -> 'orgs',
-  jsonb_build_array(jsonb_build_object('name', (select name from public.organizations where id = tests.uid('district')), 'role', 'district_admin')),
+  jsonb_build_array(jsonb_build_object('id', tests.uid('district'), 'name', (select name from public.organizations where id = tests.uid('district')), 'role', 'district_admin')),
   'current organisations and roles are listed');
 select is(jsonb_array_length(public.admin_list_accounts(p_limit => 2) -> 'rows'), 2, 'paging: limit');
 select isnt(pg_temp.ids(public.admin_list_accounts(p_limit => 2)), pg_temp.ids(public.admin_list_accounts(p_limit => 2, p_offset => 2)),
@@ -80,7 +80,7 @@ reset role;
 select tests.authenticate_as('platform_admin');
 select public.admin_delete_account(tests.uid('teacher_b1'), 'teacher.b1@example.test');
 select is(pg_temp.row_of(public.admin_list_accounts(p_status => 'deleted'), tests.uid('teacher_b1')) - array['id','created_at','last_sign_in_at','requested_org'],
-  '{"email": null, "full_name": "ผู้ใช้ที่ถูกลบ", "display_name": null, "user_code": null, "status": "deleted", "orgs": [], "platform_roles": [], "is_self": false, "can_manage": false, "can_edit": false, "can_delete": false}'::jsonb,
+  '{"email": null, "full_name": "ผู้ใช้ที่ถูกลบ", "display_name": null, "user_code": null, "status": "deleted", "orgs": [], "platform_roles": [], "is_self": false, "can_manage": false, "can_edit": false, "can_delete": false, "can_set_school": false}'::jsonb,
   'a deleted account shows no e-mail and offers nothing');
 reset role;
 

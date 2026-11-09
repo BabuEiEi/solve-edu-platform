@@ -172,11 +172,7 @@ begin
   end if;
   insert into public.organization_memberships (user_id, organization_id, org_role, granted_by)
   values (p_target, v_org, 'teacher', p_by)
-  returning id into v_id;
-  insert into private.audit_logs (actor_id, action, table_name, record_id, before_json, after_json, reason)
-  values (p_by, 'INSERT', 'public.organization_memberships', v_id, null,
-          jsonb_build_object('user_id', p_target, 'organization_id', v_org, 'org_role', 'teacher'),
-          'approved: school asked for at sign-up');
+  returning id into v_id; -- audited by the table's own trigger (org_memberships_audit)
   return v_id;
 end;
 $$;

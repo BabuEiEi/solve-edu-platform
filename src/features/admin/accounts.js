@@ -1,5 +1,5 @@
 import { html, render } from '../../shared/ui/html.js'
-import { promptDialog } from '../../shared/ui/dialog.js'
+import { confirmDialog, promptDialog } from '../../shared/ui/dialog.js'
 import {
   pageHeader,
   emptyState,
@@ -36,7 +36,25 @@ const sameEmail = (a, b) =>
     .trim()
     .toLowerCase()
 
-export async function renderAccountsView(el, { services, caps }) {
+/** The teacher school of an account row (one school per person; the first if there are several). */
+export const schoolOf = (a) => (a.orgs ?? []).find((o) => o.role === 'teacher')?.id ?? ''
+
+/**
+ * Schools the caller may choose (admin_set_school is the real gate): every
+ * active school for the platform admin and Staff; for a district admin, the
+ * schools below their district.
+ */
+export function choosableSchools(schools, context, caps) {
+  if (caps?.isPlatformAdmin || caps?.isPlatformSupport) return schools
+  const mine = new Set(
+    (context?.orgMemberships ?? [])
+      .filter((m) => m.org_role === 'district_admin')
+      .map((m) => m.organization_id)
+  )
+  return schools.filter((o) => mine.has(o.parent_id) || mine.has(o.id))
+}
+
+export async function renderAccountsView(el, { services, caps, context }) {
   const state = {
     search: '',
     status: '',
@@ -50,6 +68,7 @@ export async function renderAccountsView(el, { services, caps }) {
   let message = null
   let tone = 'success'
   let rowError = ''
+  let schools = null // loaded the first time a row is edited
 
   const load = async () => {
     render(el, html`${pageHeader('จัดการบัญชี')}${loading}`)
@@ -97,6 +116,19 @@ export async function renderAccountsView(el, { services, caps }) {
       if (a.status === 'suspended')
         out.push(btn('active', 'เปิดใช้งานอีกครั้ง', 'border border-ink-200 text-ink-700 hover:bg-ink-50'))
     }
+    // Staff (platform_support): appointed and removed by the platform admin only (RLS)
+    if (
+      caps?.isPlatformAdmin &&
+      !a.is_self &&
+      a.status === 'active' &&
+      !(a.platform_roles ?? []).includes('platform_admin')
+    ) {
+      out.push(
+        (a.platform_roles ?? []).includes('platform_support')
+          ? html`<button type="button" class="${secondary}" data-action="revoke-staff" data-id="${a.id}">ถอดจาก Staff</button>`
+          : html`<button type="button" class="${secondary}" data-action="appoint-staff" data-id="${a.id}">แต่งตั้งเป็น Staff</button>`
+      )
+    }
     if (a.can_delete)
       out.push(
         html`<button type="button" class="${small} border border-rose-300 text-rose-800 hover:bg-rose-50" data-action="delete" data-id="${a.id}">ลบบัญชี</button>`
@@ -111,6 +143,22 @@ export async function renderAccountsView(el, { services, caps }) {
         <label class="${label}">ชื่อที่แสดง<input name="display_name" maxlength="100" value="${a.display_name ?? ''}" class="${input}" /></label>
         <label class="${label}">รหัสประจำตัว<input name="user_code" maxlength="50" value="${a.user_code ?? ''}" placeholder="เช่น T-0001" class="${input}" /></label>
         <p class="text-xs text-ink-500 sm:col-span-3">รหัสประจำตัวไม่ซ้ำกัน (ไม่สนตัวพิมพ์เล็ก/ใหญ่) ใช้ตัวอักษร ตัวเลข . _ - ไม่เว้นวรรค · เว้นว่าง = ไม่มีรหัส</p>
+        ${
+          a.can_set_school
+            ? html`<label class="${label} sm:col-span-3"
+                  >โรงเรียน (บทบาทครู)<select name="school_id" class="${input}" data-school-select>
+                    <option value="">— ไม่มีโรงเรียน —</option>
+                    ${(schools ?? []).map(
+                      (o) =>
+                        html`<option value="${o.id}" ${o.id === schoolOf(a) ? html`selected` : ''}>${o.name}</option>`
+                    )}
+                  </select></label
+                >
+                <p class="text-xs text-ink-500 sm:col-span-3">
+                  ${a.requested_org ? html`ขอสังกัดไว้ตอนสมัคร: ${a.requested_org} · ` : ''}หนึ่งคนสังกัดได้หนึ่งโรงเรียน การเปลี่ยนโรงเรียนจะสิ้นสุดสังกัดเดิม (เก็บประวัติไว้) บทบาทอื่น เช่น ศึกษานิเทศก์ ไม่เปลี่ยน
+                </p>`
+            : ''
+        }
         ${rowError ? html`<div class="sm:col-span-3">${alertBox(rowError, 'error')}</div>` : ''}
         <div class="flex gap-2 sm:col-span-3">
           <button type="submit" class="${small} bg-brand-600 text-white hover:bg-brand-700">บันทึก</button>
@@ -155,7 +203,7 @@ export async function renderAccountsView(el, { services, caps }) {
       html`
         ${pageHeader(
           'จัดการบัญชี',
-          `แสดงเฉพาะบุคคลในขอบเขตของท่าน · แก้ชื่อและรหัสประจำตัว เปลี่ยนสถานะ${caps?.isPlatformAdmin ? ' และลบบัญชี' : ''} · ทุกการเปลี่ยนแปลงบันทึกใน Audit Log`
+          `แสดงเฉพาะบุคคลในขอบเขตของท่าน · แก้ชื่อ รหัสประจำตัว โรงเรียน เปลี่ยนสถานะ${caps?.isPlatformAdmin ? ' แต่งตั้ง Staff และลบบัญชี' : ''} · ทุกการเปลี่ยนแปลงบันทึกใน Audit Log`
         )}
         <form data-form="account-search" class="mb-4 flex flex-wrap items-end gap-2" role="search">
           <label class="${label} min-w-0 flex-1 basis-60"
@@ -234,12 +282,16 @@ export async function renderAccountsView(el, { services, caps }) {
     }
     if (form.dataset.form === 'account-edit') {
       const fd = new FormData(form)
+      const a = find(form.dataset.id)
       try {
         await services.admin.updateAccount(form.dataset.id, {
           full_name: fd.get('full_name'),
           display_name: fd.get('display_name'),
           user_code: fd.get('user_code'),
         })
+        const school = String(fd.get('school_id') ?? '')
+        if (a?.can_set_school && fd.has('school_id') && school !== schoolOf(a))
+          await services.admin.setSchool(form.dataset.id, school || null)
         state.editing = null
         rowError = ''
         message = 'บันทึกข้อมูลบัญชีแล้ว'
@@ -284,7 +336,42 @@ export async function renderAccountsView(el, { services, caps }) {
     if (action === 'edit') {
       Object.assign(state, { editing: b.dataset.id, deleting: null })
       rowError = ''
+      if (find(b.dataset.id)?.can_set_school && schools === null) {
+        try {
+          schools = choosableSchools(
+            (await services.organizations.listActiveOrganizations({ orgType: 'school' })) ?? [],
+            context,
+            caps
+          )
+        } catch (err) {
+          schools = null
+          rowError = toUserMessage(err)
+        }
+      }
       return draw()
+    }
+    if (action === 'appoint-staff' || action === 'revoke-staff') {
+      const a = find(b.dataset.id)
+      if (!a) return undefined
+      const appoint = action === 'appoint-staff'
+      const ok = await confirmDialog({
+        title: appoint ? `แต่งตั้ง ${a.full_name} เป็น Staff?` : `ถอด ${a.full_name} จาก Staff?`,
+        text: appoint
+          ? 'Staff อนุมัติ ระงับ แก้ชื่อ รหัส และโรงเรียนของบัญชีทั่วไปได้ทุกคน แต่ลบบัญชีและแต่งตั้งผู้อื่นไม่ได้'
+          : 'สิทธิ์ของ Staff จะหมดทันที บัญชียังใช้งานได้ตามบทบาทอื่น',
+        confirmText: appoint ? 'แต่งตั้ง' : 'ถอดจาก Staff',
+        danger: !appoint,
+      })
+      if (!ok) return undefined
+      try {
+        await (appoint ? services.admin.appointStaff(a.id) : services.admin.revokeStaff(a.id))
+        message = appoint ? 'แต่งตั้งเป็น Staff แล้ว' : 'ถอดจาก Staff แล้ว'
+        tone = 'success'
+      } catch (err) {
+        message = toUserMessage(err)
+        tone = 'error'
+      }
+      return load()
     }
     if (action === 'delete') {
       Object.assign(state, { deleting: b.dataset.id, editing: null, typed: '' })

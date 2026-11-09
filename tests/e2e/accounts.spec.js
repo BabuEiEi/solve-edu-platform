@@ -1,10 +1,10 @@
 import { execFileSync } from 'node:child_process'
 import { test, expect } from './fixtures.js'
-import { signIn } from './helpers.js'
+import { signIn, answerDialog } from './helpers.js'
 
 /**
- * "จัดการบัญชี" end to end: search, set a personal code, scope of a school
- * admin, and deleting an account through the real Edge Function (served by
+ * "จัดการบัญชี" end to end: search, set a personal code, Staff approval and
+ * school change (4f), appointing Staff, and deleting an account through the real Edge Function (served by
  * scripts/supabase-local/test-e2e.sh).
  */
 const sql = (text) =>
@@ -124,15 +124,68 @@ test('platform admin: find a teacher, give a code, find by code; delete a throwa
   }
 })
 
-test('a school admin manages only their school and is never offered "ลบบัญชี"', async ({ page }) => {
-  await signIn(page, 'school.admin.b@example.test')
+test('4f: Staff approves a newcomer, who joins the school they asked for; Staff moves them, is never offered "ลบบัญชี", and a former school admin has no such page', async ({
+  page,
+}) => {
+  await signIn(page, 'staff@example.test')
+  await expect(page.locator('a[href="#/admin/accounts"]:visible')).toBeVisible()
+  await expect(page.locator('a[href="#/admin/import"]')).toHaveCount(0) // roster import (e-mails) is not Staff's
   await page.goto('/#/admin/accounts')
-  const rows = page.locator('tr[data-account-id]')
-  await expect(rows.first()).toBeVisible()
-  await expect(page.locator('tbody')).toContainText('ครู ข1')
-  await expect(page.locator('tbody')).not.toContainText('ครู ก1')
+  const newcomer = page.locator('tr[data-account-id]', { hasText: 'ผู้สมัครใหม่' })
+  await expect(newcomer).toContainText('ขอสังกัด: โรงเรียนสาธิต ก')
   await expect(page.getByRole('button', { name: 'ลบบัญชี' })).toHaveCount(0)
-  await expect(
-    page.locator('tr[data-account-id]', { hasText: 'ครู ข1' }).getByRole('button', { name: 'แก้ไข' })
-  ).toBeVisible()
+  await expect(page.getByRole('button', { name: 'แต่งตั้งเป็น Staff' })).toHaveCount(0)
+  await expect(page.locator('tbody')).not.toContainText('ผู้ดูแลระบบ (สมมติ)') // a platform role holder
+
+  await newcomer.getByRole('button', { name: 'อนุมัติ' }).first().click()
+  await expect(page.getByText('เปิดใช้งานบัญชีแล้ว')).toBeVisible()
+  const approved = page.locator('tr[data-account-id]', { hasText: 'ผู้สมัครใหม่' })
+  await expect(approved).toContainText('ครู')
+  await expect(approved).toContainText('โรงเรียนสาธิต ก (สมมติ)')
+  await expect(approved).not.toContainText('ยังไม่มีสังกัด')
+
+  // the school was wrong: move them to school B in the edit form
+  await approved.getByRole('button', { name: 'แก้ไข' }).first().click()
+  const select = page.locator('[data-school-select]')
+  await expect(select).toHaveValue('10000000-0000-4000-a000-000000000002')
+  await select.selectOption({ label: 'โรงเรียนสาธิต ข (สมมติ)' })
+  await page.locator('form[data-form=account-edit]').getByRole('button', { name: 'บันทึก' }).click()
+  await expect(page.getByText('บันทึกข้อมูลบัญชีแล้ว')).toBeVisible()
+  await expect(page.locator('tr[data-account-id]', { hasText: 'ผู้สมัครใหม่' })).toContainText(
+    'โรงเรียนสาธิต ข (สมมติ)'
+  )
+  await expect(page.locator('tr[data-account-id]', { hasText: 'ผู้สมัครใหม่' })).not.toContainText(
+    'โรงเรียนสาธิต ก (สมมติ)'
+  )
+  expect(
+    sql(`select count(*) from public.organization_memberships m join public.profiles p on p.id = m.user_id
+          where p.full_name like 'ผู้สมัครใหม่%' and m.ended_at is not null`)
+  ).toBe('1') // school A kept as history
+
+  // a former school admin (a teacher now) has no admin pages at all
+  const other = await (await page.context().browser().newContext()).newPage()
+  await signIn(other, 'school.admin.b@example.test')
+  await expect(other.locator('a[href="#/admin/accounts"]')).toHaveCount(0)
+  await expect(other.locator('a[href="#/admin/approvals"]')).toHaveCount(0)
+})
+
+test('4f: the platform admin appoints Staff and removes them again', async ({ page }) => {
+  await signIn(page, 'platform.admin@example.test')
+  await page.goto('/#/admin/accounts')
+  await page.locator('input[name=q]').fill('teacher.a2@')
+  await page.getByRole('button', { name: 'ค้นหา' }).click()
+  const row = page.locator('tr[data-account-id]', { hasText: 'ครู ก2' })
+  await row.getByRole('button', { name: 'แต่งตั้งเป็น Staff' }).first().click()
+  await answerDialog(page)
+  await expect(page.getByText('แต่งตั้งเป็น Staff แล้ว')).toBeVisible()
+  await expect(row).toContainText('ผู้ช่วยดูแลระบบ (Staff)')
+  await row.getByRole('button', { name: 'ถอดจาก Staff' }).first().click()
+  await answerDialog(page)
+  await expect(page.getByText('ถอดจาก Staff แล้ว')).toBeVisible()
+  await expect(row).not.toContainText('ผู้ช่วยดูแลระบบ (Staff)')
+  expect(
+    sql(
+      `select count(*) from public.platform_role_assignments where user_id = '00000000-0000-4000-a000-000000000009' and revoked_at is not null`
+    )
+  ).toBe('1') // history kept
 })

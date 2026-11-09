@@ -88,6 +88,41 @@ export function createAdminService(client) {
       return data
     },
 
+    /** One school per person, as teacher (null = none). Scope and audit in the database (admin_set_school). */
+    async setSchool(targetId, schoolId) {
+      return unwrap(
+        await client.rpc('admin_set_school', { p_target: targetId, p_school: schoolId || null }),
+        'rpc.admin_set_school'
+      )
+    },
+
+    /** Platform admin only (RLS): make someone Staff (platform_support). */
+    async appointStaff(targetId) {
+      unwrap(
+        await client
+          .from('platform_role_assignments')
+          .insert({ user_id: targetId, role: 'platform_support' })
+          .select('id')
+          .single(),
+        'platform_roles.appoint'
+      )
+    },
+
+    /** Platform admin only (RLS): end someone's Staff role (history kept). */
+    async revokeStaff(targetId) {
+      const rows = unwrap(
+        await client
+          .from('platform_role_assignments')
+          .update({ revoked_at: new Date().toISOString() })
+          .eq('user_id', targetId)
+          .eq('role', 'platform_support')
+          .is('revoked_at', null)
+          .select('id'),
+        'platform_roles.revoke'
+      )
+      if (!rows?.length) throw new AppError('ไม่พบบทบาท Staff ที่ใช้งานอยู่ของบัญชีนี้ หรือท่านไม่มีสิทธิ์')
+    },
+
     /** Trusted RPC: authorization, scope and audit are enforced in the database. */
     async setProfileStatus(targetId, status, reason) {
       if (!ALLOWED_STATUS.includes(status)) throw new AppError('สถานะไม่ถูกต้อง')
