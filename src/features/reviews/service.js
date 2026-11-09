@@ -150,6 +150,59 @@ export function createReviewService(client) {
       unwrap(await client.from('task_reviews').delete().eq('id', reviewId).select('id'), 'reviews.discard')
     },
 
+    /**
+     * Everything the .zip of one task-in-a-cohort needs (see zip.js): every
+     * submitted attempt with its files and released reviews, and the roster.
+     * RLS decides every row, exactly as on the review page.
+     */
+    async zipData(allocationId) {
+      const allocation = await this.getAllocation(allocationId)
+      if (!allocation) return null
+      const PERSON = 'id, full_name, display_name, user_code'
+      const submissions = await rows(
+        client
+          .from('task_submissions')
+          .select(
+            `id, allocation_id, user_id, attempt_no, status, text_response, links, submitted_at, is_late, profiles ( ${PERSON} )`
+          )
+          .eq('allocation_id', allocationId)
+          .eq('status', 'submitted'),
+        'reviews.zip.submissions'
+      )
+      const ids = submissions.map((s) => s.id)
+      const files = []
+      const reviews = []
+      for (let i = 0; i < ids.length; i += 100) {
+        const chunk = ids.slice(i, i + 100)
+        const [f, r] = await Promise.all([
+          rows(
+            client.from('task_submission_files').select(FILE_COLUMNS).in('submission_id', chunk),
+            'reviews.zip.files'
+          ),
+          rows(
+            client
+              .from('task_reviews')
+              .select('id, submission_id, outcome, score, max_score, released_at')
+              .in('submission_id', chunk)
+              .eq('status', 'released'),
+            'reviews.zip.reviews'
+          ),
+        ])
+        files.push(...f)
+        reviews.push(...r)
+      }
+      const roster = await rows(
+        client
+          .from('cohort_memberships')
+          .select(`user_id, profiles!cohort_memberships_user_id_fkey ( ${PERSON} )`)
+          .eq('cohort_id', allocation.cohort_id)
+          .eq('cohort_role', 'trainee')
+          .eq('status', 'active'),
+        'reviews.zip.roster'
+      )
+      return { task: allocation.tasks, cohort: allocation.cohorts, submissions, files, reviews, roster }
+    },
+
     async signedUrls(paths, expiresIn = 3600) {
       if (!paths?.length) return {}
       const out =

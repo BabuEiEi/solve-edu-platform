@@ -5,7 +5,10 @@
  * open the file afterwards.
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest'
-import { supabaseAs, serverNow, IDS } from './helpers.js'
+import { unzipSync, strFromU8 } from 'fflate'
+import { supabaseAs, serverNow, IDS, U } from './helpers.js'
+import { createReviewService } from '../../src/features/reviews/service.js'
+import { planZip, buildZip, SUMMARY_FILE } from '../../src/features/reviews/zip.js'
 
 const env = {
   url: process.env.SOLVEEDU_API_URL,
@@ -128,5 +131,41 @@ run('Tasks: submit work with a file (Supabase Local)', () => {
     const next = await learner.rpc('start_task_submission', { p_allocation: allocationId })
     expect(next.error).toBeNull()
     expect(next.data).not.toBe(submissionId)
+  })
+
+  it('zip (4e): the trainer gets every submitted attempt with its file, answer and result; others get only what RLS shows', async () => {
+    const reviews = createReviewService(supabaseAs(env, 'trainer'))
+    const data = await reviews.zipData(allocationId)
+    expect(data.task.title).toBe('ส่งแผนการสอน (integration)')
+    const mine = data.submissions.filter((x) => x.user_id === U.teacher_a1)
+    expect(mine.map((x) => x.attempt_no)).toEqual([1]) // attempt 2 is a draft: not in
+    expect(mine[0].profiles).toHaveProperty('user_code')
+    const plan = planZip(data)
+    const out = await buildZip(plan, {
+      signedUrls: (paths) => reviews.signedUrls(paths, 120),
+      fetchBytes: async (url) => {
+        const res = await fetch(url)
+        if (!res.ok) throw new Error(String(res.status))
+        return new Uint8Array(await res.arrayBuffer())
+      },
+    })
+    expect(out.failed).toEqual([])
+    const files = unzipSync(out.bytes)
+    const pdfName = Object.keys(files).find((n) => n.endsWith('/แผนการสอน.pdf'))
+    expect(pdfName).toMatch(/\/รอบที่ 1 \(ส่ง \d{4}-\d{2}-\d{2}\)\/แผนการสอน\.pdf$/)
+    expect(strFromU8(files[pdfName]).startsWith('%PDF-1.4')).toBe(true)
+    const answer = Object.keys(files).find((n) => n.endsWith('/คำตอบ.txt'))
+    expect(strFromU8(files[answer])).toContain('แผนเรื่องเศษส่วน')
+    // the summary sheet itself is read back in tests/unit/zip.test.js (needs DOMParser)
+    expect(files[SUMMARY_FILE].length).toBeGreaterThan(0)
+    const rows = plan.summaryRows.slice(1)
+    expect(rows.find((r) => r[2] === 1)?.[7]).toBe('ส่งกลับแก้ไข')
+    expect(rows.some((r) => r[7] === 'ยังไม่ส่ง')).toBe(true) // the roster's others
+
+    // another trainee of the cohort: sees the task but none of A1's work
+    const peer = await createReviewService(supabaseAs(env, 'teacher_a2')).zipData(allocationId)
+    expect(peer.submissions.filter((x) => x.user_id === U.teacher_a1)).toEqual([])
+    // an outsider: nothing at all
+    expect(await createReviewService(supabaseAs(env, 'school_admin_b')).zipData(allocationId)).toBeNull()
   })
 })
