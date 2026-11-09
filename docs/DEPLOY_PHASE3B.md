@@ -45,6 +45,8 @@
 
 ## 4. เตรียม Google — เจ้าของระบบ / ผู้ดูแล Google Workspace
 
+> **ข้อ 4–5 ยังไม่ใช้งาน (2569-11-09):** เจ้าของระบบมีเฉพาะบัญชี Google ส่วนตัว ซึ่งไม่มี Shared Drive และ service account อัปโหลดเข้า My Drive ไม่ได้ (ไม่มีพื้นที่เก็บของตนเอง) จึงใช้ปุ่มดาวน์โหลด .zip ที่หน้าตรวจงานแทน (Phase 4e) · ปุ่ม Drive ซ่อนอยู่ เปิดกลับด้วย `VITE_DRIVE_EXPORT=true` ตอน build เมื่อมี Shared Drive ขององค์กร
+
 - [ ] Google Cloud: โปรเจกต์ขององค์กร → เปิด Google Drive API
 - [ ] สร้าง service account → สร้าง key แบบ JSON (ห้าม commit ห้ามส่งในแชท)
 - [ ] สร้าง Shared Drive → เพิ่ม service account เป็น **Content manager**

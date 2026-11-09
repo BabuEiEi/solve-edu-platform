@@ -2,9 +2,9 @@ import { html, render, safeUrl } from '../../shared/ui/html.js'
 import { pageHeader, emptyState, alertBox, loading } from '../../shared/ui/components.js'
 import { createAutosave } from '../../shared/ui/autosave.js'
 import { confirmDialog } from '../../shared/ui/dialog.js'
-import { toUserMessage } from '../../core/errors.js'
+import { AppError, toUserMessage } from '../../core/errors.js'
 import { formatThaiDateTime } from '../../shared/utils/date.js'
-import { downloadTable, exportButtons } from '../../shared/ui/download.js'
+import { downloadBytes, downloadTable, exportButtons } from '../../shared/ui/download.js'
 import { canAssessHint, traineeOnlyCohorts } from '../assignments/logic.js'
 import { sortedLevels } from '../rubrics/logic.js'
 import { reviewsOf } from '../submissions/logic.js'
@@ -20,6 +20,7 @@ import {
   scoreText,
   STATE_LABELS,
 } from './logic.js'
+import { buildZip, checkZipLimits, planZip } from './zip.js'
 
 const input =
   'mt-1 block w-full rounded-lg border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 shadow-sm focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/30'
@@ -124,9 +125,89 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
 
   // Copy to the central Google Drive: for the cohort's assessors only (the
   // database decides; this hint only keeps the button off other people's pages)
-  const driveOn = canAssessHint(caps, context, allocation.cohort_id)
+  const assessor = canAssessHint(caps, context, allocation.cohort_id)
+  const driveOn = Boolean(services.drive) && assessor // off unless a Shared Drive is set up (see main.js)
   const drive = { busy: false, result: null, error: '', history: [] }
   if (driveOn) drive.history = (await services.drive?.history(allocationId)) ?? []
+
+  // Download everything the cohort submitted as one .zip (the reviewer's own rights, in the browser)
+  const zip = { busy: false, progress: null, error: '', done: null }
+  const zipStatus = () =>
+    html`${
+      zip.busy
+        ? alertBox(
+            zip.progress
+              ? `กำลังดาวน์โหลดไฟล์ ${zip.progress.done.toLocaleString('th-TH')} / ${zip.progress.total.toLocaleString('th-TH')} — อย่าปิดหน้านี้`
+              : 'กำลังเตรียมรายการงาน…',
+            'info'
+          )
+        : ''
+    }${zip.error ? alertBox(zip.error, 'error') : ''}${zip.done ? alertBox(zip.done.text, zip.done.tone) : ''}`
+
+  const zipSection =
+    () => html`<section class="mb-4 rounded-xl border border-ink-200 bg-white p-4" data-zip aria-labelledby="zip-title">
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="min-w-0 flex-1 basis-64">
+        <h2 id="zip-title" class="text-sm font-semibold text-ink-800">ดาวน์โหลดงานทั้งหมดของรุ่นนี้</h2>
+        <p class="mt-1 text-xs text-ink-500">
+          ไฟล์ .zip จัดเป็นโฟลเดอร์ ชื่อผู้เรียน / รอบที่ส่ง พร้อมคำตอบที่พิมพ์ ลิงก์ และไฟล์แนบของงานที่ส่งแล้วทุกรอบ (ไม่รวมร่าง) และไฟล์ สรุป.xlsx · ไฟล์มีชื่อและงานของผู้เรียน โปรดเก็บรักษาตามนโยบายข้อมูลส่วนบุคคล
+        </p>
+      </div>
+      <button type="button" class="${secondary}" data-action="zip-download" ${zip.busy ? html`disabled aria-busy="true"` : ''}>
+        ${zip.busy ? 'กำลังเตรียมไฟล์…' : 'ดาวน์โหลดงานทั้งหมด (.zip)'}
+      </button>
+    </div>
+    <div class="mt-3 space-y-2" aria-live="polite" data-zip-status>${zipStatus()}</div>
+  </section>`
+
+  const runZip = async () => {
+    if (zip.busy) return
+    Object.assign(zip, { busy: true, progress: null, error: '', done: null })
+    draw()
+    // This page stays in memory while the person browses on: once the address has
+    // changed, stop downloading and do not draw over (or save a file from) another page.
+    const startedAt = window.location.hash
+    const gone = () => window.location.hash !== startedAt
+    const status = () => render(el.querySelector('[data-zip-status]'), zipStatus())
+    try {
+      const data = await services.reviews.zipData(allocationId)
+      if (gone()) return
+      if (!data) throw new AppError('ไม่พบภาระงานนี้ หรือท่านไม่มีสิทธิ์')
+      const plan = planZip(data)
+      if (!plan.folders.length) throw new AppError('ยังไม่มีงานที่ส่งแล้วให้ดาวน์โหลด')
+      checkZipLimits(plan) // too big for the browser: say so before downloading anything
+      const out = await buildZip(plan, {
+        signedUrls: (paths) => services.reviews.signedUrls(paths), // an hour: a big download may be slow
+        fetchBytes: async (url) => {
+          const res = await fetch(url)
+          if (!res.ok) throw new Error(`HTTP ${res.status}`)
+          return new Uint8Array(await res.arrayBuffer())
+        },
+        isCancelled: gone,
+        onProgress: (p) => {
+          if (gone()) return
+          zip.progress = p
+          status()
+        },
+      })
+      if (!out || gone()) return
+      downloadBytes(out.name, out.bytes, 'application/zip')
+      zip.done = out.failed.length
+        ? {
+            tone: 'warning',
+            text: `ดาวน์โหลดแล้ว แต่มี ${out.failed.length.toLocaleString('th-TH')} ไฟล์ที่โหลดไม่สำเร็จ (รายชื่ออยู่ในไฟล์ ไฟล์ที่ดาวน์โหลดไม่สำเร็จ.txt ใน zip) — กดดาวน์โหลดอีกครั้ง หรือเปิดจากหน้าตรวจงานของแต่ละคน`,
+          }
+        : {
+            tone: 'success',
+            text: `ดาวน์โหลดแล้ว: ${plan.folders.length.toLocaleString('th-TH')} รอบ ${plan.fileCount.toLocaleString('th-TH')} ไฟล์`,
+          }
+    } catch (err) {
+      zip.error = toUserMessage(err)
+    }
+    if (gone()) return
+    zip.busy = false
+    draw()
+  }
 
   const driveSection =
     () => html`<section class="mb-4 rounded-xl border border-ink-200 bg-white p-4" data-drive aria-labelledby="drive-title">
@@ -206,6 +287,7 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
           ${pageHeader(task.title, `${cohortLabel(allocation.cohorts)} · ${task.courses?.title ?? ''}${allocation.due_at ? ` · กำหนดส่ง ${formatThaiDateTime(allocation.due_at)}` : ''}`)}
           ${exportButtons({ action: 'export', label: 'ดาวน์โหลดผล', className: secondary })}
         </div>
+        ${assessor ? zipSection() : ''}
         ${driveOn ? driveSection() : ''}
         <div class="mb-3 flex flex-wrap gap-2" role="group" aria-label="กรองตามสถานะ">
           ${Object.entries(FILTERS).map(
@@ -268,6 +350,10 @@ export async function renderTaskPeopleView(el, { services, caps, context }, { al
     if (f) {
       filter = f.dataset.filter
       return draw()
+    }
+    if (e.target.closest('button[data-action=zip-download]')) {
+      runZip()
+      return undefined
     }
     if (e.target.closest('button[data-action=drive-export]')) {
       runDriveExport()

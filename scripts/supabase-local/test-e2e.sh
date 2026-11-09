@@ -16,6 +16,8 @@ npx supabase db reset --local >/dev/null
 functions_up
 
 status=0
+# the Drive copy is hidden in production (no Shared Drive); its spec needs the button
+VITE_DRIVE_EXPORT=true \
 FAKE_GOOGLE_PORT="$FAKE_GOOGLE_PORT" \
 FAKE_GOOGLE_EMAIL="$FAKE_GOOGLE_EMAIL" \
 FAKE_GOOGLE_PUBLIC_KEY_FILE="$WORK/sa.pub.pem" \

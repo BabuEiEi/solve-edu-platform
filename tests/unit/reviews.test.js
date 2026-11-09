@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
+import { unzipSync, strFromU8 } from 'fflate'
 import { readXlsxRows } from '../../src/shared/utils/xlsx.js'
 import {
   buildReviewPayload,
@@ -510,5 +511,226 @@ describe('pages', () => {
     expect(services.reviews.discard).toHaveBeenCalledWith('R9') // the draft autosave created
     confirmDialog.mockReset()
     vi.useRealTimers()
+  })
+
+  describe("the .zip of a cohort's work (4e) and the hidden Drive copy", () => {
+    const zipServices = (over = {}) => {
+      const services = baseServices({
+        zipData: vi.fn(async () => ({
+          task: { title: 'ส่งแผน' },
+          cohort: { name: 'รุ่น 1', code: 'R1' },
+          submissions: [
+            sub('s1', 'ก', 1, { profiles: { ...prof('ก'), user_code: 'T001' }, text_response: 'คำตอบของ ก' }),
+          ],
+          files: [
+            {
+              id: 'f1',
+              submission_id: 's1',
+              object_path: 's1/a.pdf',
+              file_name: 'แผน.pdf',
+              size_bytes: 5,
+              created_at: '2026-11-01T00:00:00Z',
+            },
+          ],
+          reviews: [],
+          roster: [],
+        })),
+        signedUrls: vi.fn(async (paths) =>
+          Object.fromEntries(paths.map((p) => [p, `https://files.example.test/${p}`]))
+        ),
+        ...over,
+      })
+      return services
+    }
+    const open = async (services, c = ctx(services)) => {
+      const el = document.createElement('div')
+      await renderTaskPeopleView(el, c, { allocationId: 'A1' })
+      return el
+    }
+
+    it('the Google Drive copy is hidden unless a Drive service is wired; the zip button shows for an assessor only', async () => {
+      const off = await open(baseServices())
+      expect(off.querySelector('[data-drive]')).toBeNull()
+      expect(off.querySelector('[data-action=drive-export]')).toBeNull()
+      expect(off.querySelector('[data-zip] [data-action=zip-download]').textContent).toContain('(.zip)')
+
+      const withDrive = baseServices()
+      withDrive.drive = { history: vi.fn(async () => []), exportTask: vi.fn() }
+      expect((await open(withDrive)).querySelector('[data-drive]')).not.toBeNull()
+
+      const mentorCtx = {
+        ...ctx(baseServices()),
+        caps: {},
+        context: { cohortMemberships: [{ cohort_id: 'C', cohort_role: 'mentor' }] },
+      }
+      expect((await open(mentorCtx.services, mentorCtx)).querySelector('[data-zip]')).toBeNull()
+    })
+
+    it('pressing the button downloads one zip: folders, the answer, the file and สรุป.xlsx', async () => {
+      const blobs = []
+      vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => (blobs.push(b), 'blob:zip'))
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      const fetched = []
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url) => {
+          fetched.push(url)
+          return { ok: true, arrayBuffer: async () => new TextEncoder().encode('%PDF').buffer }
+        })
+      )
+      try {
+        const services = zipServices()
+        const el = await open(services)
+        el.querySelector('[data-action=zip-download]').click()
+        await settle()
+        expect(services.reviews.zipData).toHaveBeenCalledWith('A1')
+        expect(fetched).toEqual(['https://files.example.test/s1/a.pdf'])
+        expect(blobs).toHaveLength(1)
+        expect(blobs[0].type).toBe('application/zip')
+        const files = unzipSync(new Uint8Array(await blobs[0].arrayBuffer()))
+        const base = 'T001 ก/รอบที่ 1 (ส่ง 2026-11-01)'
+        expect(Object.keys(files)).toEqual(
+          expect.arrayContaining([`${base}/แผน.pdf`, `${base}/คำตอบ.txt`, 'สรุป.xlsx'])
+        )
+        expect(strFromU8(files[`${base}/แผน.pdf`])).toBe('%PDF')
+        expect(strFromU8(files[`${base}/คำตอบ.txt`])).toContain('คำตอบของ ก')
+        expect(el.querySelector('[data-zip-status]').textContent).toContain('ดาวน์โหลดแล้ว: 1 รอบ 1 ไฟล์')
+        expect(el.querySelector('[data-action=zip-download]').disabled).toBe(false)
+      } finally {
+        vi.unstubAllGlobals()
+        URL.createObjectURL.mockRestore()
+        URL.revokeObjectURL.mockRestore()
+      }
+    })
+
+    it('leaving the page during the download: no file is saved and the new page is not drawn over', async () => {
+      const blobs = []
+      vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => (blobs.push(b), 'blob:zip'))
+      vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+      let release
+      const gate = new Promise((r) => (release = r))
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => {
+          await gate
+          return { ok: true, arrayBuffer: async () => new TextEncoder().encode('%PDF').buffer }
+        })
+      )
+      const before = window.location.hash
+      try {
+        const el = await open(zipServices())
+        el.querySelector('[data-action=zip-download]').click()
+        await settle()
+        expect(el.querySelector('[data-zip-status]').textContent).toContain('กำลังดาวน์โหลดไฟล์')
+        window.location.hash = '#/somewhere-else' // the person opens another page
+        el.textContent = 'ANOTHER PAGE' // which the router has drawn into the same element
+        release()
+        await settle()
+        expect(blobs).toHaveLength(0)
+        expect(el.textContent).toBe('ANOTHER PAGE')
+      } finally {
+        window.location.hash = before
+        vi.unstubAllGlobals()
+        URL.createObjectURL.mockRestore()
+        URL.revokeObjectURL.mockRestore()
+      }
+    })
+
+    it('leaving the page: the files not yet requested are never requested; an error after leaving draws nothing', async () => {
+      let release
+      const gate = new Promise((r) => (release = r))
+      const fetched = []
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (url) => {
+          fetched.push(url)
+          await gate
+          return { ok: true, arrayBuffer: async () => new TextEncoder().encode('%PDF').buffer }
+        })
+      )
+      const before = window.location.hash
+      try {
+        const services = zipServices()
+        const base = await zipServices().reviews.zipData()
+        services.reviews.zipData = vi.fn(async () => ({
+          ...base,
+          files: Array.from({ length: 6 }, (_, n) => ({
+            id: `f${n}`,
+            submission_id: 's1',
+            object_path: `s1/${n}.pdf`,
+            file_name: `ไฟล์${n}.pdf`,
+            size_bytes: 5,
+            created_at: `2026-11-01T00:00:0${n}Z`,
+          })),
+        }))
+        const el = await open(services)
+        el.querySelector('[data-action=zip-download]').click()
+        await settle()
+        expect(fetched).toHaveLength(4) // four at a time
+        window.location.hash = '#/somewhere-else'
+        release()
+        await settle()
+        expect(fetched).toHaveLength(4) // the other two were never requested
+
+        // an error that arrives after the person has left must not draw over the new page
+        const late = zipServices()
+        let fail
+        late.reviews.zipData = vi.fn(() => new Promise((_, reject) => (fail = reject)))
+        const el2 = await open(late)
+        el2.querySelector('[data-action=zip-download]').click()
+        await settle()
+        window.location.hash = '#/another-page'
+        el2.textContent = 'ANOTHER PAGE'
+        fail(new AppError('boom'))
+        await settle()
+        expect(el2.textContent).toBe('ANOTHER PAGE')
+      } finally {
+        window.location.hash = before
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it('too big: refused with the size, nothing is downloaded; nobody submitted: said so', async () => {
+      vi.stubGlobal('fetch', vi.fn())
+      try {
+        const big = zipServices()
+        big.reviews.zipData = vi.fn(async () => ({
+          ...(await zipServices().reviews.zipData()),
+          files: [
+            {
+              id: 'f1',
+              submission_id: 's1',
+              object_path: 's1/a.pdf',
+              file_name: 'ใหญ่.mp4',
+              size_bytes: 600 * 1024 * 1024,
+            },
+          ],
+        }))
+        const el = await open(big)
+        el.querySelector('[data-action=zip-download]').click()
+        await settle()
+        expect(el.querySelector('[data-zip-status]').textContent).toContain(
+          'เกินกว่าที่ดาวน์โหลดเป็นไฟล์เดียวได้'
+        )
+        expect(big.reviews.signedUrls).not.toHaveBeenCalled()
+        expect(fetch).not.toHaveBeenCalled()
+
+        const none = zipServices()
+        none.reviews.zipData = vi.fn(async () => ({
+          task: { title: 'x' },
+          cohort: { name: 'y' },
+          submissions: [],
+          files: [],
+          reviews: [],
+          roster: [],
+        }))
+        const el2 = await open(none)
+        el2.querySelector('[data-action=zip-download]').click()
+        await settle()
+        expect(el2.querySelector('[data-zip-status]').textContent).toContain('ยังไม่มีงานที่ส่งแล้ว')
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
   })
 })

@@ -48,7 +48,11 @@ run('Assessment attempts (Supabase Local)', () => {
     expect(ids.size).toBe(1)
     expect(results.filter((r) => r.data[0].resumed === false)).toHaveLength(1)
 
-    const { data } = await as('teacher_a2').from('assessment_attempts').select('id, attempt_no, status')
+    // only this pretest: other files (run at the same time on the same database) start other tests for A2
+    const { data } = await as('teacher_a2')
+      .from('assessment_attempts')
+      .select('id, attempt_no, status')
+      .eq('assignment_id', A.pretest)
     expect(data).toEqual([{ id: [...ids][0], attempt_no: 1, status: 'in_progress' }])
   })
 
