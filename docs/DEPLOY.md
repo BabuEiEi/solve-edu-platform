@@ -16,7 +16,8 @@
 | Google login | Google Cloud โปรเจกต์ "SolveEdu" (บัญชีส่วนตัวของเจ้าของระบบ, External) | ✅ เปิดใช้แล้ว · ⏸ ต้องกด Publish app (ใส่ลิงก์หน้าแรกและนโยบายใน Branding แล้ว) จึงใช้ได้ทุกคน |
 | นโยบายความเป็นส่วนตัว | https://solve-edu-platform.vercel.app/privacy.html | ✅ ลิงก์จากหน้าเข้าสู่ระบบ |
 | SMTP | Gmail + App Password ของเจ้าของระบบ · จำกัด 100 ฉบับ/ชม. | ✅ ทดสอบแล้ว (2569-11-08) อีเมลยืนยันถึงกล่องจดหมาย |
-| ล้างไฟล์ทุกคืน | pg_cron `cleanup-task-files-nightly` (`30 19 * * *` UTC = 02:30 น.) → pg_net → `cleanup-task-files` · Vault `project_url`, `cleanup_task_files_secret` | ✅ 2569-11-09 · ลองแบบไม่ลบแล้ว: 200, ไม่มีไฟล์ค้าง · ⚠ `pg_net` ยังลงทะเบียนใน schema `public` (advisor 0014) — ย้ายด้วย `drop extension pg_net; create extension pg_net with schema extensions;` |
+| ล้างไฟล์ทุกคืน | pg_cron `cleanup-task-files-nightly` (`30 19 * * *` UTC = 02:30 น.) → pg_net → `cleanup-task-files` · Vault `project_url`, `cleanup_task_files_secret` | ✅ 2569-11-09 · ลองแบบไม่ลบแล้ว: 200, ไม่มีไฟล์ค้าง · `pg_net` อยู่ใน schema `extensions` (ย้ายจาก `public` แล้ว) · ฟังก์ชันใน schema `net` เรียกผ่าน API ไม่ได้ (REST เปิดเฉพาะ `public`, `graphql_public` — ตรวจแล้วได้ PGRST106; ไม่ได้เปิด pg_graphql) |
+| Security advisor | — | คำเตือนที่เหลือ: 0029 ฟังก์ชัน RPC 23 ตัวที่ตั้งใจให้ผู้ใช้เรียก · ป้องกันรหัสผ่านที่รั่ว (HaveIBeenPwned) ใช้ได้เฉพาะแพ็กเกจ Pro — ข้ามไว้ |
 | ผู้ดูแลเขต, Google Drive | — | ⏸ เจ้าของระบบ (ดูด้านล่างและ `docs/DEPLOY_PHASE3B.md`) |
 
 ## หน้าเว็บบน Vercel
