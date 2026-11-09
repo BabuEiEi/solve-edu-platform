@@ -17,6 +17,11 @@ describe('errors', () => {
       'แบบทดสอบหรือ Rubric นี้ถูกเก็บถาวรแล้ว กรุณากด “นำกลับมาใช้” ที่หน้าของมันก่อน'
     )
   })
+  it('cohort joining and enrollment codes have Thai messages (4g)', () => {
+    expect(toUserMessage({ code: 'SE011' })).toContain('เต็มจำนวน')
+    expect(toUserMessage({ code: 'SE012' })).toContain('ไม่ได้เปิดรับสมัคร')
+    expect(toUserMessage({ code: 'SE013' })).toContain('เฉพาะผู้เข้าอบรมของรุ่นนี้')
+  })
   it('unwrap throws AppError when Supabase returns an error (SEC-05)', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() => unwrap({ data: null, error: { code: '23505', message: 'dup' } })).toThrow(AppError)

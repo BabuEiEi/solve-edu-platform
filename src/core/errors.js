@@ -20,6 +20,10 @@ const BY_CODE = {
   // Google Drive copy (begin_task_drive_export): one run per task-cohort at a time
   SE008: 'กำลังส่งสำเนาไป Google Drive อยู่ กรุณารอสักครู่แล้วลองใหม่',
   // an archived quiz or rubric cannot be assigned or chosen again until it is brought back (Phase 4d)
+  // cohorts and course enrollment (Phase 4g)
+  SE011: 'รุ่นนี้มีผู้เข้าอบรมเต็มจำนวนแล้ว',
+  SE012: 'รุ่นนี้ไม่ได้เปิดรับสมัครในขณะนี้',
+  SE013: 'ลงทะเบียนได้เฉพาะผู้เข้าอบรมของรุ่นนี้ และเฉพาะหลักสูตรของโครงการนี้',
   SE010: 'แบบทดสอบหรือ Rubric นี้ถูกเก็บถาวรแล้ว กรุณากด “นำกลับมาใช้” ที่หน้าของมันก่อน',
   PGRST116: 'ไม่พบข้อมูลที่ต้องการ',
   PGRST301: 'เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่',
