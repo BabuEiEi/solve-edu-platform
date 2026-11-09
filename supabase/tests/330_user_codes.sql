@@ -2,7 +2,7 @@
 -- nobody sets their own (except the platform admin), unique ignoring case,
 -- strict format, audited; roster import carries them without overwriting.
 begin;
-select plan(41);
+select plan(44);
 
 create or replace function pg_temp.err(p_sql text) returns text language plpgsql as $$
 declare v_state text;
@@ -36,45 +36,55 @@ select is(pg_temp.set_code('teacher_a2', 'X-1'), '42501', 'a teacher cannot set 
 select is(pg_temp.err($$ update public.profiles set full_name = 'ครู ก1 (แก้เอง)' where id = auth.uid() $$), 'no error', 'a teacher still edits their own name');
 reset role;
 
--- ---------- school admins ----------
-select tests.authenticate_as('school_admin_a');
-select is(pg_temp.set_code('teacher_a1', 'T-001'), 'no error', 'school admin A sets the code of a teacher in school A');
+-- ---------- Staff (4f: platform_support; there are no school admins) ----------
+select tests.authenticate_as('school_admin_a'); -- a teacher of school A now
+select is(pg_temp.set_code('teacher_a1', 'T-001'), '42501', 'a teacher of school A (formerly its school admin) cannot set codes');
+reset role;
+select tests.authenticate_as('staff');
+select is(pg_temp.set_code('teacher_a1', 'T-001'), 'no error', 'Staff sets the code of a teacher of school A');
 reset role;
 select is(pg_temp.code_of('teacher_a1'), 'T-001', '… and it is stored');
 select is((select after_json ->> 'user_code' from private.audit_logs
             where action = 'UPDATE_PROFILE' and record_id = tests.uid('teacher_a1') order by id desc limit 1), 'T-001',
   'the change is audited (before and after)');
-select tests.authenticate_as('school_admin_a');
-select is(pg_temp.set_code('teacher_b1', 'T-009'), '42501', 'school admin A cannot touch a teacher of school B');
-select is(pg_temp.set_code('supervisor', 'S-1'), '42501', 'a school admin cannot edit a supervisor');
-select is(pg_temp.set_code('school_admin_a', 'SA-1'), '42501', 'nor their own code');
+select tests.authenticate_as('staff');
+select is(pg_temp.set_code('teacher_b1', 'T-009'), 'no error', 'Staff is not limited to one school');
+select is(pg_temp.set_code('district_admin', 'D-9'), '42501', 'Staff cannot edit a district admin');
+select is(pg_temp.set_code('staff', 'ST-1'), '42501', 'nor their own code');
 select is(pg_temp.err(format('select public.admin_update_profile(%L, %L)', tests.uid('teacher_a1'), '   ')), '23514',
   'a full name is required');
 reset role;
+select tests.authenticate_as('staff');
+select is(pg_temp.set_code('teacher_b1', '   '), 'no error', '(Staff clears the code it set, for the tests below)');
+reset role;
 
 -- ---------- the second rule: people who hold admin or platform roles ----------
--- (the caller administers their school, but they are not "just teachers")
 insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
   ('99999999-0000-4000-a000-0000000000d1', 'co.admin@example.test', now(), '{}'),
   ('99999999-0000-4000-a000-0000000000d2', 'support.person@example.test', now(), '{}');
+update public.profiles set status = 'active' where id in ('99999999-0000-4000-a000-0000000000d1', '99999999-0000-4000-a000-0000000000d2');
 insert into public.organization_memberships (user_id, organization_id, org_role, granted_by) values
-  ('99999999-0000-4000-a000-0000000000d1', tests.uid('school_a'), 'school_admin', tests.uid('district_admin')),
-  ('99999999-0000-4000-a000-0000000000d2', tests.uid('school_a'), 'teacher', tests.uid('school_admin_a'));
+  ('99999999-0000-4000-a000-0000000000d1', tests.uid('school_a'), 'supervisor', tests.uid('district_admin')),
+  ('99999999-0000-4000-a000-0000000000d2', tests.uid('school_a'), 'teacher', tests.uid('district_admin'));
 insert into public.platform_role_assignments (user_id, role, granted_by)
 values ('99999999-0000-4000-a000-0000000000d2', 'platform_support', tests.uid('platform_admin'));
-select tests.authenticate_as('school_admin_a');
-select is(pg_temp.err($$ select public.admin_update_profile('99999999-0000-4000-a000-0000000000d1', 'ผู้บริหารร่วม', null, 'SA-2') $$),
-  '42501', 'a school admin cannot edit another school admin of the same school');
+select tests.authenticate_as('staff');
 select is(pg_temp.err($$ select public.admin_update_profile('99999999-0000-4000-a000-0000000000d2', 'ผู้สนับสนุน', null, 'PS-1') $$),
-  '42501', 'nor a teacher who holds a platform role');
+  '42501', 'Staff cannot edit another Staff member (a platform role holder)');
+select is(pg_temp.err($$ select public.admin_update_profile('99999999-0000-4000-a000-0000000000d1', 'ศน.โรงเรียน', null, 'SV-2') $$),
+  'no error', 'Staff may edit a supervisor');
+reset role;
+select tests.authenticate_as('teacher_a2');
+select is(pg_temp.err($$ select public.admin_update_profile('99999999-0000-4000-a000-0000000000d1', 'ศน.โรงเรียน', null, 'SV-3') $$),
+  '42501', 'a teacher of the same school may not');
 reset role;
 select tests.authenticate_as('district_admin');
-select is(pg_temp.err($$ select public.admin_update_profile('99999999-0000-4000-a000-0000000000d1', 'ผู้บริหารร่วม', null, 'SA-2') $$),
-  'no error', 'the district admin governing the school may edit that school admin');
+select is(pg_temp.err($$ select public.admin_update_profile('99999999-0000-4000-a000-0000000000d1', 'ศน.โรงเรียน', null, 'SV-4') $$),
+  'no error', 'the district admin governing the school may edit that supervisor');
 reset role;
 
 -- ---------- uniqueness and format ----------
-select tests.authenticate_as('school_admin_b');
+select tests.authenticate_as('staff');
 select is(pg_temp.set_code('teacher_b1', 't-001'), '23505', 'codes are unique ignoring case (t-001 vs T-001)');
 select is(pg_temp.set_code('teacher_b1', 'T 002'), '23514', 'no spaces');
 select is(pg_temp.set_code('teacher_b1', repeat('9', 51)), '23514', 'at most 50 characters');
@@ -86,7 +96,7 @@ select is(pg_temp.code_of('teacher_b1'), null, '… to null');
 -- ---------- district admin and platform admin ----------
 select tests.authenticate_as('district_admin');
 select is(pg_temp.set_code('supervisor', 'S-001'), 'no error', 'the district admin edits a supervisor of the district');
-select is(pg_temp.set_code('school_admin_a', 'SA-001'), 'no error', '… and a school admin under it');
+select is(pg_temp.set_code('school_admin_a', 'SA-001'), 'no error', '… and a teacher under it');
 select is(pg_temp.set_code('platform_admin', 'P-1'), '42501', 'but not the platform admin');
 select is(pg_temp.set_code('district_admin', 'D-1'), '42501', 'nor their own code');
 reset role;
@@ -102,7 +112,7 @@ select is((select count(*)::int from private.audit_logs where action = 'UPDATE_P
 insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
   ('99999999-0000-4000-a000-0000000000c1', 'coded.teacher@example.test', now(), '{}'),
   ('99999999-0000-4000-a000-0000000000c2', 'taken.code@example.test', now(), '{}');
-select tests.authenticate_as('school_admin_a');
+select tests.authenticate_as('district_admin');
 select is(pg_temp.err($$ insert into public.preregistrations (email, organization_id, org_role, user_code)
                          values ('coded.teacher@example.test', tests.uid('school_a'), 'teacher', 'T-100') $$),
   'no error', 'a roster row may carry a code');
@@ -127,7 +137,7 @@ select is((select coalesce(user_code, 'none') from public.profiles where id = '9
   '… but the code is not stolen from its holder');
 
 -- someone who already has a code keeps it
-select tests.authenticate_as('school_admin_a');
+select tests.authenticate_as('district_admin');
 insert into public.preregistrations (email, organization_id, org_role, user_code)
 values ('teacher.a1@example.test', tests.uid('school_a'), 'teacher', 'T-555');
 reset role;

@@ -44,7 +44,8 @@ async function confirmationLink(email) {
 
 run('CSV pre-registration (GoTrue + Mailpit + RLS)', () => {
   beforeAll(() => vi.spyOn(console, 'error').mockImplementation(() => {}))
-  const admin = () => createPreregistrationService(supabaseAs(env, 'school_admin_a'))
+  // 4f: there are no school admins; the district admin imports for the schools of the district
+  const admin = () => createPreregistrationService(supabaseAs(env, 'district_admin'))
 
   it('imports a roster; only the importing org can see it', async () => {
     const csv =
@@ -69,12 +70,15 @@ run('CSV pre-registration (GoTrue + Mailpit + RLS)', () => {
     expect(pending.some((p) => p.email === 'fresh.row@example.test')).toBe(false)
   })
 
-  it('school admin A cannot import into school B', async () => {
+  it('a teacher of school A (formerly its school admin) cannot import, not even into school A', async () => {
     await expect(
-      admin().importRows([{ email: 'x.y@example.test', full_name: '' }], {
-        organizationId: '10000000-0000-4000-a000-000000000003',
-        orgRole: 'teacher',
-      })
+      createPreregistrationService(supabaseAs(env, 'school_admin_a')).importRows(
+        [{ email: 'x.y@example.test', full_name: '' }],
+        {
+          organizationId: SCHOOL_A,
+          orgRole: 'teacher',
+        }
+      )
     ).rejects.toThrow('ไม่มีสิทธิ์')
   })
 

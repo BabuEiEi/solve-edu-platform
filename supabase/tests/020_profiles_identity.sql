@@ -30,8 +30,8 @@ select throws_ok($$ update public.profiles set status = 'suspended' where id = t
 select throws_ok($$ insert into public.platform_role_assignments (user_id, role) values (tests.uid('teacher_a1'), 'platform_admin') $$,
   '42501', null, 'A1 cannot self-assign platform_admin');
 select throws_ok($$ insert into public.organization_memberships (user_id, organization_id, org_role)
-                    values (tests.uid('teacher_a1'), tests.uid('school_a'), 'school_admin') $$,
-  '42501', null, 'A1 cannot grant self school_admin');
+                    values (tests.uid('teacher_a1'), tests.uid('school_a'), 'district_admin') $$,
+  '42501', null, 'A1 cannot grant self an admin role');
 select throws_ok($$ select public.admin_set_profile_status(tests.uid('teacher_a2'), 'suspended', 'x') $$,
   '42501', null, 'A1 cannot suspend another user');
 select throws_ok($$ update public.profiles set requested_org_id = tests.uid('school_b') where id = tests.uid('teacher_a1') $$,
@@ -41,20 +41,21 @@ select lives_ok($$ update public.profiles set display_name = 'ครูเอ' w
 select is((select count(*)::int from public.profiles where display_name = 'ครูเอ'), 1, 'own display_name updated');
 reset role;
 
--- ---------- approval workflow (scoped by requested_org_id) ----------
-select tests.authenticate_as('school_admin_b');
+-- ---------- approval workflow (4f: platform admin, Staff, district admin — no school admins) ----------
+-- school_admin_a / _b were the demo school admins; the role is gone, they are teachers now
+select tests.authenticate_as('school_admin_a');
 select throws_ok($$ select public.admin_set_profile_status(tests.uid('newcomer'), 'active', 'try') $$,
-  '42501', null, 'School admin B cannot approve a user who requested school A');
+  '42501', null, 'a teacher of school A (formerly its school admin) cannot approve a newcomer of school A');
 reset role;
 
-select tests.authenticate_as('school_admin_a');
+select tests.authenticate_as('staff');
 select ok(exists (select 1 from public.profiles where id = tests.uid('newcomer') and status = 'pending'),
-  'School admin A sees the pending newcomer of school A');
+  'Staff sees the pending newcomer');
 select lives_ok($$ select public.admin_set_profile_status(tests.uid('newcomer'), 'active', 'ยืนยันตัวตนแล้ว') $$,
-  'School admin A approves newcomer');
-select throws_ok($$ select public.admin_set_profile_status(tests.uid('supervisor'), 'suspended', 'x') $$,
-  '42501', null, 'School admin cannot suspend a supervisor');
-select throws_ok($$ select public.admin_set_profile_status(tests.uid('school_admin_a'), 'suspended', 'x') $$,
+  'Staff approves newcomer');
+select throws_ok($$ select public.admin_set_profile_status(tests.uid('district_admin'), 'suspended', 'x') $$,
+  '42501', null, 'Staff cannot suspend a district admin');
+select throws_ok($$ select public.admin_set_profile_status(tests.uid('staff'), 'suspended', 'x') $$,
   '42501', null, 'cannot change own status');
 reset role;
 
@@ -62,7 +63,7 @@ select is((select status from public.profiles where id = tests.uid('newcomer')),
 select is(
   (select count(*)::int from private.audit_logs
     where action = 'SET_STATUS' and record_id = tests.uid('newcomer')
-      and actor_id = tests.uid('school_admin_a') and reason = 'ยืนยันตัวตนแล้ว'),
+      and actor_id = tests.uid('staff') and reason = 'ยืนยันตัวตนแล้ว'),
   1, 'status change written to audit log with actor and reason');
 
 select * from finish();
