@@ -41,7 +41,7 @@ export function createAssignmentService(client) {
       return unwrap(
         await client
           .from('instrument_versions')
-          .select('id, version_no, status, instruments ( id, code, title, course_id )')
+          .select('id, version_no, status, instruments ( id, code, title, course_id, status )')
           .eq('id', versionId)
           .maybeSingle(),
         'assignments.version'

@@ -12,6 +12,11 @@ describe('errors', () => {
       'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง'
     )
   })
+  it('says what to do when an archived quiz or rubric is used again (SE010)', () => {
+    expect(toUserMessage({ code: 'SE010', message: 'this quiz is archived' })).toBe(
+      'แบบทดสอบหรือ Rubric นี้ถูกเก็บถาวรแล้ว กรุณากด “นำกลับมาใช้” ที่หน้าของมันก่อน'
+    )
+  })
   it('unwrap throws AppError when Supabase returns an error (SEC-05)', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
     expect(() => unwrap({ data: null, error: { code: '23505', message: 'dup' } })).toThrow(AppError)
