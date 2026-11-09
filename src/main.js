@@ -131,7 +131,8 @@ async function boot() {
     tasks: createTaskService(supabase),
     submissions: createSubmissionService(supabase),
     reviews: createReviewService(supabase),
-    drive: createDriveService(supabase),
+    // the Google Drive copy needs a Shared Drive; off unless VITE_DRIVE_EXPORT=true (the zip replaces it)
+    drive: import.meta.env.VITE_DRIVE_EXPORT === 'true' ? createDriveService(supabase) : null,
     deletion: createDeletionService(supabase),
     notices: createNoticeService(supabase),
     assignments: createAssignmentService(supabase),
