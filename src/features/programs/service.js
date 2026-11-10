@@ -224,6 +224,21 @@ export function createProgramService(client) {
       )
     },
 
+    /** Cohorts open for joining right now, with their published courses and the caller's own status (no other people). */
+    async listOpenCohorts() {
+      return unwrap(await client.rpc('list_open_cohorts'), 'cohorts.open') ?? []
+    },
+
+    /** → 'active' (joined at once) | 'requested' (waiting for a manager). The server checks window, seats, history. */
+    async requestJoin(cohortId) {
+      return unwrap(await client.rpc('request_cohort_join', { p_cohort: cohortId }), 'cohorts.join')
+    },
+
+    /** Take back a request that is still waiting. */
+    async cancelRequest(cohortId) {
+      unwrap(await client.rpc('cancel_cohort_request', { p_cohort: cohortId }), 'cohorts.cancel_request')
+    },
+
     /** Take an enrollment back (status 'withdrawn'; progress kept). */
     async withdrawEnrollment(enrollmentId) {
       return one(

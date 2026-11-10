@@ -5,6 +5,7 @@ import { roleChip } from './components.js'
 export const NAV_ITEMS = [
   { path: '/', label: 'ภาพรวม', icon: '◧', show: () => true },
   { path: '/programs', label: 'โครงการและรุ่น', icon: '▤', show: (c) => c.isActive },
+  { path: '/join', label: 'รุ่นที่เปิดรับสมัคร', icon: '✚', show: (c) => c.isActive },
   { path: '/courses', label: 'หลักสูตร', icon: '❏', show: (c) => c.isActive },
   { path: '/assessments', label: 'แบบทดสอบ', icon: '✎', show: (c) => c.isTrainee },
   {

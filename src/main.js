@@ -52,6 +52,7 @@ import {
   renderProgramsView,
 } from './features/programs/views.js'
 import { renderCohortMembersView } from './features/programs/members.js'
+import { renderOpenCohortsView } from './features/programs/join.js'
 import { renderCoursesView, renderCourseOutlineView } from './features/courses/views.js'
 import { renderLessonView } from './features/lessons/views.js'
 import { renderCourseBuilderView, renderLessonEditorView } from './features/builder/views.js'
@@ -68,6 +69,7 @@ const routes = compileRoutes([
   { path: '/', view: renderDashboard },
   { path: '/profile', view: renderProfileView },
   { path: '/programs', view: renderProgramsView, allow: (c) => c.isActive },
+  { path: '/join', view: renderOpenCohortsView, allow: (c) => c.isActive },
   { path: '/programs/new', view: renderNewProgramView, allow: (c) => c.canAdministerPrograms },
   { path: '/programs/:id', view: renderProgramDetailView, allow: (c) => c.isActive },
   { path: '/programs/:id/cohorts/:cohortId', view: renderCohortMembersView, allow: (c) => c.isActive },
