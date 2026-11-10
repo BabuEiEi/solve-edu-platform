@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 vi.mock('../../src/shared/ui/dialog.js', () => ({ confirmDialog: vi.fn(), promptDialog: vi.fn() }))
 import { confirmDialog } from '../../src/shared/ui/dialog.js'
-import { enrolledSet, joinAction, renderOpenCohortsView } from '../../src/features/programs/join.js'
+import { courseState, joinAction, renderOpenCohortsView } from '../../src/features/programs/join.js'
 import { NAV_ITEMS } from '../../src/shared/ui/layout.js'
 
 const XSS = '<img src=x onerror=alert(1)>'
@@ -44,13 +44,15 @@ describe('logic', () => {
     expect(joinAction(cohort('A', { seats_left: null }))).toBe('join') // no limit
   })
 
-  it('enrollments in force: a withdrawn one does not count', () => {
-    const set = enrolledSet([
-      { cohort_id: 'A', course_id: 'K1', status: 'active' },
-      { cohort_id: 'A', course_id: 'K2', status: 'withdrawn' },
-      { cohort_id: 'B', course_id: 'K1', status: 'completed' },
-    ])
-    expect([...set].sort()).toEqual(['A:K1', 'B:K1'])
+  it('a course of my cohort: enrolled / finished / may enroll / cohort no longer running', () => {
+    const running = { can_enroll: true }
+    const ended = { can_enroll: false }
+    expect(courseState(running, { enrollment_status: 'active' })).toBe('enrolled')
+    expect(courseState(ended, { enrollment_status: 'completed' })).toBe('completed')
+    expect(courseState(running, { enrollment_status: null })).toBe('can-enroll')
+    expect(courseState(running, { enrollment_status: 'withdrawn' })).toBe('can-enroll') // taken back: may enroll again
+    expect(courseState(ended, { enrollment_status: null })).toBe('closed')
+    expect(courseState(ended, { enrollment_status: 'withdrawn' })).toBe('closed')
   })
 
   it('the menu offers it to every active account and to nobody else', () => {
@@ -66,27 +68,40 @@ describe('page', () => {
     document.body.replaceChildren()
     confirmDialog.mockReset()
   })
-  const open = async ({ list = [cohort('A')], enrollments = [], over = {}, refresh = vi.fn() } = {}) => {
+  const myCohort = (id, over = {}) => ({
+    cohort_id: id,
+    cohort_code: id,
+    cohort_name: `รุ่นของฉัน ${id}`,
+    cohort_status: 'in_progress',
+    start_at: null,
+    end_at: null,
+    program_name: 'โครงการ',
+    fiscal_year: 2570,
+    owner_org: 'เขตสาธิต',
+    can_enroll: true,
+    courses: [
+      { id: 'K1', title: 'หลักสูตร 1', enrollment_id: 'E1', enrollment_status: 'active' },
+      { id: 'K2', title: 'หลักสูตร 2', enrollment_id: null, enrollment_status: null },
+    ],
+    ...over,
+  })
+  const open = async ({ list = [cohort('A')], mine = [], over = {}, refresh = vi.fn() } = {}) => {
     const programs = {
       listOpenCohorts: vi.fn(async () => list),
+      myCohortCourses: vi.fn(async () => mine),
       requestJoin: vi.fn(async () => 'active'),
       cancelRequest: vi.fn(async () => {}),
       enroll: vi.fn(async () => 'E1'),
       ...over,
     }
-    const courses = { listMyEnrollments: vi.fn(async () => enrollments) }
     const el = document.createElement('div')
     document.body.append(el)
-    await renderOpenCohortsView(el, {
-      services: { programs, courses },
-      session: { user: { id: 'me' } },
-      refresh,
-    })
-    return { el, programs, courses, refresh }
+    await renderOpenCohortsView(el, { services: { programs }, refresh })
+    return { el, programs, refresh }
   }
 
   it('lists cohorts and their courses as text; nothing about other people', async () => {
-    const { el, courses } = await open({
+    const { el } = await open({
       list: [
         cohort('A', {
           cohort_name: XSS,
@@ -101,7 +116,7 @@ describe('page', () => {
     expect(el.querySelector('[data-seats]').textContent).toContain('เหลือ 3 ที่นั่ง')
     expect(el.textContent).toContain('ปิดรับสมัคร')
     expect(el.querySelector('[data-action=enroll]')).toBeNull() // not a member: courses are shown, not offered
-    expect(courses.listMyEnrollments).toHaveBeenCalledWith('me')
+    expect(el.querySelector('[data-my-cohorts]')).toBeNull() // in no cohort: no "รุ่นของฉัน"
   })
 
   it('nothing open: said so', async () => {
@@ -144,17 +159,41 @@ describe('page', () => {
     expect(programs.cancelRequest).toHaveBeenCalledWith('B')
   })
 
-  it('a member chooses courses one by one; an enrolled course offers "เปิดเรียน"', async () => {
-    const list = [cohort('A', { my_status: 'active' })]
-    const enrollments = [{ cohort_id: 'A', course_id: 'K1', status: 'active' }]
-    const { el, programs } = await open({ list, enrollments })
-    expect(el.querySelector('[data-status=member]')).not.toBeNull()
-    expect(el.querySelector('[data-course=K1] a[href="#/courses/K1"]')).not.toBeNull()
-    expect(el.querySelector('[data-course=K1] [data-action=enroll]')).toBeNull()
-    el.querySelector('[data-course=K2] [data-action=enroll]').click()
+  it('my cohorts (also one closed to joining) are listed once, apart from the open ones; courses chosen one by one', async () => {
+    // A is open for joining AND mine: shown only under "รุ่นของฉัน"; C is mine but closed to joining
+    const list = [cohort('A', { my_status: 'active' }), cohort('B')]
+    const mine = [myCohort('A'), myCohort('C')]
+    const { el, programs } = await open({ list, mine })
+    const my = el.querySelector('[data-my-cohorts]')
+    expect([...my.querySelectorAll('[data-mine]')].map((a) => a.dataset.cohort)).toEqual(['A', 'C'])
+    expect(
+      [...el.querySelectorAll('[data-open-cohorts] article[data-cohort]')].map((a) => a.dataset.cohort)
+    ).toEqual(['B'])
+    expect(my.querySelector('[data-cohort=A] [data-course=K1] a[href="#/courses/K1"]')).not.toBeNull()
+    expect(my.querySelector('[data-cohort=A] [data-course=K1] [data-action=enroll]')).toBeNull()
+    my.querySelector('[data-cohort=A] [data-course=K2] [data-action=enroll]').click()
     await settle()
     expect(programs.enroll).toHaveBeenCalledWith('A', 'K2') // no user: the server takes the caller
     expect(el.textContent).toContain('ลงทะเบียนหลักสูตรแล้ว')
+    expect(programs.myCohortCourses).toHaveBeenCalledTimes(2) // reloaded to show the new enrollment
+  })
+
+  it('a cohort that has ended: courses not enrolled in say so, no button; finished courses can still be opened', async () => {
+    const mine = [
+      myCohort('E', {
+        can_enroll: false,
+        courses: [
+          { id: 'K1', title: 'หลักสูตร 1', enrollment_id: 'E1', enrollment_status: 'completed' },
+          { id: 'K2', title: 'หลักสูตร 2', enrollment_id: null, enrollment_status: null },
+        ],
+      }),
+    ]
+    const { el } = await open({ list: [], mine })
+    expect(el.querySelector('[data-cohort=E] [data-course=K1]').textContent).toContain('เรียนจบแล้ว')
+    expect(el.querySelector('[data-cohort=E] [data-course=K1] a[href="#/courses/K1"]')).not.toBeNull()
+    expect(el.querySelector('[data-cohort=E] [data-course=K2]').textContent).toContain('รุ่นนี้ปิดแล้ว')
+    expect(el.querySelector('[data-cohort=E] [data-action=enroll]')).toBeNull()
+    expect(el.textContent).toContain('ขณะนี้ยังไม่มีรุ่นที่เปิดรับสมัคร')
   })
 
   it('a refusal (full, closed, not a trainee) is shown in Thai, the list is reloaded, the page stays usable', async () => {

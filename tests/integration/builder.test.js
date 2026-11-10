@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeAll, vi } from 'vitest'
 import { JSDOM } from 'jsdom'
-import { supabaseAs, IDS } from './helpers.js'
+import { supabaseAs, IDS, U } from './helpers.js'
 
 globalThis.window ??= new JSDOM('').window
 const { createBuilderService } = await import('../../src/features/builder/service.js')
@@ -96,16 +96,40 @@ run('Course Builder (Supabase Local)', () => {
     ).rejects.toThrow()
   })
 
-  it('publishing the draft lesson makes it visible to the trainee', async () => {
-    const lessons = createLessonService(supabaseAs(env, 'teacher_a1'))
-    expect(await lessons.getLesson(IDS.draft_lesson)).toBeNull()
-    await builderAs('trainer').updateLesson(IDS.draft_lesson, { status: 'published' })
-    try {
-      expect((await lessons.getLesson(IDS.draft_lesson)).id).toBe(IDS.draft_lesson)
-    } finally {
-      // Other files (storage, lessons) rely on this lesson being a draft: put it back.
-      await builderAs('trainer').updateLesson(IDS.draft_lesson, { status: 'draft' })
-    }
+  it('publishing a draft lesson makes it visible to an enrolled trainee', async () => {
+    // Its own course, unit and lesson (published course and unit, draft lesson) with its own
+    // enrollment for teacher_b1: other files run at the same time on the same database and
+    // count the demo course's lessons and the demo draft lesson — never publish those here.
+    const sup = builderAs('supervisor')
+    const db = supabaseAs(env, 'supervisor')
+    const course = await sup.createCourse({
+      owner_org_id: DISTRICT,
+      code: `IT-PUB-${Date.now()}`,
+      title: 'หลักสูตรทดสอบการเผยแพร่',
+    })
+    const unit = await sup.addUnit(course.id, 'หน่วยทดสอบ', 1)
+    const lesson = await sup.addLesson(unit.id, 'บทร่าง', 1)
+    await sup.updateUnit(unit.id, { status: 'published' })
+    await sup.updateCourse(course.id, { status: 'published' })
+    expect(
+      (
+        await db
+          .from('program_courses')
+          .insert({ program_id: IDS.program, course_id: course.id, display_order: 99 })
+      ).error
+    ).toBeNull()
+    expect(
+      (
+        await db
+          .from('course_enrollments')
+          .insert({ cohort_id: IDS.cohort, course_id: course.id, user_id: U.teacher_b1 })
+      ).error
+    ).toBeNull()
+
+    const learner = createLessonService(supabaseAs(env, 'teacher_b1'))
+    expect(await learner.getLesson(lesson.id)).toBeNull() // still a draft
+    await sup.updateLesson(lesson.id, { status: 'published' })
+    expect((await learner.getLesson(lesson.id)).id).toBe(lesson.id)
   })
 
   it('a lesson with learner progress cannot be deleted (archive instead)', async () => {

@@ -21,6 +21,7 @@ describe('errors', () => {
     expect(toUserMessage({ code: 'SE011' })).toContain('เต็มจำนวน')
     expect(toUserMessage({ code: 'SE012' })).toContain('ไม่ได้เปิดรับสมัคร')
     expect(toUserMessage({ code: 'SE013' })).toContain('เฉพาะผู้เข้าอบรมของรุ่นนี้')
+    expect(toUserMessage({ code: 'SE014' })).toContain('รุ่นนี้ปิดแล้ว')
   })
   it('unwrap throws AppError when Supabase returns an error (SEC-05)', () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {})

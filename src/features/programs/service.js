@@ -229,6 +229,14 @@ export function createProgramService(client) {
       return unwrap(await client.rpc('list_open_cohorts'), 'cohorts.open') ?? []
     },
 
+    /**
+     * The cohorts the caller is a trainee of (also those closed to joining), each with
+     * its programme's published courses and the caller's own enrollment (my_cohort_courses).
+     */
+    async myCohortCourses() {
+      return unwrap(await client.rpc('my_cohort_courses'), 'cohorts.mine') ?? []
+    },
+
     /** → 'active' (joined at once) | 'requested' (waiting for a manager). The server checks window, seats, history. */
     async requestJoin(cohortId) {
       return unwrap(await client.rpc('request_cohort_join', { p_cohort: cohortId }), 'cohorts.join')
