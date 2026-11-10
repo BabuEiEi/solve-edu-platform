@@ -34,6 +34,9 @@ export function deriveCapabilities(context) {
     // roster import (e-mails): platform admin and district admins only — not Staff
     canImportRoster: active && (isPlatformAdmin || ORG_ADMIN_ROLES.some((r) => orgRoles.has(r))),
     canManagePrograms: active && (isPlatformAdmin || PROGRAM_MANAGER_ROLES.some((r) => orgRoles.has(r))),
+    // programme/cohort pages (4g): managers above + Staff — NOT the results/review menus
+    canAdministerPrograms:
+      active && (isPlatformAdmin || isPlatformSupport || PROGRAM_MANAGER_ROLES.some((r) => orgRoles.has(r))),
     // mirrors authz.can_create_course_in_org (platform admin, district admin/supervisor)
     canCreateCourses: active && (isPlatformAdmin || PROGRAM_MANAGER_ROLES.some((r) => orgRoles.has(r))),
     isTrainee: active && cohortRoles.has('trainee'),
