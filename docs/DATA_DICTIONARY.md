@@ -202,10 +202,17 @@
 | `status` | text | ✓ | `'draft'::text` |  |
 | `created_at` | timestamp with time zone | ✓ | `now()` |  |
 | `updated_at` | timestamp with time zone | ✓ | `now()` |  |
+| `enrollment_mode` | text | ✓ | `'closed'::text` | สมัครเข้ารุ่นเอง: closed (ปิด) \| approval (ต้องอนุมัติ) \| open (เข้าได้ทันที) — 4g |
+| `seat_limit` | integer |  |  | จำนวนผู้เข้าอบรมสูงสุด (null = ไม่จำกัด) — นับเฉพาะผู้เข้าอบรมที่ active |
+| `enroll_from` | timestamp with time zone |  |  |  |
+| `enroll_until` | timestamp with time zone |  |  |  |
 
 **Constraints**
 
+- `cohorts_enroll_window`: `CHECK (((enroll_until IS NULL) OR (enroll_from IS NULL) OR (enroll_until > enroll_from)))`
+- `cohorts_enrollment_mode_check`: `CHECK ((enrollment_mode = ANY (ARRAY['closed'::text, 'approval'::text, 'open'::text])))`
 - `cohorts_period`: `CHECK (((end_at IS NULL) OR (start_at IS NULL) OR (end_at >= start_at)))`
+- `cohorts_seat_limit_check`: `CHECK (((seat_limit IS NULL) OR ((seat_limit >= 1) AND (seat_limit <= 10000))))`
 - `cohorts_status_check`: `CHECK ((status = ANY (ARRAY['draft'::text, 'open'::text, 'in_progress'::text, 'closed'::text, 'archived'::text])))`
 - `cohorts_program_id_fkey`: `FOREIGN KEY (program_id) REFERENCES programs(id) ON DELETE RESTRICT`
 - `cohorts_pkey`: `PRIMARY KEY (id)`
@@ -225,7 +232,7 @@
 | `cohort_id` | uuid | ✓ |  |  |
 | `user_id` | uuid | ✓ |  |  |
 | `cohort_role` | text | ✓ |  |  |
-| `status` | text | ✓ | `'active'::text` |  |
+| `status` | text | ✓ | `'active'::text` | invited \| requested (ขอเข้ารุ่นเอง รออนุมัติ — ไม่มีสิทธิ์ใด) \| active \| withdrawn |
 | `approved_by` | uuid |  | `auth.uid()` |  |
 | `created_at` | timestamp with time zone | ✓ | `now()` |  |
 | `updated_at` | timestamp with time zone | ✓ | `now()` |  |
@@ -233,7 +240,7 @@
 **Constraints**
 
 - `cohort_memberships_cohort_role_check`: `CHECK ((cohort_role = ANY (ARRAY['trainee'::text, 'trainer'::text, 'mentor'::text, 'coordinator'::text])))`
-- `cohort_memberships_status_check`: `CHECK ((status = ANY (ARRAY['invited'::text, 'active'::text, 'withdrawn'::text])))`
+- `cohort_memberships_status_check`: `CHECK ((status = ANY (ARRAY['invited'::text, 'requested'::text, 'active'::text, 'withdrawn'::text])))`
 - `cohort_memberships_approved_by_fkey`: `FOREIGN KEY (approved_by) REFERENCES profiles(id) ON DELETE SET NULL`
 - `cohort_memberships_cohort_id_fkey`: `FOREIGN KEY (cohort_id) REFERENCES cohorts(id) ON DELETE RESTRICT`
 - `cohort_memberships_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES profiles(id) ON DELETE CASCADE`

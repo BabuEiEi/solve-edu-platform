@@ -183,6 +183,12 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | แก้ชื่อ/รหัสประจำตัวของผู้ใช้ | `rpc('admin_update_profile', {p_target, p_full_name, p_display_name, p_user_code})` → `{id, full_name, display_name, user_code}` | ช่องว่าง = ล้างค่า · 42501 = นอกขอบเขต · 23505 = รหัสซ้ำ (ไม่สนตัวพิมพ์) · 23514 = รูปแบบรหัสผิด/ไม่มีชื่อ |
 | เปลี่ยนโรงเรียนของบัญชี (4f) | `rpc('admin_set_school', {p_target, p_school})` → `[{organization_id, name, org_role}]` (สังกัดปัจจุบันทั้งหมด) | หนึ่งคนหนึ่งโรงเรียน (บทบาท teacher) · สังกัดครูเดิมสิ้นสุด (เก็บประวัติ) · บทบาทอื่นไม่ถูกแตะ · `p_school = null` = ไม่มีโรงเรียน · 42501 = จัดการบัญชีนี้ไม่ได้ / ผู้ดูแลเขตเลือกโรงเรียนนอกเขต · 22023 = ไม่ใช่โรงเรียนที่เปิดอยู่ · 23514 = บัญชีถูกลบ |
 | แต่งตั้ง / ถอด Staff (4f) | `from('platform_role_assignments').insert({user_id, role: 'platform_support'})` · `.update({revoked_at}).eq('user_id', …).eq('role', 'platform_support').is('revoked_at', null)` | ผู้ดูแลระบบเท่านั้น (RLS) · ห้ามตนเอง · ถอดแล้วสิทธิ์หมดทันที (ประวัติเก็บไว้) |
+| รุ่นที่เปิดรับสมัคร (4g) | `rpc('list_open_cohorts')` → `[{cohort_id, cohort_code, cohort_name, start_at, end_at, enrollment_mode, enroll_until, seats_left, program_name, fiscal_year, owner_org, courses: [{id, title}], my_status}]` | ทุกบัญชีที่ใช้งานได้ · เฉพาะรุ่น approval/open ที่สถานะ open/in_progress ในโครงการ active และอยู่ในช่วงรับสมัคร · หลักสูตรที่เผยแพร่เท่านั้น |
+| สมัคร / ถอนคำขอ (4g) | `rpc('request_cohort_join', {p_cohort})` → `'active'` \| `'requested'` · `rpc('cancel_cohort_request', {p_cohort})` | SE012 ไม่เปิดรับ · SE011 เต็ม · เคยถูกนำออก = `'requested'` เสมอ · กดซ้ำได้ผลเดิม |
+| ตอบคำขอ (4g) | `rpc('decide_cohort_request', {p_membership, p_accept})` → `'active'` \| `'withdrawn'` | ผู้จัดการรุ่น/Staff · 42501 ไม่มีสิทธิ์ · 22023 ไม่ใช่คำขอที่รออยู่ · SE011 เต็ม |
+| รุ่นของฉัน (4g) | `rpc('my_cohort_courses')` → `[{cohort_id, cohort_code, cohort_name, cohort_status, start_at, end_at, program_name, fiscal_year, owner_org, can_enroll, courses: [{id, title, enrollment_id, enrollment_status}]}]` | รุ่นที่ตนเป็นผู้เข้าอบรม active (ไม่รวมที่เก็บถาวร) · ข้อมูลของตนเองเท่านั้น |
+| ลงทะเบียนหลักสูตร (4g) | `rpc('enroll_in_course', {p_cohort, p_course, p_user?})` → enrollment id | `p_user` ว่าง = ตนเอง (หลักสูตรเผยแพร่, รุ่นกำลังดำเนินการ — SE014) · ผู้จัดการ/Staff ให้ผู้เข้าอบรม active ได้ทุกเมื่อ · SE013 ไม่ใช่ผู้เข้าอบรม/หลักสูตรไม่อยู่ในโครงการ · เคยถอน = ใช้รายการเดิม |
+| โครงการ/รุ่น/สมาชิก (หน้าเว็บ, 4g) | `from('programs' \| 'cohorts' \| 'program_courses' \| 'cohort_memberships' \| 'course_enrollments')` insert/update/delete ตาม RLS | ดู PERMISSIONS · ค้นหาคน: ผู้ดูแลบัญชีใช้ `admin_list_accounts` (มีอีเมล) อื่นๆ ใช้ `profiles` (ชื่อ/รหัส) |
 | อ่านรหัสประจำตัว | `from('profiles').select('id, full_name, display_name, user_code, status, …')` | เห็นเท่าที่เห็นโปรไฟล์ได้ (RLS เดิม) |
 | นำเข้ารายชื่อพร้อมรหัส | `from('preregistrations').insert({…, user_code})` | ใส่ให้โปรไฟล์ตอนผูกบัญชี ถ้ายังไม่มีรหัสและรหัสยังว่าง |
 | ลบได้ไหม / เพราะอะไร | `rpc('deletion_usage', {p_kind: 'course'\|'instrument'\|'task', p_id})` → `{can_delete, reasons: {enrollments?, attempts?, submissions?, drive_exports?, rubric_tasks?, rubric_tasks_elsewhere?, reviews?}}` | นับเฉพาะเหตุที่มี · 42501 = ไม่ใช่ผู้จัดการ |
@@ -205,6 +211,10 @@ entry = `{id: [a-z0-9]{1,8}, text?, image_path?}` · `instrument_items.scoring_m
 | `SE004` | มีผู้เริ่มทำแล้ว จึงแก้ประเภท เกณฑ์ผ่าน หรือหลักสูตร หรือย้อนเป็นฉบับร่างไม่ได้ (2B.1: รวมเวลาทำต่อครั้ง) |
 | `SE005` | มีการทำต่อจากอีกเครื่องแล้ว กรุณาโหลดหน้าใหม่ (ส่งจากหน้าที่ถูกแทนที่) |
 | `SE010` | แบบทดสอบหรือ Rubric นี้ถูกเก็บถาวรแล้ว กรุณากด “นำกลับมาใช้” ที่หน้าของมันก่อน (4d) |
+| `SE011` | รุ่นนี้มีผู้เข้าอบรมเต็มจำนวนแล้ว (4g) |
+| `SE012` | รุ่นนี้ไม่ได้เปิดรับสมัครในขณะนี้ (4g) |
+| `SE013` | ลงทะเบียนได้เฉพาะผู้เข้าอบรมของรุ่นนี้ และเฉพาะหลักสูตรของโครงการนี้ (4g) |
+| `SE014` | รุ่นนี้ปิดแล้ว ลงทะเบียนหลักสูตรเพิ่มเองไม่ได้ — ติดต่อผู้จัดการรุ่น (4g) |
 | `PGRST116` | ไม่พบข้อมูลที่ต้องการ |
 | อื่น ๆ | ข้อความทั่วไป (ไม่เปิดเผยข้อความจากฐานข้อมูล) |
 

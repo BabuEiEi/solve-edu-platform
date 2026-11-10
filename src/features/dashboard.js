@@ -34,6 +34,7 @@ export function renderDashboard(el, { context, caps }) {
         ${caps.isTrainee ? card('#/courses', 'หลักสูตรของฉัน', 'บทเรียนที่ลงทะเบียนและความก้าวหน้า') : ''}
         ${caps.isTrainer || caps.canCreateCourses ? card('#/courses', 'จัดการหลักสูตร', 'สร้างหน่วย บทเรียน และเนื้อหา พร้อมเผยแพร่') : ''}
         ${caps.isActive ? card('#/programs', 'โครงการและรุ่น', 'โครงการพัฒนาครูที่เกี่ยวข้อง') : ''}
+        ${caps.isActive ? card('#/join', 'รุ่นที่เปิดรับสมัคร', 'สมัครเข้ารุ่นอบรมและเลือกหลักสูตรที่จะเรียน') : ''}
         ${caps.canApproveUsers ? card('#/admin/approvals', 'อนุมัติผู้ใช้', 'คำขอสมัครในขอบเขตหน่วยงานของท่าน') : ''}
         ${card('#/profile', 'โปรไฟล์ของฉัน', 'ชื่อที่แสดงและสังกัด')}
       </div>

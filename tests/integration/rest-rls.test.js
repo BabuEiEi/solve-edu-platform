@@ -68,9 +68,10 @@ run('REST + RLS integration (local)', () => {
   })
 
   it('approval queue: Staff sees the newcomer and the school asked for; a former school admin sees nobody (4f)', async () => {
+    // Staff sees EVERY pending account — other files sign people up at the same time, so look for ours
     const staff = await createAdminService(clientAs('staff')).listProfilesByStatus('pending')
-    expect(staff.map((p) => p.id)).toEqual([U.newcomer])
-    expect(staff[0].organizations.name).toBe('โรงเรียนสาธิต ก (สมมติ)')
+    const newcomer = staff.find((p) => p.id === U.newcomer)
+    expect(newcomer.organizations.name).toBe('โรงเรียนสาธิต ก (สมมติ)')
     expect(await createAdminService(clientAs('school_admin_a')).listProfilesByStatus('pending')).toEqual([])
   })
 
