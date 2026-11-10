@@ -51,6 +51,7 @@ import {
   renderProgramDetailView,
   renderProgramsView,
 } from './features/programs/views.js'
+import { renderCohortMembersView } from './features/programs/members.js'
 import { renderCoursesView, renderCourseOutlineView } from './features/courses/views.js'
 import { renderLessonView } from './features/lessons/views.js'
 import { renderCourseBuilderView, renderLessonEditorView } from './features/builder/views.js'
@@ -69,6 +70,7 @@ const routes = compileRoutes([
   { path: '/programs', view: renderProgramsView, allow: (c) => c.isActive },
   { path: '/programs/new', view: renderNewProgramView, allow: (c) => c.canAdministerPrograms },
   { path: '/programs/:id', view: renderProgramDetailView, allow: (c) => c.isActive },
+  { path: '/programs/:id/cohorts/:cohortId', view: renderCohortMembersView, allow: (c) => c.isActive },
   { path: '/courses', view: renderCoursesView, allow: (c) => c.isActive },
   { path: '/courses/:id', view: renderCourseOutlineView, allow: (c) => c.isActive },
   {
@@ -183,6 +185,10 @@ async function boot() {
   const route = async () => {
     if (!state.caps?.isActive) return
     const ticket = navigation.begin()
+    // The previous page goes at once: until the next one is drawn, nothing on the
+    // old page can be clicked (a click there would act on a page that is leaving).
+    const leaving = document.getElementById('view')
+    if (leaving) render(leaving, loading)
     const hit = resolveRoute(routes, window.location.hash, state.caps, '/')
     const currentPath = (window.location.hash || '#/').slice(1)
     const notices = await services.notices.counts() // never throws: a failure shows no badge
